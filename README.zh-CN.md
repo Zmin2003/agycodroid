@@ -1,6 +1,6 @@
 # agycodroid
 
-[English](README.md) · **简体中文** · [Discussions](https://github.com/Zmin2003/agycodroid/discussions) · [Contributing](CONTRIBUTING.md)
+[English](README.md) · **简体中文** · [Contributing](CONTRIBUTING.md)
 
 **在安卓手机上跑 Google Antigravity CLI（`agy`）的开发启动器。** 不用 root，不用定制 ROM，不用 chroot / proot / 虚拟机。
 
@@ -18,6 +18,8 @@
 > agycodroid 是 [cccodroid](https://github.com/greyoak111/cccodroid)（v0.7.9）的 fork，cccodroid 用同样的方式跑 Claude Code。
 > 本 README 里凡是不涉及 `agy` 本身的内容，都是从 cccodroid 继承来的；换了什么、改了什么、砍了什么，见
 > [与 cccodroid 的区别](#与-cccodroid-的区别)。
+
+> **感谢 greyoak111。** agycodroid 站在 [cccodroid](https://github.com/greyoak111/cccodroid) 的肩膀上：网关、界面、工具链、安装器都是你的工作——这个 fork 只是把 Claude Code 换成了 Antigravity CLI。谢谢你把它做出来，并公开分享。
 
 ## 为什么
 
@@ -165,10 +167,10 @@ cccodroid 跑 Claude Code；agycodroid 跑 Antigravity CLI。应用壳、网关�
 
 ## 社区与贡献
 
-- **问题、想法、设备报告**：[GitHub Discussions](https://github.com/Zmin2003/agycodroid/discussions)，中英文都行。
+- **问题和想法**：新开一个 GitHub issue，中英文都行。
 - **Bug**：在应用里点设置 → 在 GitHub 上报告；设备和自检结果会自动填好。
 
-**日常维护基本还是一个人，所以非常欢迎帮忙。** 设备报告、翻译修正、组件配方、文档和代码都欢迎，不会写代码也能帮。见[贡献指南](CONTRIBUTING.md)。
+**非常欢迎帮忙。** 设备报告、翻译修正、组件配方、文档和代码都欢迎，不会写代码也能帮。见[贡献指南](CONTRIBUTING.md)。
 
 ## 架构
 
@@ -298,15 +300,15 @@ node devkit/devkit.mjs build --target cc.codroid   # 构建工具链（CI 也能
 - **[CCB-Fox](https://github.com/CCB-Fox)**：Dimensity GPU 驱动组件（[cccodroid-components#46](https://github.com/greyoak111/cccodroid-components/pull/46)），由此有了 Mali 支持，0.3.3。
 - **[Cosmosophius](https://github.com/Cosmosophius)**：一份详尽的 Dimensity 9300 报告（[cccodroid-components#47](https://github.com/greyoak111/cccodroid-components/issues/47)）。
 - **[gogoiPhone](https://github.com/gogoiPhone)**：Redmi K70 Ultra 设备报告，带自己的 Vulkan 计算测试（[#14](https://github.com/greyoak111/cccodroid/issues/14)）。
-- **[Slingerspir](https://github.com/Slingerspir)**：建议了 GitHub 加速路线和多线程下载（[discussion #15](https://github.com/greyoak111/cccodroid/discussions/15)）；0.4.1 加了分段并行下载和 gh-proxy 备用。
-- **[hye45402-pixel](https://github.com/hye45402-pixel)**：要了 LaTeX、语法高亮、代码块语言标签、删除线、粗斜体和任务列表（[discussion #18](https://github.com/greyoak111/cccodroid/discussions/18)）；0.4.4 全部加上。
+- **[Slingerspir](https://github.com/Slingerspir)**：建议了 GitHub 加速路线和多线程下载；0.4.1 加了分段并行下载和 gh-proxy 备用。
+- **[hye45402-pixel](https://github.com/hye45402-pixel)**：要了 LaTeX、语法高亮、代码块语言标签、删除线、粗斜体和任务列表；0.4.4 全部加上。
 - **[STUTTEFRFIX](https://github.com/STUTTEFRFIX)**：Work Island 集成，在 ColorOS 16 流体云岛上显示 Claude 的工作状态（[#20](https://github.com/greyoak111/cccodroid/pull/20)、[#21](https://github.com/greyoak111/cccodroid/pull/21)），配套应用 [WorkIsland-Android](https://github.com/STUTTEFRFIX/WorkIsland-Android)。cccodroid 合并的第一个外部 PR；0.4.7 上线。
-- **[ThinkReally114](https://github.com/ThinkReally114)**：0.3.x 期间在社区群里的反馈和 bug 报告。
-- **[wangxp12](https://github.com/wangxp12)**：0.3.x 期间在社区群里的反馈和 bug 报告。
-- **[unoyg](https://github.com/unoyg)**：0.3.x 期间在社区群里的反馈和 bug 报告。
-- **[fisHarly0](https://github.com/fisHarly0)**：0.3.x 期间在社区群里的建议和 bug 报告。
-- **[chenshi723](https://github.com/chenshi723)**：0.4.x 期间在社区群里的前端建议。0.4.11 整套界面动效就是从他一句"动效感觉光秃秃的"开始的；他后来又指出侧边栏关闭时的残留动画、新聊天问候语渲染两次、流式卡顿、DeepSeek 余额显示 0 和字体不完全跟系统——0.4.11–0.4.12 陆续修好。0.5.15 的 OpenAI bridge 配置面板和安全卸载来自他的 PR（[#58](https://github.com/greyoak111/cccodroid/pull/58)），他还维护 [cccodroid-openai-bridge](https://github.com/chenshi723/cccodroid-openai-bridge) 组件。从 0.5.20 起他深度审查每个版本（0.6.0 一个版本 80 多条发现，0.6.4 十二份报告），还查出后台程序在点了"保留"之后还反复问确认的原因（[#167](https://github.com/greyoak111/cccodroid/issues/167)，0.6.7 修好）。
-- **[leemwood](https://github.com/leemwood)**：在社区群里指出网页预览缺元素点选，由此有了 0.4.14 的 DevTools 和"帮 Claude 点元素"。
+- **[ThinkReally114](https://github.com/ThinkReally114)**：0.3.x 期间的反馈和 bug 报告。
+- **[wangxp12](https://github.com/wangxp12)**：0.3.x 期间的反馈和 bug 报告。
+- **[unoyg](https://github.com/unoyg)**：0.3.x 期间的反馈和 bug 报告。
+- **[fisHarly0](https://github.com/fisHarly0)**：0.3.x 期间的建议和 bug 报告。
+- **[chenshi723](https://github.com/chenshi723)**：0.4.x 期间的前端建议。0.4.11 整套界面动效就是从他一句"动效感觉光秃秃的"开始的；他后来又指出侧边栏关闭时的残留动画、新聊天问候语渲染两次、流式卡顿、DeepSeek 余额显示 0 和字体不完全跟系统——0.4.11–0.4.12 陆续修好。0.5.15 的 OpenAI bridge 配置面板和安全卸载来自他的 PR（[#58](https://github.com/greyoak111/cccodroid/pull/58)），他还维护 [cccodroid-openai-bridge](https://github.com/chenshi723/cccodroid-openai-bridge) 组件。从 0.5.20 起他深度审查每个版本（0.6.0 一个版本 80 多条发现，0.6.4 十二份报告），还查出后台程序在点了"保留"之后还反复问确认的原因（[#167](https://github.com/greyoak111/cccodroid/issues/167)，0.6.7 修好）。
+- **[leemwood](https://github.com/leemwood)**：指出网页预览缺元素点选，由此有了 0.4.14 的 DevTools 和"帮 Claude 点元素"。
 - **[hwsyyds666](https://github.com/hwsyyds666)**：一加 Ace 5 ColorOS 16 的设备报告（[#61](https://github.com/greyoak111/cccodroid/issues/61)）。
 - **[zx-5426](https://github.com/zx-5426)**、**[1fshi26](https://github.com/1fshi26)** 和 **[FatBrother1](https://github.com/FatBrother1)**：红队的核心，0.6.x 安全工作的一大半。
   - zx-5426 的红队材料让 0.6.7 的越狱检查抓住了好几种专门绕检测的写法。他还贡献了 21 个修复提交（分段下载写入、流修复、并发缩略图、定时任务、卡住的队列、台账健壮性等等），0.6.4–0.6.7 陆续合并。

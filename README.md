@@ -1,6 +1,6 @@
 # agycodroid
 
-**English** · [简体中文](README.zh-CN.md) · [Discussions](https://github.com/Zmin2003/agycodroid/discussions) · [Contributing](CONTRIBUTING.md)
+**English** · [简体中文](README.zh-CN.md) · [Contributing](CONTRIBUTING.md)
 
 **A development launcher that runs Google Antigravity CLI (`agy`) on Android phones.** No root, no custom ROM, no chroot / proot / VM.
 
@@ -18,6 +18,8 @@ write code, compile C/C++, run Python / Node, build APKs and push with git — a
 > agycodroid is a fork of [cccodroid](https://github.com/greyoak111/cccodroid) (v0.7.9), which runs Claude Code the same way.
 > Everything in this README that is not about `agy` itself is inherited from cccodroid; see
 > [What changed vs cccodroid](#what-changed-vs-cccodroid) for the full list of what was replaced, changed or dropped.
+
+> **Thank you, greyoak111.** agycodroid stands on [cccodroid](https://github.com/greyoak111/cccodroid): the gateway, the UI, the toolchain and the installer are all your work — this fork only replaces Claude Code with Antigravity CLI. Thank you for building it and sharing it openly.
 
 ## Why
 
@@ -165,10 +167,10 @@ cccodroid runs Claude Code; agycodroid runs Antigravity CLI. The app shell, gate
 
 ## Community and contributing
 
-- **Questions, ideas, device reports**: [GitHub Discussions](https://github.com/Zmin2003/agycodroid/discussions), in English or Chinese.
+- **Questions and ideas**: open a GitHub issue, in English or Chinese.
 - **Bugs**: in the app, tap Settings → Report on GitHub; your device and self-test results are filled in for you.
 
-**Day-to-day maintenance is still mostly one person, so help is very welcome.** Device reports, translation fixes, component recipes, docs and code are all welcome, and you can help without writing code. See the [contributing guide](CONTRIBUTING.md).
+**Help is very welcome.** Device reports, translation fixes, component recipes, docs and code are all welcome, and you can help without writing code. See the [contributing guide](CONTRIBUTING.md).
 
 ## Architecture
 
@@ -298,15 +300,15 @@ Inherited from cccodroid — the people below built the app this fork stands on:
 - **[CCB-Fox](https://github.com/CCB-Fox)**: the Dimensity GPU driver component ([cccodroid-components#46](https://github.com/greyoak111/cccodroid-components/pull/46)), which led to Mali support in 0.3.3.
 - **[Cosmosophius](https://github.com/Cosmosophius)**: a thorough Dimensity 9300 report ([cccodroid-components#47](https://github.com/greyoak111/cccodroid-components/issues/47)).
 - **[gogoiPhone](https://github.com/gogoiPhone)**: a Redmi K70 Ultra device report with their own Vulkan compute test ([#14](https://github.com/greyoak111/cccodroid/issues/14)).
-- **[Slingerspir](https://github.com/Slingerspir)**: suggested a GitHub acceleration route and multi-threaded downloads ([discussion #15](https://github.com/greyoak111/cccodroid/discussions/15)); 0.4.1 added segmented parallel downloads and a gh-proxy fallback.
-- **[hye45402-pixel](https://github.com/hye45402-pixel)**: asked for LaTeX, syntax highlighting, code-block language labels, strikethrough, bold italic and task lists ([discussion #18](https://github.com/greyoak111/cccodroid/discussions/18)); all added in 0.4.4.
+- **[Slingerspir](https://github.com/Slingerspir)**: suggested a GitHub acceleration route and multi-threaded downloads; 0.4.1 added segmented parallel downloads and a gh-proxy fallback.
+- **[hye45402-pixel](https://github.com/hye45402-pixel)**: asked for LaTeX, syntax highlighting, code-block language labels, strikethrough, bold italic and task lists; all added in 0.4.4.
 - **[STUTTEFRFIX](https://github.com/STUTTEFRFIX)**: the Work Island integration, which shows Claude's working status on the ColorOS 16 Fluid Cloud island ([#20](https://github.com/greyoak111/cccodroid/pull/20), [#21](https://github.com/greyoak111/cccodroid/pull/21)), with the companion app [WorkIsland-Android](https://github.com/STUTTEFRFIX/WorkIsland-Android). The first outside pull request merged into cccodroid; shipped in 0.4.7.
-- **[ThinkReally114](https://github.com/ThinkReally114)**: feedback and bug reports in the community group throughout 0.3.x.
-- **[wangxp12](https://github.com/wangxp12)**: feedback and bug reports in the community group throughout 0.3.x.
-- **[unoyg](https://github.com/unoyg)**: feedback and bug reports in the community group throughout 0.3.x.
-- **[fisHarly0](https://github.com/fisHarly0)**: suggestions and bug reports in the community group during 0.3.x.
-- **[chenshi723](https://github.com/chenshi723)**: front-end suggestions in the community group during 0.4.x. The whole interface motion system in 0.4.11 started from their remark that the app's motion felt bare; they then pointed out the sidebar's leftover animation when closing, the new-chat greeting rendering twice, choppy streaming, the DeepSeek balance showing 0 and fonts not fully following the system — fixed across 0.4.11–0.4.12. The OpenAI bridge configuration panel and safe uninstall in 0.5.15 came from their PR ([#58](https://github.com/greyoak111/cccodroid/pull/58)), and they maintain the [cccodroid-openai-bridge](https://github.com/chenshi723/cccodroid-openai-bridge) component. From 0.5.20 on they have reviewed every release in depth (more than 80 findings for 0.6.0, twelve reports for 0.6.4), and they tracked down why background programs kept asking for confirmation after "Keep" ([#167](https://github.com/greyoak111/cccodroid/issues/167), fixed in 0.6.7).
-- **[leemwood](https://github.com/leemwood)**: pointed out in the community group that the web preview lacked element picking, which led to the DevTools and "pick an element for Claude" in 0.4.14.
+- **[ThinkReally114](https://github.com/ThinkReally114)**: feedback and bug reports throughout 0.3.x.
+- **[wangxp12](https://github.com/wangxp12)**: feedback and bug reports throughout 0.3.x.
+- **[unoyg](https://github.com/unoyg)**: feedback and bug reports throughout 0.3.x.
+- **[fisHarly0](https://github.com/fisHarly0)**: suggestions and bug reports during 0.3.x.
+- **[chenshi723](https://github.com/chenshi723)**: front-end suggestions during 0.4.x. The whole interface motion system in 0.4.11 started from their remark that the app's motion felt bare; they then pointed out the sidebar's leftover animation when closing, the new-chat greeting rendering twice, choppy streaming, the DeepSeek balance showing 0 and fonts not fully following the system — fixed across 0.4.11–0.4.12. The OpenAI bridge configuration panel and safe uninstall in 0.5.15 came from their PR ([#58](https://github.com/greyoak111/cccodroid/pull/58)), and they maintain the [cccodroid-openai-bridge](https://github.com/chenshi723/cccodroid-openai-bridge) component. From 0.5.20 on they have reviewed every release in depth (more than 80 findings for 0.6.0, twelve reports for 0.6.4), and they tracked down why background programs kept asking for confirmation after "Keep" ([#167](https://github.com/greyoak111/cccodroid/issues/167), fixed in 0.6.7).
+- **[leemwood](https://github.com/leemwood)**: pointed out that the web preview lacked element picking, which led to the DevTools and "pick an element for Claude" in 0.4.14.
 - **[hwsyyds666](https://github.com/hwsyyds666)**: device report for the OnePlus Ace 5 on ColorOS 16 ([#61](https://github.com/greyoak111/cccodroid/issues/61)).
 - **[zx-5426](https://github.com/zx-5426)**, **[1fshi26](https://github.com/1fshi26)** and **[FatBrother1](https://github.com/FatBrother1)**: the core of the red team, and a big part of the 0.6.x security work.
   - zx-5426's red-team material let the 0.6.7 jailbreak check catch several kinds of wording written specifically to dodge detection. They also contributed 21 fix commits (segmented download writes, the stream fix, concurrent thumbnails, scheduled tasks, a stuck queue, ledger robustness and more), merged across 0.6.4–0.6.7.
