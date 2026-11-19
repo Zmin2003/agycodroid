@@ -120,3 +120,43 @@ jobs:
             dist/agycodroid.apk
             dist/agycodroid-36.apk
           retention-days: 30
+  # main 推送且构建成功后自动发 Release：一个版本只发一次，v<versionName> 已存在就跳过；
+  # 要发新 Release 就升 android/AndroidManifest.xml 里的 versionName。
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+
+      - name: 读取版本号
+        id: version
+        run: |
+          VERSION=$(grep -o 'android:versionName="[^"]*"' android/AndroidManifest.xml | sed 's/.*="//;s/"//')
+          if [ -z "$VERSION" ]; then echo "::error::android/AndroidManifest.xml 里找不到 android:versionName"; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "版本号：$VERSION"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agycodroid-release-*
+          path: dist
+          merge-multiple: true
+
+      - name: 检查产物
+        run: |
+          ls -l dist/agycodroid.apk dist/agycodroid-36.apk
+
+      - name: 发布 Release（已存在则跳过）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$TAG 已存在，跳过"
+            exit 0
+          fi
+          gh release create "$TAG" dist/agycodroid.apk dist/agycodroid-36.apk --title "agycodroid ${{ steps.version.outputs.version }}"
