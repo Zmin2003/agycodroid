@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="cc.codroid"
+    package="cc.agyroid"
     android:versionCode="137"
     android:versionName="0.7.9">
 
@@ -36,7 +36,7 @@
     <!-- 设备工具 open(kind=alarm/timer)：只是把闹钟应用打开并预填，普通权限，装时自动给 -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- 以下为 targetSdk 36：前台服务类型（34 起必须声明）、定时任务的精确闹钟（31 起要权限，用户在设置里给）、
-         共享目录 /sdcard/cccodroid（30 起分区存储，旧的存储权限不再管用，要「所有文件访问」） -->
+         共享目录 /sdcard/agycodroid（30 起分区存储，旧的存储权限不再管用，要「所有文件访问」） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
@@ -60,7 +60,7 @@
     </queries>
 
     <application
-        android:label="cccodroid"
+        android:label="agycodroid"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:hasCode="true"
@@ -99,7 +99,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 「分享到 cccodroid」：相册 / 文件管理器 / 浏览器把东西递进来，变成输入框里的附件。
+            <!-- 「分享到 agycodroid」：相册 / 文件管理器 / 浏览器把东西递进来，变成输入框里的附件。
                  content:// 是按次授予读权限的，不需要存储权限 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -117,7 +117,7 @@
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="cc.codroid.shizuku"
+            android:authorities="cc.agyroid.shizuku"
             android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
@@ -126,7 +126,7 @@
         <!-- 往外分享文件（会话导出包、日志包）：不导出，只靠分享时一次性的读授权 -->
         <provider
             android:name=".Share"
-            android:authorities="cc.codroid.share"
+            android:authorities="cc.agyroid.share"
             android:exported="false"
             android:grantUriPermissions="true" />
 
@@ -134,7 +134,7 @@
              只能走系统文件访问框架；权限只经系统选择器一次性授出，作用域只有 home/workspace（见 Docs.java） -->
         <provider
             android:name=".Docs"
-            android:authorities="cc.codroid.docs"
+            android:authorities="cc.agyroid.docs"
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS">

@@ -1,10 +1,10 @@
-# 参与 cccodroid
+# 参与 agycodroid
 
 [English](CONTRIBUTING.md) | 中文
 
-cccodroid 目前只有作者一个人在维护。安卓机型千差万别，一个人测不过来，也写不过来，所以非常需要帮手。下面按门槛从低到高排，挑你顺手的就行。
+agycodroid 目前只有作者一个人在维护。安卓机型千差万别，一个人测不过来，也写不过来，所以非常需要帮手。下面按门槛从低到高排，挑你顺手的就行。
 
-先来打个招呼也好：**QQ 交流群 1062538743**、[Discord](https://discord.gg/jE6KW8kwpe)，或者 [GitHub 讨论区](https://github.com/greyoak111/cccodroid/discussions)。
+先来打个招呼也好：**QQ 交流群 1062538743**、[Discord](https://discord.gg/jE6KW8kwpe)，或者 [GitHub 讨论区](https://github.com/Zmin2003/agycodroid/discussions)。
 
 ---
 
@@ -38,7 +38,7 @@ cccodroid 目前只有作者一个人在维护。安卓机型千差万别，一�
 
 ## 写配方：可选组件
 
-可选组件（Python、Blender、各种语言环境……）在单独的 [cccodroid-components](https://github.com/greyoak111/cccodroid-components) 仓库。每个组件就是一份配方，提交后由 CI 构建、测试、签名，不用在自己手机上折腾，是最适合上手写代码的地方。
+可选组件（Python、Blender、各种语言环境……）在单独的 [cccodroid-components](https://github.com/greyoak111/cccodroid-components) 仓库（上游——agycodroid 用的是同一份签过名的组件索引）。每个组件就是一份配方，提交后由 CI 构建、测试、签名，不用在自己手机上折腾，是最适合上手写代码的地方。
 
 ---
 
@@ -49,9 +49,9 @@ cccodroid 目前只有作者一个人在维护。安卓机型千差万别，一�
 | 位置 | 是什么 |
 |---|---|
 | `android/java/` | 安卓外壳（Java）：安装、更新、通知、Shizuku、WebView |
-| `android/assets/bin/`、`android/assets/scripts/` | 终端里的小工具与脚本（`pkg`、Claude Code 安装脚本等）的**源文件** |
+| `android/assets/bin/`、`android/assets/scripts/` | 终端里的小工具与脚本（`pkg`、Antigravity CLI 安装脚本等）的**源文件** |
 | `android/native/` | 几个小原生程序（伪终端、seccomp 兜底） |
-| `gateway/server.mjs`、`gateway/gw/` | 网关，只用 Node 内置模块，负责跑 claude、会话、文件、设置等全部接口。`server.mjs` 只管分发请求和启动，各功能（会话、文件、git、组件……）分在 `gw/` 下的模块里，清单见 `server.mjs` 文件头 |
+| `gateway/server.mjs`、`gateway/gw/` | 网关，只用 Node 内置模块，负责跑 agy、会话、文件、设置等全部接口。`server.mjs` 只管分发请求和启动，各功能（会话、文件、git、组件……）分在 `gw/` 下的模块里，清单见 `server.mjs` 文件头 |
 | `gateway/web/` | 界面：原生 JS + CSS，**没有构建步骤**，改完刷新就是 |
 | `i18n/` | 译文 |
 | `devkit/` | 开发工具包（Termux 官方仓库组装）的构建脚本 |
@@ -77,12 +77,12 @@ PR 的包是用临时测试钥匙签的，和正式版签名不同：要先卸�
 
 ### 合规底线
 
-这个项目能长期存在，靠的是遵守 Anthropic 的条款（见 [README 的「条款与合规」](README.zh-CN.md#条款与合规)）。下面这些改动不会被接受：
+这个项目能长期存在，靠的是遵守 Google 关于 Antigravity 的条款（见 [README 的「条款与合规」](README.zh-CN.md#条款与合规)）。下面这些改动不会被接受：
 
-- 修改 Claude Code 程序本身，或者读取它的凭据文件；
-- 共享、中转、转售 Claude 账户或用量；
-- 无人值守、定时自动跑 Claude 的功能；
-- 在名称、图标里使用 Claude 或 Anthropic 的商标。
+- 修改 Antigravity CLI 程序本身，或者读取它的凭据文件；
+- 共享、中转、转售 Antigravity 账户或用量；
+- 无人值守、定时自动跑 Antigravity 的功能；
+- 在名称、图标里使用 Antigravity 或 Google 的商标。
 
 ### 许可
 
