@@ -909,7 +909,7 @@
 909	Tidak menemukan "{q}" di pesan yang dimuat
 910	Pilih file devkit yang sudah diunduh untuk dipasang
 911	File lokal…
-912	Pasang devkit dari file lokal?\n\nPilih devkit-cc.codroid.tar.gz (atau .tar); Anda bisa mengunduhnya dari halaman rilis GitHub (github.com/Zmin2003/agycodroid/releases). Sebelum dipasang, file akan dicocokkan dengan rilis yang sudah diterbitkan; layanan berhenti selama 1–2 menit saat pemasangan.\nApa pun yang Anda pasang ke devkit dengan pip / npm -g akan dipertahankan.
+912	Pasang devkit dari file lokal?\n\nPilih devkit-cc.agyroid.tar.gz (atau .tar); Anda bisa mengunduhnya dari halaman rilis GitHub (github.com/Zmin2003/agycodroid/releases). Sebelum dipasang, file akan dicocokkan dengan rilis yang sudah diterbitkan; layanan berhenti selama 1–2 menit saat pemasangan.\nApa pun yang Anda pasang ke devkit dengan pip / npm -g akan dipertahankan.
 913	Log perintah istimewa
 914	Belum ada perintah yang dijalankan lewat priv
 915	{n} entri terakhir (terbaru di atas). Hanya disimpan di perangkat ini, tidak diunggah.

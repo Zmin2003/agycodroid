@@ -909,7 +909,7 @@
 909	« {q} » introuvable dans les messages chargés
 910	Installer depuis un fichier de boîte à outils déjà téléchargé
 911	Fichier local…
-912	Installer la boîte à outils depuis un fichier local ?\n\nChoisissez un devkit-cc.codroid.tar.gz (ou .tar), téléchargeable depuis la page des versions GitHub (github.com/Zmin2003/agycodroid/releases). Il est comparé aux versions publiées avant l’installation ; le service est suspendu 1 à 2 minutes pendant l’installation.\nCe que vous avez installé avec pip / npm -g est conservé.
+912	Installer la boîte à outils depuis un fichier local ?\n\nChoisissez un devkit-cc.agyroid.tar.gz (ou .tar), téléchargeable depuis la page des versions GitHub (github.com/Zmin2003/agycodroid/releases). Il est comparé aux versions publiées avant l’installation ; le service est suspendu 1 à 2 minutes pendant l’installation.\nCe que vous avez installé avec pip / npm -g est conservé.
 913	Journal des commandes privilégiées
 914	Aucune commande n’a encore été exécutée via priv
 915	{n} dernières entrées (les plus récentes d’abord). Conservées sur cet appareil uniquement, jamais envoyées.
