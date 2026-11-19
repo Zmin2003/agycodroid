@@ -956,7 +956,7 @@ public class MainActivity extends Activity {
             throw new java.io.IOException(Tr.f("APK 里的工具包清单不是给本应用的（target 是 {0}），不安装", pin.optString("target")));
         String file = pin.getJSONObject("gz").getString("file"), base = pin.getString("base");
         String gh = base + file;
-        // 以前共享目录里有 devkit-cc.codroid.tar.gz 就自动多一项「用共享目录里的文件」：那里任何有存储权限的应用都能放，
+        // 以前共享目录里有 devkit-cc.agyroid.tar.gz 就自动多一项「用共享目录里的文件」：那里任何有存储权限的应用都能放，
         // 等于替人摆好一个诱饵（审查 v0513b 低-24）。离线装照样能走「选择本地文件…」，自己挑的文件才装
         String local = null;
         while (true) {
@@ -1013,7 +1013,7 @@ public class MainActivity extends Activity {
             chooser.addView(q);
             String[][] opts = {
                 {"github", Tr.t("从 GitHub 下载"), Tr.t("海外网络一般最快")},
-                {"local", Tr.t("选择本地文件…"), Tr.t("已经下好的 devkit-cc.codroid.tar.gz（或 .tar）；装之前核对是不是发布版")},
+                {"local", Tr.t("选择本地文件…"), Tr.t("已经下好的 devkit-cc.agyroid.tar.gz（或 .tar）；装之前核对是不是发布版")},
                 local != null ? new String[]{"path", Tr.t("用共享目录里的文件"), local} : null,
             };
             for (String[] o : opts) {
