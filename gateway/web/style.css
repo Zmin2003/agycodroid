@@ -396,7 +396,7 @@ td{color:var(--fg2)}
 #run-strip .rs-goal.bad{border-color:var(--err)}
 #run-strip .rs-row{display:flex;align-items:center;gap:8px;min-width:0}
 #run-strip .rs-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#run-strip .rs-meta,#run-strip .rs-head,#run-strip .rs-sub{color:var(--fg3);font-size:11.5px}
+#run-strip .rs-meta,#run-strip .rs-sub{color:var(--fg3);font-size:11.5px}
 #run-strip .rs-meta{flex:0 0 auto;font-variant-numeric:tabular-nums}
 #run-strip .rs-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #run-strip .rs-kind{flex:0 0 auto;font-size:11px;color:var(--fg2);background:var(--bg3);border-radius:6px;padding:1px 6px}
@@ -442,16 +442,7 @@ td{color:var(--fg2)}
 /* 敏感操作再确认：红边、说明块放最上面 */
 .perm.guard{border-color:var(--err-line,var(--err))}
 .perm.guard .perm-kind{color:var(--err)}
-.perm-guard{margin:0 0 8px;padding:8px 10px;border-radius:8px;background:var(--err-bg);color:var(--err-fg);font-size:12.5px;line-height:1.5;overflow-wrap:anywhere}
-.perm-guard b{display:block;font-weight:600}
-.perm-guard p{margin:3px 0 0;opacity:.85}
-.perm-plan{max-height:50vh;overflow:auto;font-size:13.5px}
-.perm-q{margin:4px 0 10px}
-.perm-qt{font-weight:600;margin-bottom:6px}
-.perm-opts{display:flex;flex-direction:column;gap:5px}
-.perm-opt{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
-.perm-opt small{display:block;color:var(--fg3);font-size:11.5px}
-.perm-other,.perm-deny textarea{width:100%;box-sizing:border-box;margin-top:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:13px}
+.perm-deny textarea{width:100%;box-sizing:border-box;margin-top:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:13px}
 .perm-acts{display:flex;flex-wrap:wrap;gap:6px;padding:4px 10px 10px}
 .perm-acts code{font-size:11px}
 .perm-deny{padding:0 10px}
@@ -508,7 +499,6 @@ html[dir="rtl"] .drawer-panel{animation-name:slide-rtl}
 .side-brand{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:.2px}
 .side-brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .drawer-panel svg{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
-.side-logo{width:22px;height:22px;color:var(--accent);stroke-width:1.8}
 .side-new{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;margin-bottom:6px;border-radius:11px;
   background:var(--bg);border:1px solid var(--line);color:var(--fg);font:inherit;font-size:14px;font-weight:500;cursor:pointer}
 .side-new:hover{border-color:var(--accent-dim)}
@@ -535,10 +525,6 @@ html[dir="rtl"] .drawer-panel{animation-name:slide-rtl}
 html.dock-l .side-recent{margin:0 -12px;padding:0 12px 8px}
 .side-recent h4{margin:12px 12px 3px;font-size:11.5px;font-weight:600;color:var(--fg3);letter-spacing:.4px}
 .side-recent h4:first-child{margin-top:4px}
-.ac-slide{padding:12px 14px}
-.ac-head{display:flex;align-items:center;gap:10px}
-.ac-head b{font-weight:600}
-.ac-head #ac-val{flex:1;color:var(--fg2);font-variant-numeric:tabular-nums}
 .ac-track{position:relative;height:28px;margin:6px 0 0}
 /* 纸色：只在构成 · 浅色时出现（设置 → 通用 → 外观下面） */
 html:not([data-skin="goucheng"][data-theme="light"]) #gp-row{display:none}
@@ -550,8 +536,6 @@ html:not([data-skin="goucheng"][data-theme="light"]) #gp-row{display:none}
 .ac-track input:active::-webkit-slider-thumb{transform:scale(1.15)}
 .ac-track.auto input::-webkit-slider-runnable-track{background:repeating-linear-gradient(90deg,var(--bg4) 0 6px,transparent 6px 10px)}
 .ac-track.auto input::-webkit-slider-thumb{border-color:var(--fg3)}
-.ac-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--fg3);font-variant-numeric:tabular-nums}
-.ac-slide p.tiny{margin:8px 0 0}
 .side-recent h4.sr-g{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;-webkit-user-select:none;border-radius:6px;padding:2px 0}
 .side-recent h4.sr-g svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-left:-3px;transition:transform .18s}
 .side-recent h4.sr-g.shut svg{transform:rotate(-90deg)}
@@ -606,7 +590,6 @@ html.has-right #pages{inset-inline-end:var(--rw)}
 #page-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:18px 16px calc(var(--safe-b) + 28px)}
 #page-body > .tab-pane{max-width:760px;margin:0 auto;overflow-wrap:anywhere}
 #page-body > #tab-ext,#page-body > #tab-help,#page-body > #tab-changelog{max-width:900px}
-.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
 .tabs{display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:3px}
 .tab{
   background:transparent;border:0;color:var(--fg3);font:inherit;font-size:13px;
@@ -906,7 +889,6 @@ a.weblink{overflow-wrap:anywhere}
 .qitem.held .q-tag{color:var(--fg3)}
 .q-acts{display:flex;justify-content:flex-end;gap:4px;margin-top:2px}
 .q-acts .q-now{color:var(--accent)}
-.wait-note{color:var(--fg3);font-size:12px;margin:4px 0 0}
 
 /* ── v3：历史翻页 / 提示条 ── */
 #older{display:block;margin:0 auto 14px;padding:6px 16px;border-radius:16px;border:1px solid var(--line);
@@ -1143,14 +1125,6 @@ code a.fpath{border-bottom-style:dotted}
 .gh-acc button{margin-left:auto}
 .gh-acc button + button{margin-left:0}
 /* 欢迎页 */
-.welcome-tips{color:var(--fg2);font-size:13.5px;padding-inline-start:0;list-style:none}
-.welcome-tips li{margin:6px 0;display:flex;gap:12px;align-items:flex-start}
-.welcome-tips .wt-k{flex:0 0 4.6em;display:inline-flex;gap:4px;align-items:center;color:var(--fg);min-height:1.6em}
-.wt-ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.wt-txt{font-family:var(--mono);font-weight:600;font-size:13px}
-.welcome-ex-h{margin:10px 0 6px;color:var(--fg2);font-size:13px}
-.welcome-ex{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-.welcome-ex .btn{white-space:normal;text-align:start;height:auto;line-height:1.4;padding:6px 10px}
 .setup-guide{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .setup-paths{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
 .setup-path{flex:1 1 220px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
@@ -1226,8 +1200,6 @@ html.dock-l .side-acct{margin-inline:-12px}
 html.dock-l .tab{padding:6px 10px}
 /* 抽屉只许竖着滚：标签一多（加了「帮助」）就横向溢出，窄侧栏里一拖整块内容跑偏。标签条自己横滑，其余内容限宽 */
 .drawer-panel{overflow-x:hidden}
-.drawer-head .tabs{min-width:0;overflow-x:auto;scrollbar-width:none}
-.drawer-head .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto}
 .tab-pane{min-width:0;max-width:100%}
 html.has-right #browser{padding-inline-start:6px}   /* 原生浏览器会盖住分隔条的右半边，留一条给手指 */
@@ -1235,8 +1207,6 @@ html[dir="rtl"] .field select{background-position:12px 50%,17px 50%}   /* 从右
 
 /* ── 帮助 ── */
 .help-toc{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 18px;scroll-margin-top:12px}
-.help-link{background:var(--bg3);border:0;color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px}
-.help-link:active{background:var(--bg4)}
 .help-body{font-size:14px;line-height:1.75;overflow-wrap:anywhere}
 .help-body h2{font-size:19px;margin:0 0 10px;color:var(--strong)}
 .help-body h3{font-size:16.5px;margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;scroll-margin-top:10px;color:var(--strong)}
@@ -1247,7 +1217,6 @@ html[dir="rtl"] .field select{background-position:12px 50%,17px 50%}   /* 从右
 .help-body blockquote{margin:10px 0;padding:2px 0;padding-inline-start:12px;border-inline-start:3px solid var(--accent-dim);color:var(--fg2)}
 .help-body table{font-size:12.5px}
 .help-body td{white-space:normal}
-.help-up{margin-inline-start:auto;background:none;border:0;color:var(--fg3);font-size:14px;padding:2px 6px}
 .help-body pre,.help-body table{display:block;max-width:100%;overflow-x:auto}
 #btn-send .ico-stop rect{fill:currentColor;stroke:none}
 .live-tail{display:flex;align-items:center;gap:8px;margin-top:4px;min-height:18px}
@@ -1563,12 +1532,6 @@ mark.jump-hit{background:#f5c54266;color:inherit;border-radius:2px}
 
 /* 交流群与参与（帮助页末尾、更新说明卡片底部） */
 .cm-box{margin:6px 0 10px}
-.cm-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.cm-k{color:var(--fg2);font-size:14px}
-.cm-num{border:1px solid var(--line);background:var(--bg3);color:var(--fg);font:inherit;font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:.5px;padding:4px 12px;border-radius:9px;cursor:pointer}
-.cm-num:active{background:var(--accent-btn);color:var(--on-accent)}
-.cm-qr{display:block;width:100%;max-width:260px;margin:10px 0 4px;border-radius:12px}
-.cm-qr.hidden{display:none}
 .cm-box p{margin:8px 0;font-size:14px;line-height:1.6}
 .cm-links{margin-top:8px;font-size:13.5px;color:var(--fg3)}
 .cm-links a{color:var(--accent);text-decoration:none}
@@ -1777,7 +1740,6 @@ input[type=checkbox].sw:disabled{opacity:.45;cursor:default}
 #tab-sessions .sess-grp{font-size:12.5px;margin-top:14px}
 #tab-sessions #session-list{gap:8px}
 /* 能力页：一行计数格、搜索框、命令卡片 */
-.caps-sum{font-size:12.5px;color:var(--fg3);margin:0 2px 12px;line-height:1.6}
 .cap-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-bottom:14px}
 .cap-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;
   background:var(--bg2);color:var(--fg);font:inherit;text-align:start;cursor:pointer;transition:border-color .15s}
@@ -1801,21 +1763,12 @@ input[type=checkbox].sw:disabled{opacity:.45;cursor:default}
 .cmd-card span:last-child:empty{display:none}
 #tab-caps .chips{gap:6px}
 #tab-caps .chip{font-family:var(--mono);font-size:12.5px;padding:4px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
-.mcp-chip{display:inline-flex;align-items:center;gap:7px}
-.mcp-chip small{color:var(--fg3);font-size:11px}
 .mdot{width:7px;height:7px;border-radius:50%;background:var(--bg4)}
 .mdot.ok{background:var(--ok)}
 .mdot.bad{background:var(--err)}
 
 /* 用量页（#pages 里）：额度大数字、统计块改成工程风的等宽数字 */
 .quota-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:4px 0 8px}
-.q-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
-.q-tile .q-l{font-size:12px;color:var(--fg3);letter-spacing:.04em}
-.q-tile b{font:600 30px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.q-tile b small{font-size:15px;color:var(--fg3);margin-left:2px}
-.q-tile.warm b{color:var(--warn)} .q-tile.hot b{color:var(--err)}
-.q-tile .quota-bar{max-width:none;flex:none;width:100%}
-.q-tile .q-r{font-size:11.5px;color:var(--fg3);font-family:var(--mono)}
 #pages .us-tiles{gap:10px}
 #pages .us-tile{background:var(--bg);border:1px solid var(--line);padding:12px 14px}
 #pages .us-n{font:600 26px/1.1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
@@ -1884,7 +1837,6 @@ input[type=checkbox].sw:disabled{opacity:.45;cursor:default}
 .help-body .tbl-wrap tr:last-child td{border-bottom:0}
 .help-body .tbl-wrap td:first-child{color:var(--fg);white-space:nowrap}
 .help-body blockquote{background:var(--bg2);border-radius:0 10px 10px 0;padding:8px 12px;padding-inline-start:12px}
-.help-up{display:none}
 .hl-ico svg,.hl-inl svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 /* 对话页：紧凑行，跟侧栏同一套语言 */
@@ -2380,8 +2332,6 @@ body{line-height:var(--phi)}
 #run-strip .rs-goal.ok .rs-ico,#run-strip .rs-tasks.ok .rs-ico{color:var(--ok)}
 #run-strip .rs-goal.bad .rs-ico{color:var(--err)}
 #run-strip .rs-ico .ui-i{width:15px;height:15px}
-#run-strip .rs-head{display:flex;align-items:center;gap:5px}
-#run-strip .rs-head .ui-i{width:13px;height:13px}
 #run-strip .rs-chev{display:inline-flex}
 #run-strip .rs-chev .ui-i{width:14px;height:14px;transition:transform .15s}
 #run-strip .rs-chev.up .ui-i{transform:rotate(180deg)}

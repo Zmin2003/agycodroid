@@ -41,7 +41,7 @@
   // 模块装完 / 卸完后组件卡要跟着刷新：组件装的正是刚补上的模块，不刷新的话安装按钮一直是灰的（0.6.10 审计 195-I.4）
   let modTouched = false;
   const MOD_USES = () => ({
-    claude: t("Antigravity CLI 本身"), git: t("git 面板"), terminal: t("终端"), shizuku: t("Shizuku 一键启动（无线调试）"), search: t("Antigravity 搜代码、看差异"),
+    agy: t("Antigravity CLI 本身"), git: t("git 面板"), terminal: t("终端"), shizuku: t("Shizuku 一键启动（无线调试）"), search: t("Antigravity 搜代码、看差异"),
     "native-build": t("编译原生程序"), apk: t("打 APK"), "usb-adb": t("USB 调试"), "gpu-components": t("GPU 组件（Blender、浏览器等）"),
     media: t("音视频处理"), docs: t("排版、表格分析、图片处理"),
   });
@@ -311,8 +311,17 @@
         .replace(" data-c=\"install\"", " data-c=\"install\"" + (c.verified ? "" : " data-unverified=\"1\"") + (miss.length ? " disabled" : ""))
         .replace(" data-c=\"remove\"", " data-c=\"remove\"" + (used.length ? ' data-usedby="' + listOf(used) + '"' : ""));
     }).join("");
-    const next = (r.allowUnsigned ? '<div class="tiny err">' + esc(t("组件签名检查已关闭（网关带了测试开关启动）")) + "</div>" : "") +
-      (html || '<div class="tiny">' + (r.indexError ? t("组件清单取不到：{msg}", { msg: esc(r.indexError) }) : t("暂时没有可装的组件。")) + "</div>") +
+    // devkit M1 补漏：工具包升级后，旧工具包里装的组件文件已随旧包没了（state=outdated），
+    // 每张卡上虽有单个「重新安装」，但没有升级完成后的集中入口。这里在列表顶上给一条
+    // 提示 +「一键重装全部组件」，批量复用单个重装接口（见下面 data-c="reinstall-all" 的处理，
+    // 不另写安装流程）；暂无适配构建的只计数、不进批量。
+    const reinstallable = (r.items || []).filter((c) => c.state === "outdated" && c.available && c.installedVersion);
+    const noBuild = (r.items || []).filter((c) => c.state === "outdated" && !c.available).length;
+    box._reinstallAll = reinstallable.map((c) => ({ id: c.id, name: pickLang(c.name) || c.id, unverified: !c.verified, requires: (c.requires || []).map((d) => d.id || d) }));
+    const reinstallBanner = reinstallable.length ? `<div class="item"><div class="it-title wrap">${esc(t("工具包已更新，{n} 个组件需要重新安装", { n: reinstallable.length }))}${noBuild ? " · " + esc(t("另 {n} 个暂无适配当前工具包的版本", { n: noBuild })) : ""}</div><div class="tiny">${esc(t("会按顺序逐个重新下载安装；你自己的文件、会话和设置不受影响。"))}</div><div class="it-acts"><button class="btn sm" data-c="reinstall-all">${esc(t("一键重装全部组件"))}</button></div></div>` : "";
+    const next = reinstallBanner + (r.allowUnsigned ? '<div class="tiny err">' + esc(t("组件签名检查已关闭（网关带了测试开关启动）")) + "</div>" : "") +
+      // 清单还没发布（预置索引 404）：空列表时只说一句人话，不挂红字报错；已装组件照常列出、可管理（components H4）
+      (html || '<div class="tiny">' + (r.indexNotPublished ? t("组件清单还没发布") : r.indexError ? t("组件清单取不到：{msg}", { msg: esc(r.indexError) }) : t("暂时没有可装的组件。")) + "</div>") +
       (html && r.indexError ? '<div class="tiny err">' + t("部分组件清单取不到：{msg}", { msg: esc(r.indexError) }) + "</div>" : "") +
       (r.indexError ? '<div class="it-acts"><button class="btn ghost sm" data-c="reindex">' + t("重试") + "</button></div>" : "");
     const changed = box._html !== next;
@@ -1303,6 +1312,35 @@
         const r = await post("/api/ext/off", { kind: "comp", id, on: cb.dataset.on === "1" }).catch((err) => ({ ok: false, message: err.message }));
         toast(r.ok ? (cb.dataset.on === "1" ? t("已启用") : t("已停用") + " · " + OFF_TIP()) : t("失败：{msg}", { msg: r.message || "" }), !r.ok);
         loadExtSkills();     // 组件自带的技能跟着关 / 开
+        return loadComponents();
+      }
+      // devkit M1 补漏：一键重装全部组件（升级后 outdated 的）。批量复用单个重装接口
+      // POST /api/components/install，不另写安装流程：单个装是异步任务（compStart 只起任务
+      // 就回），这里逐个起完就刷新列表，进度由 loadComponents 的一秒轮询接着显示。
+      // 依赖先装：按 requires 拓扑排一下，省得后装的先报「要先装」；有环排不出来的按原顺序。
+      if (c === "reinstall-all") {
+        const list = ($("comp-list")._reinstallAll || []).slice();
+        if (!list.length) return loadComponents();
+        const names = list.map((x) => x.name).join("、");
+        const warnUnverified = list.some((x) => x.unverified) ? "\n\n" + t("其中有没在真机上验证过的组件，可能装不上或用不了。") : "";
+        if (!confirm(t("工具包更新后，下面的组件要重新安装（会重新下载）：") + "\n\n" + names + warnUnverified + "\n\n" + t("你自己的文件、会话和设置不受影响。继续？"))) return;
+        cb.disabled = true;
+        const reqs = new Map(list.map((x) => [x.id, x.requires || []]));
+        const ordered = [];
+        const rest = new Set(list.map((x) => x.id));
+        while (rest.size) {
+          const ready = [...rest].filter((x) => !(reqs.get(x) || []).some((d) => rest.has(d)));
+          if (!ready.length) { ordered.push(...rest); break; }   // 有环：剩下的按原顺序
+          for (const x of ready) { ordered.push(x); rest.delete(x); }
+        }
+        const nameOf = new Map(list.map((x) => [x.id, x.name]));
+        const failed = [];
+        for (const x of ordered) {
+          const r = await post("/api/components/install", { id: x }).catch((err) => ({ ok: false, message: err.message }));
+          if (!r.ok) failed.push((nameOf.get(x) || x) + "：" + (r.message || t("失败")));
+        }
+        if (failed.length) toast(t("有 {n} 个组件没开始重装：", { n: failed.length }) + "\n" + failed.join("\n"), true);
+        else toast(t("已开始重装 {n} 个组件，装完自动刷新", { n: ordered.length }));
         return loadComponents();
       }
       if (compRemoving.has(id)) return;
