@@ -406,7 +406,6 @@
       }
       const pe = $("set-parallel");
       if (pe && document.activeElement !== pe) { pe.max = state.settings.maxParallelCap || 16; pe.value = state.settings.maxParallel || 3; }
-      $("set-static").checked = state.settings.staticCompat !== false;
       $("set-workisland").checked = state.settings.workIsland === true;
       loadWorkIsland();
       loadExecMode();
@@ -473,8 +472,7 @@
     const S = state.settings || {};
     const v = { model: ["set-model", S.model || ""], titleModel: ["set-titlemodel", S.titleModel || ""], effort: ["set-effort", S.effort || ""], outputStyle: ["set-style", S.outputStyle || ""],
       maxParallel: ["set-parallel", S.maxParallel || 3] };
-    const c = { staticCompat: ["set-static", S.staticCompat !== false],
-      workIsland: ["set-workisland", S.workIsland === true] };
+    const c = { workIsland: ["set-workisland", S.workIsland === true] };
     for (const k of Object.keys(patch || {})) {
       if (v[k] && $(v[k][0])) $(v[k][0]).value = v[k][1];
       if (c[k] && $(c[k][0])) $(c[k][0]).checked = c[k][1];
@@ -498,7 +496,6 @@
   $("set-effort").addEventListener("change", (e) => saveSettings({ effort: e.target.value }));
   $("set-titlemodel").addEventListener("change", (e) => saveSettings({ titleModel: e.target.value }));
 
-  $("set-static").addEventListener("change", (e) => saveSettings({ staticCompat: e.target.checked }));
   // 执行方式：存在 files/.exec-mode，重启网关生效（36 的包选「直接执行」网关会拒）
   let execPid = 0;
   async function loadExecMode() {

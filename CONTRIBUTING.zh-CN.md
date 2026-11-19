@@ -36,7 +36,7 @@
 
 ## 写配方：可选组件
 
-可选组件（Python、Blender、各种语言环境……）在单独的 [cccodroid-components](https://github.com/greyoak111/cccodroid-components) 仓库（上游——agycodroid 用的是同一份签过名的组件索引）。每个组件就是一份配方，提交后由 CI 构建、测试、签名，不用在自己手机上折腾，是最适合上手写代码的地方。
+可选组件（Python、Blender、各种语言环境……）在单独的 [agycodroid-components](https://github.com/Zmin2003/agycodroid-components) 仓库。每个组件就是一份配方，提交后由 CI 构建、测试、签名，不用在自己手机上折腾，是最适合上手写代码的地方。
 
 ---
 

@@ -84,7 +84,7 @@
     for (const a of TERM.inst.values()) termDetach(a);   // 收起了就不占连接，下次打开重连回放
   }
 
-  /** 手动登录：开一个新终端，网关替你敲好 claude auth login；授权码贴给 claude 自己的提示 */
+  /** 手动登录：开一个新终端，网关替你敲好 agy；授权码贴给 agy 自己的提示 */
   async function openLoginTerm(method) {
     MO.cancel(termEl); termEl.classList.remove("hidden"); raisePane("term");
     try { await loadXterm(); } catch (e) { toast(t("终端组件加载失败：{msg}", { msg: e.message }), true); return; }

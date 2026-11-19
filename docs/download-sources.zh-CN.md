@@ -14,18 +14,18 @@ agycodroid 要从网上取的东西有八类，大多有不止一个来源。这
 
 | # | 下载什么 | 来源（按尝试顺序） | 信任锚 | 代码 |
 |---|---|---|---|---|
-| 1 | 开发工具包（0.3.9 起按模块：默认约 330 MB，全部约 700 MB；旧版 App 用整包约 650 MB） | GitHub Release → dl.cccodroid.net/devkit/ | APK 自带的 `devkit-pin.json`（整包 gz / tar 与 `modules.json` 的 sha256，`modules.json` 里再有每块的 sha256） | `Installer.java`、`Updater.java`、`gateway/gw/modules.mjs`（扩展页加装） |
-| 2 | APK 更新 | 发布列表：GitHub API → cccodroid.net/dl/releases.json → dl.cccodroid.net/dl/releases.json；APK：GitHub Release → cccodroid.net/dl/ → dl.cccodroid.net/dl/ → gh-proxy | Android 的 APK 签名（同一把发布钥匙才能覆盖安装）+ 发布列表里的 sha256 | `Updater.java` |
+| 1 | 开发工具包（0.3.9 起按模块：默认约 330 MB，全部约 700 MB；旧版 App 用整包约 650 MB） | 只走 GitHub Release——fork 暂无镜像站（见下面“服务器端”） | APK 自带的 `devkit-pin.json`（整包 gz / tar 与 `modules.json` 的 sha256，`modules.json` 里再有每块的 sha256） | `Installer.java`、`Updater.java`、`gateway/gw/modules.mjs`（扩展页加装） |
+| 2 | APK 更新 | 发布列表：只查 GitHub API；APK：GitHub Release → gh-proxy | Android 的 APK 签名（同一把发布钥匙才能覆盖安装）+ 发布列表里的 sha256 | `Updater.java` |
 | 3 | Antigravity CLI（agy） | 只有官方 manifest（antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json） | Google 官方 manifest 给的 sha512（agy 没有 PGP 签名）；版本 / URL / sha512 安装时现读，不硬编码 | `assets/scripts/install-agy.mjs` |
-| 4 | 组件索引 | GitHub Release → cccodroid.net/components/ | 钉在网关里的 ed25519 公钥 | `gateway/gw/components.mjs` `compFetchIndex` |
-| 5 | 组件包 | GitHub Release ⇄ dl.cccodroid.net/components/（轮流试，记住上次成功的） | 签名索引里的 sha256，解包后再按包内 MANIFEST 逐个核对 | `gateway/gw/components.mjs` `compRunInstall` |
+| 4 | 组件索引 | 只走 GitHub Release（fork 暂无镜像站） | 钉在网关里的 ed25519 公钥 | `gateway/gw/components.mjs` `compFetchIndex` |
+| 5 | 组件包 | 只走 GitHub Release（fork 暂无镜像站） | 签名索引里的 sha256，解包后再按包内 MANIFEST 逐个核对 | `gateway/gw/components.mjs` `compRunInstall` |
 | 6 | pkg 装软件 | Termux 官方 → packages.termux.dev → grimler.se → 清华/中科大/北外/南大（main、x11） | 钉在 pkg 里的 Termux 自动构建钥，验 `Release.gpg` | `assets/bin/pkg.mjs` |
 | 7 | 自定义组件补 glibc 库 | Termux 官方 glibc 仓库（只此一个） | HTTPS + `Packages` 里的 sha256 | `gateway/gw/custom.mjs` `customFetchLibs` |
 | 8 | 端侧模型 | 魔搭（仅 Qwen 官方）→ HuggingFace → hf-mirror.com | 目录里钉的 sha256（取自 HF LFS） | `gateway/gw/local.mjs` `LOCAL_CATALOG` |
 
 **0.4.1 起的两项通用做法**（工具包、APK 更新、组件包、Antigravity CLI 都适用）：
 
-- **分段并行**：文件不小于 16 MB、服务器认 Range 时，把没下的部分切成最多 4 段同时下，按偏移写进同一个 `.part`（先占满到总大小），每段进度记在 `.part.seg`。被打断或换来源后按它续传；`.seg` 和 `.part` 对不上就两个都作废重来。来源不认 Range 时退回单连接。实测 dl.cccodroid.net 单线约 2.7 MB/s，4 路约 14 MB/s。代码：`Installer.java` 的 `fetchSegmented`、`gateway/gw/pget.mjs`。
+- **分段并行**：文件不小于 16 MB、服务器认 Range 时，把没下的部分切成最多 4 段同时下，按偏移写进同一个 `.part`（先占满到总大小），每段进度记在 `.part.seg`。被打断或换来源后按它续传；`.seg` 和 `.part` 对不上就两个都作废重来。来源不认 Range 时退回单连接。上游镜像 dl.cccodroid.net 上的实测（fork 之前；fork 暂无镜像站）：单线约 2.7 MB/s，4 路约 14 MB/s。代码：`Installer.java` 的 `fetchSegmented`、`gateway/gw/pget.mjs`。
 - **低速换源**（0.4.2 起，APK 与工具包的 Java 下载）：每条连接每 30 秒一窗，不到 600 KB 就当这次失败，触发重试与换源；已经没有别的来源时不计失败次数、接着续传。以前只有连不上、或 60 秒一个字节不来才换源，GitHub 慢慢滴的时候会一直卡在 0%（群友报的 0.3.16 → 0.4.1）。代码：`Installer.java` 的 `Slow`。
 - **gh-proxy.com 兜底**：GitHub 地址在其余来源都不顺时，最后再试一次 `https://gh-proxy.com/github.com/…`。这是第三方服务，不需要信任它：内容照样按上表的信任锚核对。（讨论区 #15 的建议）
 
@@ -33,9 +33,11 @@ agycodroid 要从网上取的东西有八类，大多有不止一个来源。这
 
 ---
 
-## 服务器端（cccodroid.net 上的镜像）
+## 服务器端（暂无镜像站——下面是上游 cccodroid.net 的说明，仅供参考）
 
-两个域名，同一台服务器：
+**Fork 现状（2026-11-19）：agycodroid 没有域名、没有 VPS、没有镜像站。** 下面这张表和生成器说明写的是*上游* cccodroid.net 的做法，留着参考，等 fork 有了自己的基础设施再说；今天对 agycodroid 一条都不适用。下载目前只走 GitHub Release（见上面一览表）。`scripts/publish-devkit.mjs`（mirror 步）和 `scripts/ship.mjs`（site 步）在有这套基础设施之前是停用/跳过的。
+
+两个域名，同一台服务器（仅限上游）：
 
 | 域名 | 经 Cloudflare？ | 放什么 |
 |---|---|---|
@@ -62,16 +64,16 @@ nginx 配置：`/etc/nginx/sites-available/agycodroid.conf` 和 `agycodroid-dl.c
 
 ### 1. 开发工具包
 
-- 首次安装时，安装页让用户选来源：GitHub、cccodroid.net 镜像，或本地文件。GitHub 和镜像互为备用，最后再试 gh-proxy；按顺序依次换、不回头，用同一个 `.part` 文件接着续传。
+- 首次安装时，安装页让用户选来源：GitHub 或本地文件（fork 暂无镜像站，上游的 cccodroid.net 镜像不可用）。最后再试 gh-proxy；按顺序依次换、不回头，用同一个 `.part` 文件接着续传。
 - 校验值以 APK 里的 `assets/devkit-pin.json` 为准。这个文件由 `scripts/pin-devkit.mjs` 生成，`build.sh` 会核对它和 `devkit-sources.txt` 是不是同一版。
-- **改工具包版本时**：先发布 devkit Release，再更新 `devkit-sources.txt`，然后跑 `pin-devkit.mjs`，最后打 APK。服务器会自动把新绑定的那一版同步过去。
+- **改工具包版本时**：先发布 devkit Release，再更新 `devkit-sources.txt`，然后跑 `pin-devkit.mjs`，最后打 APK。新绑定的版本从 GitHub Release 取：pin 跟着 APK 走，工具包从 Release 上下载——fork 没有自己的服务器。
 - `pin-devkit.mjs` 要求锁文件带签名（`devkit.lock.json.sig`）并验过。只有 10-29 之前那几版本来就没签，这种情况确认无误后加 `PIN_ALLOW_UNSIGNED=1` 重跑，生成的 pin 里会记 `lockSigned:false`。新版本不要用这个开关。
 - 预置组件索引（`components` Release 上的 `components.json` 和 `.sig`）：`publish-devkit.mjs` 合并前先用发布钥匙验线上那份，验不过就停。`components-index.mjs` 在有私钥时也只合并验得过的旧索引。全新的仓库（Release 上还没有索引）第一次要手工播种：对一个不存在的输出路径跑 `INDEX_SIGNING_KEY_FILE=<钥匙> node devkit/components-index.mjs <新路径>/components.json <URL 前缀> <component-x.json>`，把生成的 `components.json` 和 `components.json.sig` 传到 `components` Release，之后就交给 `publish-devkit.mjs`。
 
 ### 2. APK 更新
 
-- 先查 GitHub API。查不到就读 `cccodroid.net/dl/releases.json`，再不行读 `dl.cccodroid.net/dl/releases.json`（同一份文件，直连不经 Cloudflare）。这份文件和 GitHub 的发布列表形状相同。APK 本身由 Android 按签名把关。
-- APK 依次试 GitHub Release → `cccodroid.net/dl/<版本>/` → `dl.cccodroid.net/dl/<版本>/` → gh-proxy，同一个 `.part` 接着续传。dl 线路的 `/dl/` 是 0.4.2 时加的（VPS 上 `agycodroid-dl.conf`，与主站共用 `data/dl/` 目录），之前的版本只用前两个。
+- 先查 GitHub API。fork 只有 GitHub API 这一个发布列表来源（上游的 `cccodroid.net/dl/releases.json` 和 `dl.cccodroid.net/dl/releases.json` 镜像不提供 agycodroid）。APK 本身由 Android 按签名把关。
+- APK 依次试 GitHub Release → gh-proxy，同一个 `.part` 接着续传。（上游还会试 `cccodroid.net/dl/<版本>/` 和 `dl.cccodroid.net/dl/<版本>/`；那两个镜像只服务上游，不提供 agycodroid。）
 - 本地测试可以写 `home/.config/agycodroid/update-feed` 来覆盖发布列表的地址。
 
 ### 3. Antigravity CLI（最复杂的一项）
@@ -108,8 +110,8 @@ bash install-agy.sh latest        # 或具体版本号（如果已经装过）
 
 ### 4、5. 组件索引与组件包
 
-- 索引：主地址是 GitHub，备用是 `COMP_INDEX_MIRROR`（cccodroid.net）。ed25519 公钥钉在网关里，服务器镜像前也用同一把公钥验一次。
-- 组件包：`compMirrorUrl(b)` 把 GitHub 地址映射到 `dl.cccodroid.net/components/<official|community>/<文件名>`，其中 `preset` 来源映射到 `official`。最多试 4 次，在两个来源之间轮流；成功的那个记在 `compMirrorFirst`，进程重启后清零。界面的进度条会显示当前来源（`progress.via`）。
+- 索引：只走 GitHub（fork 暂无镜像站；上游的 `COMP_INDEX_MIRROR`（cccodroid.net）备用不适用）。ed25519 公钥钉在网关里。
+- 组件包：目前只走 GitHub（fork 暂无镜像站；上游把 GitHub 地址映射到 `dl.cccodroid.net/components/<official|community>/<文件名>` 的 `compMirrorUrl(b)` 不适用）。界面的进度条会显示当前来源（`progress.via`）。
 - **新发布组件时不需要做任何额外的事**：生成器下一轮会自动把新包同步过去。可以用下面的检查脚本（「定期检查」一节）确认。
 
 ### 6. pkg
@@ -126,7 +128,7 @@ bash install-agy.sh latest        # 或具体版本号（如果已经装过）
 
 ### 7. 自定义组件补 glibc 库
 
-只有 Termux 官方的 glibc 仓库可用，因为国内没有镜像。用户连不上时，分析结果会把这些库列为「找不到来源」，装还是能装，只是可能跑不起来。以后想补的话，可以在服务器上镜像 `termux-glibc`，并像 pkg 那样验 `Release.gpg`。
+只有 Termux 官方的 glibc 仓库可用，因为国内没有镜像。用户连不上时，分析结果会把这些库列为「找不到来源」，装还是能装，只是可能跑不起来。以后想补的话，可以在 fork 自己的服务器（目前还没有）上镜像 `termux-glibc`，并像 pkg 那样验 `Release.gpg`。
 
 ### 8. 端侧模型
 
@@ -137,19 +139,18 @@ bash install-agy.sh latest        # 或具体版本号（如果已经装过）
 ## 定期检查（发版前或出问题时）
 
 ```sh
-# agy 官方 manifest 能取到且 version/url/sha512 齐全；索引里每个组件包在 dl.cccodroid.net 上都在、大小一致
+# agy 官方 manifest 能取到且 version/url/sha512 齐全；索引里每个组件包在 GitHub 上都在、大小一致（暂无镜像站可核）
 node scripts/check-mirrors.mjs
 
-# 生成器最近一次的运行结果
-ssh <服务器> 'journalctl -u agycodroid-site -n 20 --no-pager'
+#（没有可查的镜像服务器：fork 没有 VPS；上游的 agycodroid-site 服务不是我们的）
 ```
 
 **常见问题**：
 
 | 现象 | 多半是 | 怎么办 |
 |---|---|---|
-| 安装日志里写「cccodroid.net 镜像的签名文件取不到」 | 用户那边的网络到 Cloudflare 不稳定 | 正常，会接着试 dl.cccodroid.net，再试 gh-proxy |
-| 组件包在镜像上 404 | 刚发布，生成器还没跑到 | 等 30 分钟，或者手动 `systemctl start agycodroid-site` |
+| 安装日志里写「cccodroid.net 镜像的签名文件取不到」 | fork 没有镜像站，只走 GitHub（再试 gh-proxy） | 正常——如果接下来走到了 GitHub；如果它点名 cccodroid.net，那是上游残留引用，请反馈 |
+| 组件包在 GitHub 上 404 | 刚发布，Release 附件还没传完 | 等一等再试；没有镜像生成器可催（fork 没有镜像服务器） |
 | pkg 报「镜像的 Release 签名取不到」 | 镜像没同步 `Release.gpg`，或者镜像不完整 | 正常，换下一个来源；如果某个镜像长期这样，就从列表里拿掉 |
 | pkg 所有来源都验签失败 | Termux 换了签名钥 | 按第 6 节的方法核实新钥后更新 `TERMUX_KEYS` |
 | agy 安装失败：manifest 连不上 | Google 的 manifest 端点挂了或当前网络被挡 | 没有后备——等一等再试；也可以在浏览器里打开 manifest 地址看通不通 |

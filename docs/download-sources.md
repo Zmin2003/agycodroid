@@ -14,18 +14,18 @@ Last verified: 2026-11-19 (agycodroid fork; the Antigravity CLI row was re-check
 
 | # | What | Sources (in order) | Trust anchor | Code |
 |---|---|---|---|---|
-| 1 | Devkit (by module from 0.3.9: ~330 MB by default, ~700 MB for all; older apps use the ~650 MB single package) | GitHub Release → dl.cccodroid.net/devkit/ | `devkit-pin.json` shipped in the APK (sha256 of the single-package gz / tar and of `modules.json`, which in turn holds each block's sha256) | `Installer.java`, `Updater.java`, `gateway/gw/modules.mjs` (adding modules later) |
-| 2 | APK updates | Release list: GitHub API → cccodroid.net/dl/releases.json → dl.cccodroid.net/dl/releases.json; APK: GitHub Release → cccodroid.net/dl/ → dl.cccodroid.net/dl/ → gh-proxy | Android APK signature (only the same release key can update) + sha256 in the release list | `Updater.java` |
+| 1 | Devkit (by module from 0.3.9: ~330 MB by default, ~700 MB for all; older apps use the ~650 MB single package) | GitHub Release only — fork has no mirror yet (see "Server side" below) | `devkit-pin.json` shipped in the APK (sha256 of the single-package gz / tar and of `modules.json`, which in turn holds each block's sha256) | `Installer.java`, `Updater.java`, `gateway/gw/modules.mjs` (adding modules later) |
+| 2 | APK updates | Release list: GitHub API only; APK: GitHub Release → gh-proxy | Android APK signature (only the same release key can update) + sha256 in the release list | `Updater.java` |
 | 3 | Antigravity CLI (agy) | Official manifest only (antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json) | sha512 from Google's official manifest (no PGP signature exists for agy); version / URL / sha512 read from the manifest at install time, never hard-coded | `assets/scripts/install-agy.mjs` |
-| 4 | Component index | GitHub Release → cccodroid.net/components/ | ed25519 key pinned in the gateway | `gateway/gw/components.mjs` `compFetchIndex` |
-| 5 | Component packages | GitHub Release ⇄ dl.cccodroid.net/components/ (alternating, last success remembered) | sha256 from the signed index, then the in-package MANIFEST after unpacking | `gateway/gw/components.mjs` `compRunInstall` |
+| 4 | Component index | GitHub Release only (fork has no mirror yet) | ed25519 key pinned in the gateway | `gateway/gw/components.mjs` `compFetchIndex` |
+| 5 | Component packages | GitHub Release only (fork has no mirror yet) | sha256 from the signed index, then the in-package MANIFEST after unpacking | `gateway/gw/components.mjs` `compRunInstall` |
 | 6 | pkg | Termux official → packages.termux.dev → grimler.se → TUNA/USTC/BFSU/NJU (main, x11) | Termux autobuilds key pinned in pkg, checks `Release.gpg` | `assets/bin/pkg.mjs` |
 | 7 | glibc libs for custom components | Termux official glibc repo only | HTTPS + sha256 from `Packages` | `gateway/gw/custom.mjs` `customFetchLibs` |
 | 8 | On-device models | ModelScope (official Qwen only) → HuggingFace → hf-mirror.com | sha256 pinned in the catalog (from HF LFS) | `gateway/gw/local.mjs` `LOCAL_CATALOG` |
 
 **Two shared techniques since 0.4.1** (devkit, APK updates, component packages and Antigravity CLI):
 
-- **Segmented parallel download**: for files of 16 MB or more from a server that honours Range, the remaining bytes are split into up to 4 segments fetched at once and written at their offsets into one `.part` (pre-sized to the full length). Per-segment progress lives in `.part.seg`, so an interrupted download, or one that switched sources, resumes from it; if `.seg` and `.part` disagree, both are discarded. A source without Range support falls back to a single connection. Measured on dl.cccodroid.net: about 2.7 MB/s on one connection, about 14 MB/s on four. Code: `fetchSegmented` in `Installer.java`, and `gateway/gw/pget.mjs`.
+- **Segmented parallel download**: for files of 16 MB or more from a server that honours Range, the remaining bytes are split into up to 4 segments fetched at once and written at their offsets into one `.part` (pre-sized to the full length). Per-segment progress lives in `.part.seg`, so an interrupted download, or one that switched sources, resumes from it; if `.seg` and `.part` disagree, both are discarded. A source without Range support falls back to a single connection. Measured on the upstream mirror dl.cccodroid.net (before the fork; the fork has no mirror yet): about 2.7 MB/s on one connection, about 14 MB/s on four. Code: `fetchSegmented` in `Installer.java`, and `gateway/gw/pget.mjs`.
 - **Switching away from slow sources** (since 0.4.2, Java downloads of the APK and devkit): each connection is measured in 30-second windows, and less than 600 KB in a window counts as a failure, which triggers a retry and then the next source. With no source left it keeps resuming without counting failures. Before, only a failed connection or 60 seconds without a byte switched sources, so a slow trickle from GitHub sat at 0% forever (reported for 0.3.16 → 0.4.1). Code: `Slow` in `Installer.java`.
 - **gh-proxy.com as a last resort**: when every other source struggles, a GitHub URL is tried once more through `https://gh-proxy.com/github.com/…`. It is a third-party service and needs no trust: content is still checked against the trust anchors in the table above. (Suggested in discussion #15.)
 
@@ -33,9 +33,11 @@ Some components also download things on first run, e.g. Blender fetches itself f
 
 ---
 
-## Server side (mirrors on cccodroid.net)
+## Server side (no mirror yet — upstream cccodroid.net described below for reference)
 
-Two hostnames, one server:
+**Fork status (2026-11-19): agycodroid has no domain, no VPS and no mirror station.** The table and generator notes below describe the *upstream* cccodroid.net setup, kept for reference until the fork builds its own; none of it applies to agycodroid today. Downloads currently come from GitHub Release only (see the overview table). `scripts/publish-devkit.mjs` (mirror step) and `scripts/ship.mjs` (site step) are disabled/skipped until that infrastructure exists.
+
+Two hostnames, one server (upstream only):
 
 | Host | Behind Cloudflare? | Serves |
 |---|---|---|
@@ -62,16 +64,16 @@ Deployment: see `repos/agycodroid-site/README.md`. **Other sites run on this ser
 
 ### 1. Devkit
 
-- On first install the setup page lets the user pick GitHub, the cccodroid.net mirror, or a local file. GitHub and the mirror back each other up, with gh-proxy tried last; sources are tried in order without going back, resuming the same `.part` file.
+- On first install the setup page lets the user pick a source: GitHub or a local file (the fork has no mirror yet, so the upstream cccodroid.net mirror is not available). gh-proxy is tried last; sources are tried in order without going back, resuming the same `.part` file.
 - Checksums come from `assets/devkit-pin.json` in the APK. It is generated by `scripts/pin-devkit.mjs`, and `build.sh` checks that it matches `devkit-sources.txt`.
-- **To change the devkit version**: publish the devkit Release, update `devkit-sources.txt`, run `pin-devkit.mjs`, then build the APK. The server picks up the newly pinned version on its own.
+- **To change the devkit version**: publish the devkit Release, update `devkit-sources.txt`, run `pin-devkit.mjs`, then build the APK. The new pin ships with the APK, and the devkit is fetched from the GitHub Release — the fork has no server of its own.
 - `pin-devkit.mjs` requires the lock file to be signed (`devkit.lock.json.sig`) and verifies it. Only the few releases before 10-29 were never signed; for those, after checking, rerun with `PIN_ALLOW_UNSIGNED=1` and the pin records `lockSigned:false`. Don't use this switch for new releases.
 - Built-in component index (`components.json` and `.sig` on the `components` Release): `publish-devkit.mjs` verifies the published copy with the release key before merging and stops if it fails. With a private key, `components-index.mjs` also only merges an old index that verifies. A brand-new repository (no index on the Release yet) needs a one-time manual seed: run `INDEX_SIGNING_KEY_FILE=<key> node devkit/components-index.mjs <new-path>/components.json <URL prefix> <component-x.json>` against an output path that doesn't exist, upload the resulting `components.json` and `components.json.sig` to the `components` Release, then leave it to `publish-devkit.mjs`.
 
 ### 2. APK updates
 
-- The GitHub API is tried first, then `cccodroid.net/dl/releases.json`, then `dl.cccodroid.net/dl/releases.json` (the same file, direct, not through Cloudflare). It has the same shape as GitHub's release list. Android itself enforces the APK signature.
-- The APK is tried from GitHub Release → `cccodroid.net/dl/<version>/` → `dl.cccodroid.net/dl/<version>/` → gh-proxy, resuming the same `.part`. The dl host's `/dl/` was added for 0.4.2 (`agycodroid-dl.conf` on the VPS, sharing the main site's `data/dl/`); older versions only use the first two.
+- The GitHub API is the only release-list source for the fork (the upstream `cccodroid.net/dl/releases.json` and `dl.cccodroid.net/dl/releases.json` mirrors do not serve agycodroid). Android itself enforces the APK signature.
+- The APK is tried from GitHub Release → gh-proxy, resuming the same `.part`. (Upstream also tried `cccodroid.net/dl/<version>/` and `dl.cccodroid.net/dl/<version>/`; those mirrors are upstream-only and do not serve agycodroid.)
 - For local testing, `home/.config/agycodroid/update-feed` overrides the release list URL.
 
 ### 3. Antigravity CLI (the hardest one)
@@ -108,8 +110,8 @@ Cover at least: manifest reachable, install succeeds and `agy --version` matches
 
 ### 4 & 5. Component index and packages
 
-- Index: GitHub first, `COMP_INDEX_MIRROR` (cccodroid.net) as backup. The ed25519 key is pinned in the gateway, and the server checks the same key before mirroring.
-- Packages: `compMirrorUrl(b)` maps a GitHub URL to `dl.cccodroid.net/components/<official|community>/<file>` (`preset` maps to `official`). Up to 4 attempts alternate between the two; the winner is remembered in `compMirrorFirst` until the process restarts. The progress bar shows the current source (`progress.via`).
+- Index: GitHub only (the fork has no mirror yet; the upstream `COMP_INDEX_MIRROR` (cccodroid.net) backup does not apply). The ed25519 key is pinned in the gateway.
+- Packages: GitHub only for now (the fork has no mirror yet; the upstream `compMirrorUrl(b)` mapping to `dl.cccodroid.net/components/<official|community>/<file>` does not apply). The progress bar shows the current source (`progress.via`).
 - **Publishing a new component needs no extra step**: the generator mirrors it on its next run. Confirm with the check script below.
 
 ### 6. pkg
@@ -126,7 +128,7 @@ Cover at least: manifest reachable, install succeeds and `agy --version` matches
 
 ### 7. glibc libs for custom components
 
-Only the official Termux glibc repo is used, since no Chinese mirror exists. If the user can't reach it, the analysis lists those libraries as "no source found"; the program still installs but may not run. A future fix would be to mirror `termux-glibc` on our server and verify `Release.gpg` as pkg does.
+Only the official Termux glibc repo is used, since no Chinese mirror exists. If the user can't reach it, the analysis lists those libraries as "no source found"; the program still installs but may not run. A future fix would be to mirror `termux-glibc` on a fork-owned server (there is none yet) and verify `Release.gpg` as pkg does.
 
 ### 8. On-device models
 
@@ -137,19 +139,18 @@ Every catalog entry has a pinned sha256. Official Qwen models try ModelScope fir
 ## Routine checks (before a release or when something breaks)
 
 ```sh
-# agy official manifest is reachable and has version/url/sha512; every component package in the indexes exists on dl.cccodroid.net with the right size
+# agy official manifest is reachable and has version/url/sha512; every component package in the indexes exists on GitHub with the right size (no mirror to check yet)
 node scripts/check-mirrors.mjs
 
-# The generator's latest runs
-ssh <server> 'journalctl -u agycodroid-site -n 20 --no-pager'
+# (no mirror server to check: the fork has no VPS; the upstream agycodroid-site service is not ours)
 ```
 
 **Common symptoms**:
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Install log says the cccodroid.net mirror's signature can't be fetched | The user's route to Cloudflare is unstable | Normal; dl.cccodroid.net is tried next, then gh-proxy |
-| Component package 404 on the mirror | Just published, generator hasn't run yet | Wait 30 minutes or run `systemctl start agycodroid-site` |
+| Install log says a mirror's signature can't be fetched | The fork has no mirror; only GitHub (then gh-proxy) is used | Normal if GitHub is reached next; if it names cccodroid.net, that reference is upstream leftovers — report it |
+| Component package 404 on GitHub | Just published, Release assets not up yet | Wait and retry; there is no mirror generator to kick (fork has no mirror server) |
 | pkg says a mirror's Release signature is missing | Mirror doesn't sync `Release.gpg`, or is incomplete | Normal, next source is used; drop the mirror from the list if it persists |
 | pkg fails verification on every source | Termux rotated its key | Verify and update `TERMUX_KEYS` (section 6) |
 | agy install fails: manifest unreachable | Google's manifest endpoint is down or blocked on this network | Nothing to fall back to — wait and retry; check whether the manifest URL loads in a browser |

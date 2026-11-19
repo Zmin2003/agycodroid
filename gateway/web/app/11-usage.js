@@ -38,7 +38,7 @@
     const a = usMonth0(y, m), b = usMonth0(y, m + 1), today = usDay0(new Date());
     // 这个月还没过完：和上月同样天数比，不拿一两天去比整月（#178-9）
     const partial = b > today && a <= today, p0 = usMonth0(y, m - 1);
-    const pEnd = partial ? new Date(Math.min(a.getTime(), usAddDays(p0, Math.round((today - a) / 86400e3) + 1).getTime())) : a;
+    const pEnd = partial ? new Date(Math.min(a.getTime(), usAddDays(p0, today.getDate()).getTime())) : a;   // Q-08：上月同期按本地日期天数算（today.getDate() 即当月已过天数，含今天）；毫秒相除取整在 DST 日会偏
     const tot = usSum(a, b), prev = usSum(p0, pEnd);
     const cal = [];
     let streak = 0, best = 0, active = 0, top = null;
@@ -179,7 +179,16 @@
     // 页脚
     c.fillStyle = K.fg(0.08); c.fillRect(P, y, W - 2 * P, 2);
     text(t("{t} 轮回复 · 读了 {i} token", { t: usNum(st.tot.t), i: usCompact(st.tot.i) }), P, y + 56, font(500, 24), FG3);
-    text("cccodroid.net", W - P, y + 56, font(600, 24), FG2, "right");
+    text("agycodroid", W - P, y + 56, font(600, 24), FG2, "right");
+    // 总高度别手算：画完按实际落笔的 y 回填（Q-10）。H 只是画前的初值（背景渐变用），
+    // 直接改 cv.height 会清空画布，先抄到临时 canvas 再画回来。
+    const finalH = y + 110;
+    if (cv.height !== finalH) {
+      const tmp = document.createElement("canvas"); tmp.width = W; tmp.height = cv.height;
+      tmp.getContext("2d").drawImage(cv, 0, 0);
+      cv.height = finalH;
+      cv.getContext("2d").drawImage(tmp, 0, 0);
+    }
   }
 
   // 换外观时重画月报（theme.js 只改 html 的 data-theme / data-skin 和 <style id="user-accent"> 的内容，不发事件）
@@ -237,7 +246,7 @@
     const now = new Date(), d0 = usDay0(now), m0 = usMonth0(now.getFullYear(), now.getMonth());
     const today = us.raw ? usSum(d0, usAddDays(d0, 1)) : usEmpty(), month = us.raw ? usSum(m0, usAddDays(d0, 1)) : usEmpty();
     // 数字一排：本轮用量（agy usage：input / output / thinking / cache_read / total tokens）、今天、本月、缓存命中
-    const q = usDash.quota;
+    const q = usDash.quota, kpi = [];   // Q-02：本轮回归删了 kpi 的声明，usPaint 每次必抛 ReferenceError；恢复原行
     if (q) {
       const num = (v) => Number.isFinite(+v) ? usTok(+v) : "—";
       kpi.push(`<div class="tile"><span class="k">${esc(t("本轮用量"))}</span><span class="n num">${num(q.total)}</span>

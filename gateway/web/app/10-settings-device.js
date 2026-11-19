@@ -199,6 +199,37 @@
       loadOrphans();
     };
   }
+  // devkit M1 补漏：工具包刚升级完，组件还是旧工具包那份时，在更新页提一句并给个
+  // 去扩展页一键重装的入口（真正的一键批量重装在扩展页，见 08-extensions.js 的
+  // reinstall-all；这里只提示 + 跳转，不另起一套安装流程）。检查结果按工具包版本
+  // 缓存（5 分钟内同一版不重复查），loadUpd 一秒多刷一次时不反复请求组件列表。
+  let updCompHint = { ver: "", at: 0, n: 0, noBuild: 0 };
+  function paintUpdCompHint() {
+    const el = $("upd-comp-hint");
+    if (!el) return;
+    const { n, noBuild } = updCompHint;
+    el.classList.toggle("hidden", !n);
+    if (!n) { el.innerHTML = ""; return; }
+    el.innerHTML = `<div class="row-actions" style="justify-content:space-between"><span class="tiny">${esc(t("工具包已更新，{n} 个组件需要重新安装", { n }))}${noBuild ? " · " + esc(t("另 {n} 个暂无适配当前工具包的版本", { n: noBuild })) : ""}</span><button class="btn sm" id="upd-comp-goto">${esc(t("去扩展页一键重装"))}</button></div>`;
+    $("upd-comp-goto").onclick = () => { closeSettings(); openPage("ext"); const f = $("comp-field"); if (f) { f.open = true; f.scrollIntoView({ block: "start" }); } };
+  }
+  async function loadUpdCompHint(st) {
+    const dk = (st.items || []).find((x) => x.id === "devkit") || {};
+    const el = $("upd-comp-hint");
+    if (!el) return;
+    if (dk.state !== "uptodate" || !dk.current) { updCompHint = { ver: "", at: 0, n: 0, noBuild: 0 }; el.classList.add("hidden"); el.innerHTML = ""; return; }
+    if (dk.current === updCompHint.ver && Date.now() - updCompHint.at < 300000) return paintUpdCompHint();
+    let r;
+    try { r = await api("/api/components"); } catch { return; }
+    // 查的这会儿工具包又变了（刚升了另一版）：这次结果作废，等下次轮询按新版重查
+    const now = ((lastUpd.items || []).find((x) => x.id === "devkit") || {}).current;
+    if (now !== dk.current) return;
+    const items = (r && r.items) || [];
+    updCompHint = { ver: dk.current, at: Date.now(),
+      n: items.filter((x) => x.state === "outdated" && x.available && x.installedVersion).length,
+      noBuild: items.filter((x) => x.state === "outdated" && !x.available).length };
+    paintUpdCompHint();
+  }
   // 更新状态取不到时不能把整个分类藏掉（用户会以为没有更新功能）；明确说失败、给重试（195-M.8）
   function updFailed(msg) {
     $("upd-field").classList.remove("hidden");
@@ -262,6 +293,7 @@
     const v = st.verify;
     if (v && v.manifest && (v.missing || v.changed) && (v.samples || []).length)
       $("upd-items").insertAdjacentHTML("beforeend", `<pre class="tiny mono" style="white-space:pre-wrap;margin:6px 0 0;color:var(--fg3)">${esc(v.samples.join("\n"))}${v.missing + v.changed > v.samples.length ? "\n…" : ""}</pre>`);
+    loadUpdCompHint(st);
     loadOrphans();
     $("upd-last").textContent = st.checking ? t("检查中…") : st.error ? "✗ " + st.error
       : st.lastCheck ? t("上次检查：{at}", { at: new Date(st.lastCheck).toLocaleString() }) : t("还没检查过");
@@ -292,7 +324,7 @@
     if (!m.isConnected) return;
     const chBox = m.querySelector(".ccv-ch"), list = m.querySelector(".mp-list"), q = m.querySelector(".mp-q");
     const ver = info.verified || {}, bad = info.bad || {};
-    // 验证状态：验过的写上在哪台设备上验的；有问题的给出原因（维护者经 cccodroid.net 发布的签名记录，见 gw/ccverified.mjs）
+    // 验证状态：验过的写上在哪台设备上验的；有问题的给出原因（维护者发布的签名记录，见 gw/ccverified.mjs）
     // 网关已把 targetSdk 传下来：28 包和 36 包走的执行方式不同，验过的是哪一种要写出来（构建报告第四节）
     const sdk = (r) => (r.targetSdk ? ` · targetSdk ${r.targetSdk}` : "");
     const vTip = (v) => ver[v] ? t("真机验证过：{who}", { who: ver[v].map((r) => `${r.device} · Android ${r.android}${sdk(r)}（${r.at}）`).join("；") }) : "";
@@ -344,7 +376,7 @@
       return;
     }
     if (act === "local") {
-      if (!confirm(t("从本地文件安装开发工具包？\n\n选一个 devkit-cc.agyroid.tar.gz（或 .tar），可以在 GitHub 发布页或 cccodroid.net 下载。装之前会核对它是不是已发布的版本；装的时候暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
+      if (!confirm(t("从本地文件安装开发工具包？\n\n选一个 devkit-cc.codroid.tar.gz（或 .tar），可以在 GitHub 发布页（github.com/Zmin2003/agycodroid/releases）下载。装之前会核对它是不是已发布的版本；装的时候暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
       AGApp.pickDevkit();
       return;
     }

@@ -190,7 +190,7 @@
   $("prof-reset")?.addEventListener("click", () => { localStorage.removeItem(PROF_KEY); $("prof-name").value = ""; paintAcct(state.serverStatus); paintProf(); });
   paintProf();
 
-  // 账户行：头像 + 昵称，下面一行只写当前接口（账户登录 / DeepSeek / Kimi …），别的都不放
+  // 账户行：头像 + 昵称，下面一行只写当前接口（账户登录 / Gemini API Key），别的都不放
   function paintAcct(s) {
     if (!s) return;
     paintAv($("acct-av"));
@@ -205,15 +205,14 @@
     if (s.keyMode === "login" && Date.now() - acctEmailAt > 600000) {
       acctEmailAt = Date.now();
       api("/api/login/status").then((st) => {
-        const wk = st && st.limits && st.limits.sevenDay ? Math.round(st.limits.sevenDay.used) : null;
         if (!st) return;
         if (!st.unknown) acctLogged = !!st.loggedIn;   // 问不出时别把上次的「已登录」翻成未登录
         const em = st.loggedIn ? st.email || acctEmail : "";
-        if (em !== acctEmail || wk !== acctWeek) { acctEmail = em; acctWeek = wk; paintAcct(s); }
+        if (em !== acctEmail) { acctEmail = em; paintAcct(s); }
       }).catch(() => {});
     }
   }
-  var acctEmail = "", acctEmailAt = 0, acctWeek = null, acctLogged = null;
+  var acctEmail = "", acctEmailAt = 0, acctLogged = null;
 
   // ── 弹出菜单（长按会话、账户行）：items 是 { label, icon, small, danger, fn } / "hr" / { head } ──
   function closeMenu() { OV.closeAll("menu"); }
@@ -481,10 +480,10 @@
     // 官方账户：按实际登录状态给「退出登录」或「登录」（接口是官方账户 ≠ 已登录）；状态没问到时先不放
     if (st.keyMode === "login" && acctLogged) items.push("hr", { label: t("退出登录"), icon: SM.logout, danger: true, fn: async () => {
       if (!confirm(t("退出这台设备上的 Antigravity 账户登录？"))) return;
-      const r = await post("/api/login/logout").catch((e) => ({ ok: false, output: e.message }));
+      const r = await post("/api/login/logout", { provider: "google" }).catch((e) => ({ ok: false, output: e.message }));
       toast(r.ok ? t("已退出登录") : t("退出失败：{msg}", { msg: r.output || r.message || "" }), !r.ok);
       // 立刻换成「登录账户」，不用等下一次状态查询（0.6.9 审计 195-G.3）
-      if (r.ok) { acctLogged = false; acctEmail = ""; acctWeek = null; }
+      if (r.ok) { localStorage.removeItem("agy-ever-google-login"); acctLogged = false; acctEmail = ""; }
       acctEmailAt = 0;
       refreshStatus();
     } });

@@ -14,6 +14,10 @@
   // 还在上传的文件（0.6.9 审计 195-D.1）：传完之前不发送，否则这些附件不在本条消息里、下一条又悄悄带上
   const uploading = new Set();
   let uploadSeq = 0;
+  // 聊天里 /login 的跟进轮询（M2）：和设置页登录卡的 watchLogin 一样，晚到的授权地址补开一次，
+  // 登录结束报一声；不用 state.loginTimer，那是设置页卡片的，两个轮询不能共用一个 timer
+  let chatLoginTimer = null;
+  let chatLoginOpenedUrl = "";
 
   async function send(forcedText, mode) {
     const fromInput = forcedText == null;
@@ -40,23 +44,56 @@
     // 下面两个命令按用户打的字认（typed），不看接了附件引用的 text：带着附件时 /rename 会把 @路径 写进标题。
     // 附件留在附件栏里，下一条照常带上
     // Google 账户登录：OAuth 全程由 agy 自己完成，网关只转递授权页地址；授权码不经手（要贴码就在终端里贴给 agy）
+    // 后端返回分三种：有 url（已拿到地址）、pending（20 秒内还没拿到）、apikey（去设置里填 Key）——
+    // 旧代码无条件拼 [url](url)，pending 时是 [null](null)，apikey 时是 [undefined](undefined)，还丢了后端回的提示（M2）
     if (typed === "/login" || typed.startsWith("/login ")) {
       if (fromInput) { inputEl.value = ""; autoGrow(); }
       const arg = typed.slice(6).trim();
       const post = (p, body) => api(p, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
       });
+      const loginBubble = (url) => {
+        const bubble = addSysMsg(t("在浏览器打开下面的地址完成授权，授权后浏览器跳回本机，登录自动完成：") + `\n\n[${url}](${url})\n\n` +
+          t("浏览器跳不回来（比如在别的设备上授权）：在终端里运行 agy，按提示完成认证，把页面给出的授权码直接贴给 agy。"), "/login");
+        // OAuth 在应用内 WebView 里会被 Google 等拦：和设置页登录卡一样交给系统浏览器（0.6.9 审计 195-G.1）
+        bubble.querySelectorAll("a.weblink").forEach((a) => a.addEventListener("click", (e) => {
+          e.preventDefault(); e.stopPropagation(); openExternal(a.getAttribute("href"));
+        }));
+        return bubble;
+      };
+      const watchChatLogin = () => {
+        clearInterval(chatLoginTimer);
+        chatLoginTimer = setInterval(async () => {
+          let st;
+          try { st = await api("/api/login/status"); } catch { return; }
+          if (st.pending) {
+            // 晚到的授权地址补开，只开一次（和 watchLogin 一样的逻辑）
+            if (st.url && st.url !== chatLoginOpenedUrl) {
+              chatLoginOpenedUrl = st.url;
+              openExternal(st.url);
+              loginBubble(st.url);
+            }
+            return;
+          }
+          clearInterval(chatLoginTimer);
+          if (st.loggedIn) addNote(st.email ? t("✓ 已登录：{email}", { email: st.email }) : t("✓ 已登录"));
+          else if (st.last && !st.last.ok) addNote(t("登录没有完成"));
+          refreshStatus();
+        }, 2000);
+      };
       try {
         addNote(t("正在启动登录…"));
         const j = await post("/api/login/start", { method: arg === "apikey" ? "apikey" : "google" });
         if (!j.ok) throw new Error(j.message || t("启动登录失败"));
-        const bubble = addSysMsg(t("在浏览器打开下面的地址完成授权，授权后浏览器跳回本机，登录自动完成：") + `\n\n[${j.url}](${j.url})\n\n` +
-          t("浏览器跳不回来（比如在别的设备上授权）：在终端里运行 agy，按提示完成认证，把页面给出的授权码直接贴给 agy。"), "/login");
-        // OAuth 在应用内 WebView 里会被 Google 等拦：和设置页登录卡一样交给系统浏览器（0.6.9 审计 195-G.1）
-        openExternal(j.url);
-        bubble.querySelectorAll("a.weblink").forEach((a) => a.addEventListener("click", (e) => {
-          e.preventDefault(); e.stopPropagation(); openExternal(a.getAttribute("href"));
-        }));
+        if (j.apikey) {
+          // 去设置里填 Key：后端回的提示直接显示，别拼链接
+          addSysMsg(j.message || t("在设置里填 Gemini API Key。"), "/login");
+          return;
+        }
+        chatLoginOpenedUrl = "";
+        if (j.url) { chatLoginOpenedUrl = j.url; loginBubble(j.url); openExternal(j.url); }
+        else addNote(t("登录还在进行，拿到授权地址后会打开"));
+        watchChatLogin();
       } catch (e) { toast(e.message, true); }
       return;
     }

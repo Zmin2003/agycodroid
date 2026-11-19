@@ -121,7 +121,19 @@ One user hit this on a Xiaomi phone (HyperOS, Android 16): after a cold start th
 
 On one user's phone every in-app update stops here. Before installing, the app checks that the downloaded APK is signed with the same release key, reading the signature through a system API. On that phone the API returns nothing, so the install is refused. The APKs themselves are fine (each was checked; the signature matches every earlier release); the phone's system API just can't read it.
 
-**Workaround:** download the APK from the GitHub Release or the website and install it over the current one. Your data isn't affected.
+**Workaround:** download the APK from the GitHub Release ([github.com/Zmin2003/agycodroid/releases](https://github.com/Zmin2003/agycodroid/releases)) and install it over the current one. Your data isn't affected. (The fork has no website/mirror; do not use the upstream cccodroid.net links.)
+
+## 11. First launch after upgrading from 1.0 downloads about 655 MB
+
+Upgrading from 1.0 to 1.0.1, the first launch downloads the gateway runtime (about 655 MB), because 1.0 never wrote it to disk. Before upgrading, make sure you have about 1 GiB free — and upgrade the toolchain to the fork's own devkit first, then the APK: with the new devkit already installed, the runtime is copied locally and nothing is downloaded.
+
+If the gateway does not come up within half an hour of upgrading, do not reinstall over and over: after a failed fetch the app does not retry the network for 30 minutes. Wait that out, or restart the app and go back in.
+
+## 12. The 1.0 toolchain is incompatible with 1.0.1 (and the signing key changed)
+
+1.0.1 uses the fork's own toolchain (devkit-2026.11.19 onwards, target `cc.agyroid`) and the fork's own signing key. The 1.0 toolchain (target `cc.codroid`, upstream-signed) is refused at startup under 1.0.1: the gateway reports a manifest mismatch, and bash/curl in the terminal will not start either. **Upgrade in this order: in 1.0, check for updates and install the new toolchain first, then update the APK to 1.0.1.** The other way round costs you the ~655 MB download from item 11. Components and modules installed on the old toolchain do not carry over automatically; reinstall them from the extensions page after upgrading.
+
+In-app updates also only accept packages signed with the new release certificate: a package from anywhere else, or signed by upstream, is rejected and the downloaded file is deleted. Update only from the GitHub Release ([github.com/Zmin2003/agycodroid/releases](https://github.com/Zmin2003/agycodroid/releases)).
 
 ## For developers: tests can create fake bugs
 

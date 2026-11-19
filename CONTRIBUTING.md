@@ -36,7 +36,7 @@ Every answered question is one less person who gives up.
 
 ## Recipes: optional components
 
-Optional components (Python, Blender, language runtimes…) live in the separate [cccodroid-components](https://github.com/greyoak111/cccodroid-components) repository (upstream — agycodroid uses the same signed component index). Each component is a recipe; CI builds, tests and signs it, so you don't need to fight with your own phone. It's the easiest place to start writing code.
+Optional components (Python, Blender, language runtimes…) live in the separate [agycodroid-components](https://github.com/Zmin2003/agycodroid-components) repository. Each component is a recipe; CI builds, tests and signs it, so you don't need to fight with your own phone. It's the easiest place to start writing code.
 
 ---
 

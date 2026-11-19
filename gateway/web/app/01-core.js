@@ -702,19 +702,31 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   // ── Markdown 渲染 ─────────────────────────────────────────────────
   // 本机绝对路径：回复里出现就变成可点的链接，点了在应用内查看器打开（目录则开文件面板）。
   // 只认这几个根，免得把 "/api/file" 这类接口名、"1/2" 这类分数当成路径。可带 ":行号" 尾巴（file.js:12）。
-  // 路径可用字符：中文、emoji 及其连接符 / 皮肤色（0.6.9 审计 195-C.1）
+  // 路径可用字符：中文、假名、韩文、扩展 A/B 区汉字、emoji 及其连接符 / 皮肤色（0.6.9 审计 195-C.1；与 MainActivity SAFE_NAME_CHARS、files.mjs 上传白名单同档）
   // 用 IIFE 自带字符集：pathnote.test.mjs 从这一行切到 inlineMd 末尾单独跑，不能引用上面的变量
   const PATH_RE = (() => {
     const C = "\\w.\\-+@%~=#?&" + String.fromCharCode(0x4e00) + "-" + String.fromCharCode(0x9fff)
       + String.fromCodePoint(0x1f300) + "-" + String.fromCodePoint(0x1faff)
       + String.fromCodePoint(0x200d) + String.fromCodePoint(0xfe0f)
-      + String.fromCodePoint(0x1f3fb) + "-" + String.fromCodePoint(0x1f3ff);
+      + String.fromCodePoint(0x1f3fb) + "-" + String.fromCodePoint(0x1f3ff)
+      + String.fromCodePoint(0x3040) + "-" + String.fromCodePoint(0x309f)
+      + String.fromCodePoint(0x30a0) + "-" + String.fromCodePoint(0x30ff)
+      + String.fromCodePoint(0x3400) + "-" + String.fromCodePoint(0x4dbf)
+      + String.fromCodePoint(0xac00) + "-" + String.fromCodePoint(0xd7a3)
+      + String.fromCodePoint(0x3131) + "-" + String.fromCodePoint(0x318e)
+      + String.fromCodePoint(0x20000) + "-" + String.fromCodePoint(0x2a6df);
     return new RegExp("(^|[\\s(（:：,，、;'\"`“])((?:\\/storage|\\/sdcard|\\/data|\\/mnt)(?:\\/[" + C + "]+)+\\/?)(:\\d+(?::\\d+)?)?", "gu");
   })();
   const PCH = "\\w.\\-+@%~=#?&" + String.fromCharCode(0x4e00) + "-" + String.fromCharCode(0x9fff)
     + String.fromCodePoint(0x1f300) + "-" + String.fromCodePoint(0x1faff)
     + String.fromCodePoint(0x200d) + String.fromCodePoint(0xfe0f)
-    + String.fromCodePoint(0x1f3fb) + "-" + String.fromCodePoint(0x1f3ff);
+    + String.fromCodePoint(0x1f3fb) + "-" + String.fromCodePoint(0x1f3ff)
+      + String.fromCodePoint(0x3040) + "-" + String.fromCodePoint(0x309f)
+      + String.fromCodePoint(0x30a0) + "-" + String.fromCodePoint(0x30ff)
+      + String.fromCodePoint(0x3400) + "-" + String.fromCodePoint(0x4dbf)
+      + String.fromCodePoint(0xac00) + "-" + String.fromCodePoint(0xd7a3)
+      + String.fromCodePoint(0x3131) + "-" + String.fromCodePoint(0x318e)
+      + String.fromCodePoint(0x20000) + "-" + String.fromCodePoint(0x2a6df);
   const PCHS = PCH + " ";
   // 带空格的路径（0.6.9 审计 195-C.1）：只认「以扩展名结尾」的最后一段，并且跨空格时只允许路径常用字符，
   // 免得把空格后面的正文一起吞进来；比它更宽松的 PATH_RE 放在后面跑

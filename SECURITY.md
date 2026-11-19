@@ -50,7 +50,7 @@ agycodroid has no server. It doesn't relay, store or see your conversations or k
 - Antigravity CLI, the toolkit, modules and components are only installed after their hashes or signatures check out.
 - App data (keys, sessions, settings) sits in the app's private storage and is excluded from Android backup.
 
-**One thing to know even then: Antigravity is you.** Antigravity and every command it runs act as the app itself, so they can read anything the app can, including your API key file. That's what makes Antigravity useful here, and it means a prompt injection (instructions hidden in a web page or file that Antigravity reads) can in the worst case reach everything in the app's data. Some sensitive actions ask you again first even when everything is allowed: touching key and credential files, reading the screen or tapping for you, reading the clipboard, and sharing files out of the app. That check is a backstop, not a wall; a command written in a roundabout way can slip past it. Read what Antigravity is about to run when it touches things you care about.
+**One thing to know even then: Antigravity is you.** Antigravity and every command it runs act as the app itself, so they can read anything the app can, including your API key file. The Gemini API key is stored in plaintext in `home/agyapp-providers.json` (mode 0600, readable by any process running as the same uid); this is accepted and recorded for now, and in the longer term the key should be wrapped with an AndroidKeyStore key and encrypted at rest. That's what makes Antigravity useful here, and it means a prompt injection (instructions hidden in a web page or file that Antigravity reads) can in the worst case reach everything in the app's data. Some sensitive actions ask you again first even when everything is allowed: touching key and credential files, reading the screen or tapping for you, reading the clipboard, and sharing files out of the app. That check is a backstop, not a wall; a command written in a roundabout way can slip past it. Read what Antigravity is about to run when it touches things you care about.
 
 **You've granted Shizuku to an app you don't trust.** Shizuku gives shell-level access. A malicious app with it can turn on accessibility to read your screen, read shared storage and install apps. agycodroid's checks don't help against that; only grant Shizuku to apps you trust.
 
@@ -146,6 +146,8 @@ agycodroid 没有服务端，不中转、不保存，也看不到你的对话和
 - 密钥、会话、设置都在应用私有目录里，也不进安卓的备份。
 
 **即便如此也要知道：Antigravity 就是你。** Antigravity 和它跑的每条命令都是以这个应用的身份在动，应用能读的它都能读，包括存 API 密钥的那个文件。Antigravity 在这里有用正是因为这一点，代价是：要是它读的网页或文件里藏了指令（提示注入），最坏能碰到应用里的所有数据。有几类操作即使开了全部放行也会再问你一次：碰密钥和凭据文件、读屏或替你点按、读剪贴板、把文件分享出去。这是兜底，不是城墙，命令写得绕一点就认不出来。它要动你在意的东西时，看一眼它准备跑什么。
+
+**密钥明文存在哪里、0600 挡得住谁。** Gemini API Key 明文存在应用私有目录下的 `home/agyapp-providers.json`，文件权限 0600，只挡得住别的 uid 的应用；同一个 uid 下的任何进程（包括 Antigravity 跑的命令）都能读到。这是当前接受并记录在案的状态，1.0.1 不改存储方式：Antigravity 调接口必须拿到明文密钥，Keystore 加密只能挡「只拷文件、不碰进程」的情形（见下面「考虑过、决定不做的」）。缓解在手机外面：去厂商控制台设单日消费上限和余额提醒，怀疑泄露就作废重建。
 
 **给来路不明的应用开了 Shizuku 授权。** Shizuku 给的是 shell 级别的权限，恶意应用拿到它能打开无障碍读你的屏幕、读共享存储、装应用。这时候 agycodroid 自己的检查帮不上忙，Shizuku 只授权给信得过的应用。
 

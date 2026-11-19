@@ -41,7 +41,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { CFG, PATHS, log, reqLang } from "./gw/config.mjs";
-import { SETTINGS, routeSettings, saveSettings } from "./gw/settings.mjs";
+import { SETTINGS, ldsoStatus, routeSettings, saveSettings } from "./gw/settings.mjs";
 import { API_KEY, PROVIDER, routeProviders } from "./gw/providers.mjs";
 import { fetchModels, normEffort, routeModels } from "./gw/models.mjs";
 import { listSessions, routeSessions } from "./gw/sessions.mjs";
@@ -52,7 +52,6 @@ import { NEXT, sendJson, serveStatic } from "./gw/http.mjs";
 import { UPLOAD_DIR, routeFiles } from "./gw/files.mjs";
 import { warmManagedBridge } from "./gw/managed-bridge.mjs";
 import { routePreview } from "./gw/preview.mjs";
-import { startStreamFix } from "./gw/streamfix.mjs";
 import { TERMS, routeTerminal } from "./gw/terminal.mjs";
 import { routeGit } from "./gw/git.mjs";
 import { compRecover, routeComponents } from "./gw/components.mjs";
@@ -164,7 +163,9 @@ try { fs.mkdirSync(CFG.workspace, { recursive: true }); } catch {}
 syncGitSafe(PROJECTS.map((p) => p.path));
 try { fs.mkdirSync(CFG.home, { recursive: true }); } catch {}
 try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
-startStreamFix();
+// streamfix 已死（M5）：它修的是 Anthropic /v1/messages SSE，agy 不走 ANTHROPIC_BASE_URL，
+// 聊天路径上再也不会有它要修的流——启动时不再挂。streamfix.mjs 本身留着（测试还在直接测它），
+// run.mjs 里那行 SWALLOW_HOOKS 注册也留着（stab2-h-run-pad 测试依赖，钩子本身无害）。
 
 // 界面专用地址：同一个处理函数再听一份。听不上（被别的应用抢先占了）App 核身份时会发现不是真网关、不交凭据；
 // 这里每 2 秒再试，对方一放手就接回来（核身份绑了监听地址，对方转发到 127.0.0.1 也过不了，见 access.mjs 的 proof）
@@ -211,10 +212,14 @@ server.listen(CFG.port, "127.0.0.1", () => {
   log(`  模型   ${SETTINGS.model}   权限 ${SETTINGS.permissionMode}`);
   if (!fs.existsSync(PATHS.loader)) log(`  ⚠️ 未找到 glibc loader: ${PATHS.loader}`);
   if (process.env.AGAPP_EXEC === "loader") {
-    // 经加载器（targetSdk 36）：APK 里的 ld.so 必须和工具包里的 libc 同版本，不同就是 APK 先升了、工具包还没跟上
-    let same = false;
-    try { same = fs.readFileSync(PATHS.loader).equals(fs.readFileSync(path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1"))); } catch {}
-    log(`  执行方式 经加载器 · ld.so ${same ? "与工具包一致" : "⚠️ 与工具包里的不一致，claude 可能起不来：更新工具包"}`);
+    // 经加载器（targetSdk 36）：只比 glibc 版本号，不比整文件字节——工具包里的 ld.so 按 cc.agyroid 改过前缀，
+    // 字节必然不同；且 agy 是 bionic 构建，根本不用这份 ld.so（M3）
+    const st = ldsoStatus(PATHS.loader, path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1"));
+    const msg = st === "same" ? "与工具包一致"
+      : st === "differ" ? "⚠️ 与工具包里的 glibc 版本不同，经加载器可能起不来：先更新工具包"
+      : st === "missing" ? "⚠️ 找不到 ld.so 文件"
+      : "版本号读不到，不比对";
+    log(`  执行方式 经加载器 · ld.so ${msg}`);
   }
   log(`  历史会话 ${listSessions(500).length} 个`);
   try { reapOrphans(); } catch (e) { log("孤儿进程清理失败: " + e.message); }

@@ -177,7 +177,7 @@ Third-party endpoints are your choice; the app does not vet or endorse them. The
 ## Updates and repair
 
 - **Auto-update** (on by default): Antigravity CLI updates silently; a new app version is signature-checked, then offered for install; toolkit updates download on Wi‑Fi and are applied the next time you open the app.
-- The toolkit can come from GitHub, the cccodroid.net mirror or a local file. If one source stalls, the other takes over and resumes; everything is checked against hashes shipped in the APK.
+- The toolkit can come from GitHub or a local file. Everything is checked against hashes shipped in the APK.
 - Updates are verified against the release manifest before anything is replaced. If one is interrupted, it finishes or rolls back on the next launch.
 - The Repair ledger under Settings → Troubleshooting records every install, check and repair.
 - **Two install packages**: the usual `agycodroid.apk` targets SDK 28 and runs on the widest range of devices; `agycodroid-36.apk` targets SDK 36 for newer phones whose system refuses apps with an old target SDK. Both have the same features and share data, and you can switch at any time under Settings → Updates → Install package. If the system ever refuses the 28 build, the app remembers it and only updates to 36 from then on; choosing 28 is then blocked. In the 36 build, toolkit programs are started through the system loader, so the odd program that locates its data relative to its own path may misbehave — please report it if you hit one.

@@ -41,9 +41,17 @@ agycodroid 把执行拿回你自己的设备：云端只做模型推理，你的
 （红魔上实测：离开前台约 90 秒就冻住），正在跑的任务就停了。agycodroid 在任务进行中检测到被冻住时，会在设置里告诉你具体去哪里改。
 红魔 / ZTE：应用信息 → 应用电池用量 → 电池优化 → **后台运行：允许**、**自启动：允许**。
 
-**离线安装**：先把 `devkit-cc.codroid.tar.gz` 下载到手机，首次启动时选"选择本地文件…"并挑它。其他东西都不用再下载，文件会先按已发布的版本校验。（工具链文件仍叫 `cc.codroid`：工具链与 cccodroid 共用，字节完全相同。）
+**离线安装**：先把 `devkit-cc.agyroid.tar.gz` 下载到手机，首次启动时选"选择本地文件…"并挑它。其他东西都不用再下载，文件会先按已发布的版本校验。（工具链文件用 fork 自己的 `cc.agyroid` 名字：agycodroid 发布自己的工具链，按 `cc.agyroid` 重建过。）
 
 带后缀的版本（例如 `v0.2.0-rc1`）是预发布版。应用内更新只推稳定版；想试某个提交的构建，去那次运行的 Artifacts 里手动下载。
+
+### 从 1.0 升到 1.0.1
+
+- **先升工具链，再升 APK。** 1.0.1 用 fork 自己发布的工具链（devkit-2026.11.19 起，target 为 `cc.agyroid`）；1.0 的旧工具链（target 为 `cc.codroid`、上游签名）在 1.0.1 下启动会被拒绝——网关报清单不符，终端里的 bash/curl 也起不来。先在 1.0 里检查更新、装好新工具链，再升 1.0.1 的 APK。旧工具链上装的组件和模块不会自动跟着过来，升级后需要在扩展页里重装。
+- **升级后首次启动要下载约 655 MB**（网关运行环境，1.0 从来没写到磁盘上）——新工具链已经装好的话，运行环境直接从本地复制，什么都不用下载。升级前留出约 1 GiB 空闲。
+- **网关起不来就先等。** 取回失败后 30 分钟内不会再重试联网；重启一次应用再进是最快的办法，别反复重装。
+- **应用内更新只认新发布证书签的包。** 上游签名的、或不是从 GitHub Release 来的包会被拒绝安装，下载文件会被删掉。只从 [GitHub Release](https://github.com/Zmin2003/agycodroid/releases) 更新。
+- **组件**现在走 fork 自己的仓库：[Zmin2003/agycodroid-components](https://github.com/Zmin2003/agycodroid-components)。在它发出第一个 `components` Release 之前，扩展页拉不到组件清单——见[已知问题](docs/known-issues.zh-CN.md)。
 
 ## 登录
 
@@ -100,7 +108,7 @@ agycodroid 的做法是：
 - **工具链按模块安装**（扩展 → 工具包模块）：分成 base、命令行工具、C/C++ 编译器、Java 和安卓打包、图形库、音视频、文档和数据、Go 和 Node.js 生态。首次安装时自选，以后可以增减。每个模块列出用途、主要命令、大小、依赖和哪些组件用它；输入一个没装的模块里的命令会告诉你去哪里找。
 - **可选组件**（扩展 → 可选组件）：不随应用附带的大工具，需要再下载。每个构建都对应某个工具链版本，安装前按 SHA-256 和逐文件清单校验，卸载干净。
   - **浏览器组件（无头 Chromium 155）**，下载约 254 MB，装完约 750 MB：让 Antigravity 无头打开页面——截图、导出 PDF、渲染后的 DOM、用 puppeteer-core 写脚本浏览。
-  - **社区组件**，来自 [cccodroid-components](https://github.com/greyoak111/cccodroid-components) 仓库（与 cccodroid 共用）。开发：GitHub CLI（gh）、Godot（无头运行、导出 APK）、Graphviz / PlantUML 画图、Hugo、逆向（rizin、binwalk）。媒体：Blender（无头合成和渲染，GPU 上做 3D）、LilyPond（乐谱雕版）、音乐制作工具链。办公：LibreOffice、Pandoc、PDF 工具箱、OCR（中英文）、LaTeX（Tectonic，支持中文）。AI：llama.cpp、OpenAI bridge（预览版）。3D 和科学：OpenSCAD、GNU Octave、科学 Python（numpy / scipy / matplotlib）。EDA：ngspice / gnucap、Icarus Verilog / Yosys。GPU：骁龙驱动（Vulkan / OpenGL / OpenCL）、Mali 驱动、GPU 跑分。网络：Cloudflare（wrangler）、rclone、QQ 机器人（原生 NapCat / SnowLuma，OneBot v11）。完整列表见 [这里](https://github.com/greyoak111/cccodroid-components#components)。索引是 ed25519 签名的，验不过就拒收；社区组件会标出来，没在真机上验证过的构建会先问你。
+  - **社区组件**，来自 [agycodroid-components](https://github.com/Zmin2003/agycodroid-components) 仓库（fork 自己的；上游组件在 [cccodroid-components](https://github.com/greyoak111/cccodroid-components)）。开发：GitHub CLI（gh）、Godot（无头运行、导出 APK）、Graphviz / PlantUML 画图、Hugo、逆向（rizin、binwalk）。媒体：Blender（无头合成和渲染，GPU 上做 3D）、LilyPond（乐谱雕版）、音乐制作工具链。办公：LibreOffice、Pandoc、PDF 工具箱、OCR（中英文）、LaTeX（Tectonic，支持中文）。AI：llama.cpp、OpenAI bridge（预览版）。3D 和科学：OpenSCAD、GNU Octave、科学 Python（numpy / scipy / matplotlib）。EDA：ngspice / gnucap、Icarus Verilog / Yosys。GPU：骁龙驱动（Vulkan / OpenGL / OpenCL）、Mali 驱动、GPU 跑分。网络：Cloudflare（wrangler）、rclone、QQ 机器人（原生 NapCat / SnowLuma，OneBot v11）。完整列表见 [这里](https://github.com/Zmin2003/agycodroid-components#components)。索引是 ed25519 签名的，验不过就拒收；社区组件会标出来，没在真机上验证过的构建会先问你。
   - **自定义组件**：导入市场上没有的 Linux arm64 程序（单个二进制或 .tar.gz / .zip）。它会自己判断程序是 glibc、安卓原生、静态还是脚本，缺的 glibc 库从 Termux 的 glibc 仓库补；装好就是一个命令，Antigravity 和终端都能用。来源由你自己负责。
 - **完整的开发工具链**（约 250 个包，取自官方 [Termux](https://termux.dev) 仓库）：
   - C/C++：clang 21 / lld、make / cmake / ninja、gdb / strace。
@@ -163,7 +171,7 @@ cccodroid 跑 Claude Code；agycodroid 跑 Antigravity CLI。应用壳、网关�
 | 用量 / 额度 | token 计量 + 费用 + 服务商额度（5 小时 / 每周上限） | 只有 token 计量（来自 stream 事件）；没有费用、没有额度——`agy` 都不报 |
 | 本地模型 | 设备上的 llama.cpp 聊天 | **砍掉**（llama.cpp 组件本身还能装；聊天没接上去） |
 | 包名 | `cc.codroid`（10 字符） | `cc.agyroid`（10 字符——工具链的等长前缀重定位要求恰好 10 字符；应用名仍是 `agycodroid`） |
-| 工具链 pin 目标 | `cc.codroid` | 不变（`cc.codroid`——fork 继续用上游的工具链字节） |
+| 工具链 pin 目标 | `cc.codroid` | `cc.agyroid`（fork 发布自己的工具链，按 `--target cc.agyroid` 重建过） |
 
 ## 社区与贡献
 
@@ -176,7 +184,7 @@ cccodroid 跑 Claude Code；agycodroid 跑 Antigravity CLI。应用壳、网关�
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/cccodroid-architecture.zh-CN-dark.png">
-  <img alt="agycodroid 架构：用户在界面（WebView；前端是网关拼起来提供的 27 个部分）里操作，经 HTTP 和 SSE 与 127.0.0.2 上的网关对话（server.mjs 加 gw/ 下的功能模块，带 token 检查、逐请求签名和事件总线）。网关跑在 files/gw 里自己的运行时（Node 和 glibc）上，每次启动前按 APK 里钉住的哈希校验。网关由 GatewayService 前台服务启动和重启，读写 home/ 下的会话、设置和 token，经私有文件 socket 上的 Priv 中继够到 Shizuku，用 stream-json 驱动官方未修改的 Antigravity CLI，启动前按安装时存下的 manifest 副本加自身 sha512 校验。每次运行前，配置检查先扫一遍交给 Antigravity 的配置里的越狱特征，只放行检查过的。Antigravity 经 HTTPS 调 Google 的 API（Google 账户或 Gemini API Key，按对话选），经工具调用工具链（base 加可选模块）。targetSdk 36 的构建里，APK 自带的加载器（libldlinux.so）和一个 exec 垫片改写程序的启动方式。设备工具 MCP 是给 Antigravity 的 MCP 服务器，经本地 socket 走 Priv。Updater / Installer 从 GitHub、cccodroid.net 镜像和官方渠道下载，管理 28/36 的 APK、工具包模块和 Antigravity CLI。组件从组件市场取 ed25519 签名的索引和包，装进工具链（它们的 Claude 技能没有 Antigravity 等价物，不会安装）" src="docs/diagrams/cccodroid-architecture.zh-CN-light.png">
+  <img alt="agycodroid 架构：用户在界面（WebView；前端是网关拼起来提供的 27 个部分）里操作，经 HTTP 和 SSE 与 127.0.0.2 上的网关对话（server.mjs 加 gw/ 下的功能模块，带 token 检查、逐请求签名和事件总线）。网关跑在 files/gw 里自己的运行时（Node 和 glibc）上，每次启动前按 APK 里钉住的哈希校验。网关由 GatewayService 前台服务启动和重启，读写 home/ 下的会话、设置和 token，经私有文件 socket 上的 Priv 中继够到 Shizuku，用 stream-json 驱动官方未修改的 Antigravity CLI，启动前按安装时存下的 manifest 副本加自身 sha512 校验。每次运行前，配置检查先扫一遍交给 Antigravity 的配置里的越狱特征，只放行检查过的。Antigravity 经 HTTPS 调 Google 的 API（Google 账户或 Gemini API Key，按对话选），经工具调用工具链（base 加可选模块）。targetSdk 36 的构建里，APK 自带的加载器（libldlinux.so）和一个 exec 垫片改写程序的启动方式。设备工具 MCP 是给 Antigravity 的 MCP 服务器，经本地 socket 走 Priv。Updater / Installer 从 GitHub 和官方渠道下载，管理 28/36 的 APK、工具包模块和 Antigravity CLI。组件从组件市场取 ed25519 签名的索引和包，装进工具链（它们的 Claude 技能没有 Antigravity 等价物，不会安装）" src="docs/diagrams/cccodroid-architecture.zh-CN-light.png">
 </picture>
 
 交互版（引导视图、浅色/深色、导出）：下载 [`docs/diagrams/agycodroid-architecture.zh-CN.html`](docs/diagrams/agycodroid-architecture.zh-CN.html) 用浏览器打开；
@@ -252,7 +260,7 @@ agycodroid 免费开源，没有服务器，不提供、不付费也不转售任
 ```sh
 sh scripts/build.sh                 # javac → d8 → aapt2 → 签名，产出 dist/agycodroid.apk（targetSdk 28）
 TARGET_SDK=36 sh scripts/build.sh   # 36 构建；scripts/ship.mjs 给发布版两个都构建
-node devkit/devkit.mjs build --target cc.codroid   # 构建工具链（CI 也能做；目标仍是 cc.codroid——工具链与上游共用）
+node devkit/devkit.mjs build --target cc.agyroid   # 构建工具链（CI 也能做；fork 发布自己的工具链，按 cc.agyroid 重建）
 ```
 
 **不用自己搭环境**：GitHub Actions 每次拉 PR 和每次推 main 都会构建 APK，从那次运行的 Artifacts 里下载（见 [.github/workflows/apk.yml](.github/workflows/apk.yml)）。这个 fork 的构建在维护者提供发布 keystore 之前都用一次性测试密钥签名，所以要先卸载已发布的版本再装；最好用备用机。CI 里的指纹检查只在官方发布密钥存在时才跑。发布签名：想让 main 分支的构建用发布密钥而不是一次性测试密钥签名，把钥匙 JSON（`{"key": PEM 私钥, "cert": PEM 证书}`，base64）放进 `apk-release` 环境的 `AGYCODROID_RELEASE_KEY` secret；指纹检查随后会校验每个 APK 确实是这把钥匙签的。
@@ -260,7 +268,7 @@ node devkit/devkit.mjs build --target cc.codroid   # 构建工具链（CI 也能
 要在自己的机器上构建，装 JDK 17、Node.js、Android SDK（build-tools 和一个 platform）和 NDK，再按 `build.sh` 顶部说的设环境变量。`apk.yml` 就是个能用的例子。脚本默认的工具路径指向作者的安卓平板。
 
 工具链由 GitHub Actions 构建和发布：推一个 `devkit-YYYY.MM.DD` 这样的 tag（见 [.github/workflows/devkit.yml](.github/workflows/devkit.yml)）。
-应用下载哪个版本的工具链由 [devkit-sources.txt](devkit-sources.txt) 定。那个版本的大小和 SHA-256 在 [devkit-pin.json](devkit-pin.json) 里，文件随 APK 一起发：首次安装（从 GitHub、cccodroid.net 镜像或本地文件）和本地文件检查都信任它，而不是信任下载来源。它还钉住了锁文件 `devkit.lock.json` 本身的 SHA-256，`build.sh` 在解开 glibc 加载器之前会先校验它，而不是只信 HTTPS。换版本时改前者，跑 `node scripts/pin-devkit.mjs "$(head -1 devkit-sources.txt)" devkit-pin.json`，两个一起提交；`build.sh` 会检查它们是否一致。
+应用下载哪个版本的工具链由 [devkit-sources.txt](devkit-sources.txt) 定。那个版本的大小和 SHA-256 在 [devkit-pin.json](devkit-pin.json) 里，文件随 APK 一起发：首次安装（从 GitHub 或本地文件）和本地文件检查都信任它，而不是信任下载来源。它还钉住了锁文件 `devkit.lock.json` 本身的 SHA-256，`build.sh` 在解开 glibc 加载器之前会先校验它，而不是只信 HTTPS。换版本时改前者，跑 `node scripts/pin-devkit.mjs "$(head -1 devkit-sources.txt)" devkit-pin.json`，两个一起提交；`build.sh` 会检查它们是否一致。
 
 目录结构：
 

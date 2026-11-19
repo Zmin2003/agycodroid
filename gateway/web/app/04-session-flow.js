@@ -588,7 +588,7 @@
           <div class="tiny">${esc(t("在浏览器里授权一次就好，不用填 Key。也可以先在终端里跑一次交互式 agy 完成认证。"))}</div>
           <button class="btn sm" data-p="login">${esc(t("去登录"))}</button></div>
         <div class="setup-path"><b>${esc(t("填 Gemini API Key"))}</b>
-          <div class="tiny">${esc(t("在设置里填 Gemini API Key；也可以用 DeepSeek、智谱 GLM、通义千问、Kimi 等兼容接口的 Key，按用量付费。"))}</div>
+          <div class="tiny">${esc(t("在设置里填 Gemini API Key。"))}</div>
           <button class="btn sm" data-p="key">${esc(t("去选接口、填 Key"))}</button></div>
       </div>
       <div class="tiny">${esc(t("两条路都在 ☰ → 设置 → 接口，以后随时能换。"))}</div>`;
@@ -699,7 +699,7 @@
     if (!es || es.readyState !== 1) connectBus(true);
   });
 
-  // ── 维护者通知（经 cccodroid.net，网关验过签；见 gw/notices.mjs）：和更新说明同样的居中卡片 ──
+  // ── 维护者通知（从 GitHub 取，网关验过签；见 gw/notices.mjs）：和更新说明同样的居中卡片 ──
   // 什么时候弹（用户 10-22 定）：正在用的时候不弹；打开应用、或从后台切回来时才看一眼。
   // 这次打开弹了更新说明，通知就顺延到下一次打开 / 切回来，两张卡片不叠在一起。
   // 内容是纯文本；链接只认 https（网关已筛）。点「知道了」= 卡片里这几条都记为看过。
@@ -711,8 +711,8 @@
     try { r = await api("/api/notices?lang=" + encodeURIComponent(I18N.lang || "zh")); } catch { return; }
     const list = r.items || [];
     // 「取不到」不能和「没有通知」一样安静：没有可显示的内容时明说一句（0.6.9 审计 195-R.8）
-    if (!list.length && r.error) { if (!noticeErrShown) { noticeErrShown = true; toast(t("暂时取不到安全通知"), true); } return; }
-    if (!list.length && r.fetching) { if (!noticeFetchShown) { noticeFetchShown = true; toast(t("正在获取安全通知…")); } return; }
+    if (!list.length && r.error) { if (!noticeErrShown) { noticeErrShown = true; toast(t("暂时取不到维护者通知"), true); } return; }
+    if (!list.length && r.fetching) { if (!noticeFetchShown) { noticeFetchShown = true; toast(t("正在获取维护者通知…")); } return; }
     noticeErrShown = noticeFetchShown = false;
     if (!list.length || noticeHold || document.hidden || document.getElementById("whatsnew") || document.getElementById("notice-pop")) return;
     const el = document.createElement("div");
@@ -723,7 +723,7 @@
         <div class="wn-ver">${esc(n.date)}</div><div class="np-title">${esc(n.title)}</div>
         ${n.body ? `<div class="np-body">${esc(n.body)}</div>` : ""}
         ${n.link ? `<button class="btn sm" data-open="${i}">${esc(n.linkText || t("查看详情"))}</button>` : ""}</section>`).join("")}
-        ${r.fetching ? `<div class="tiny">${esc(t("正在获取安全通知…"))}</div>` : ""}</div>
+        ${r.fetching ? `<div class="tiny">${esc(t("正在获取维护者通知…"))}</div>` : ""}</div>
       <div class="wn-foot"><button class="btn" data-act="ok">${esc(t("知道了"))}</button></div></div>`;
     el.addEventListener("click", async (e) => {
       const o = e.target.closest("[data-open]");

@@ -771,10 +771,12 @@
   async function vwLoadText(mode) {
     if (VW.size > VW_EDIT_MAX) {
       vwActs([]);
-      // 说“只能下载查看”却没有下载入口；给一个（195-C.10）
-      $("vw-body").innerHTML = `<div class="vw-empty"><div>${t("文件太大（{size}），只能下载查看。", { size: fmtSize(VW.size) })}</div>
+      // 应用内打不开也改不了（FL-16）：下载入口（195-C.10）之外，再给一个“用其他应用打开”
+      // （走系统分享单，用户在里面挑系统文件管理器或别的编辑器——别只留一句干文案让用户自己想办法）。
+      $("vw-body").innerHTML = `<div class="vw-empty"><div>${t("文件太大（{size}），应用内打不开，也改不了。", { size: fmtSize(VW.size) })}</div>
+        <div class="tiny">${t("可以用系统文件管理器或其他应用打开，或下载后查看。")}</div>
         <a class="btn ghost sm" href="${fileUrl(VW.path, true)}" download>⤓ ${t("下载")}</a>
-        <button class="btn ghost sm" data-a="share">${shareIco()}${t("分享")}</button></div>`;
+        <button class="btn ghost sm" data-a="share">${shareIco()}${t("用其他应用打开")}</button></div>`;
       return;
     }
     $("vw-body").innerHTML = `<div class="vw-empty">${t("读取中…")}</div>`;

@@ -222,7 +222,7 @@
         : !auth ? t("官方登录态")
         : auth.unknown ? t("官方登录态 · 问不出登录状态")
         : auth.stale ? (auth.loggedIn ? t("官方登录态 · 上次问到时已登录") : t("官方登录态 · 上次问到时未登录"))
-        : auth.loggedIn ? t("官方登录态 · 已登录") : t("官方登录态 · 未登录");
+        : auth.loggedIn ? t("官方登录态 · 已登录") : (localStorage.getItem("agy-ever-google-login") ? t("官方登录态 · 登录已过期，请重新登录") : t("官方登录态 · 未登录"));
       const needLogin = !!auth && auth.loggedIn === false && !auth.unknown;
       $("status-box").textContent =
                 `${t("网关")}     ${s.version} (pid ${s.pid})\n` +

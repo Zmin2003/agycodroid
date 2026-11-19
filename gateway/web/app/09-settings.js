@@ -181,7 +181,7 @@
     // 查询期间换了卡：迟到的失败别去碰已经不在的节点（审查 D-06）。换走又换回同一家时卡片是重画过的，
     // 只比接口 id 会让旧回执盖到新卡上：认这一次画出来的节点（审查 #52 D-06）
     const mine = box.querySelector("#login-state"), live = () => mine.isConnected && state.provView === p.id;
-    try { st = await api("/api/login/status"); } catch (e) { if (live()) mine.textContent = t("查询失败：{msg}", { msg: e.message }); return; }
+    try { st = await api("/api/login/status?provider=" + encodeURIComponent(p.id)); } catch (e) { if (live()) mine.textContent = t("查询失败：{msg}", { msg: e.message }); return; }
     if (!live()) return;
     paintLoginState(st, p);
     if (st.pending) watchLogin(p);
@@ -190,21 +190,28 @@
     const el = $("login-state"); if (!el) return;
     // 这次没问出来、沿用上次的结果：标明是旧的，带上原因（DeepSeek 复核 #3）
     const staleNote = st.stale ? `<br><span class="tiny">${esc(t("（这是上次查询的状态，这次没问出来：{msg}）", { msg: st.error || "" }))}</span>` : "";
-    if (st.loggedIn) {
+    // 这张卡只认自己这家的登录态：全局切到 Gemini Key 时探针成功也会回 loggedIn，
+    // authMethod 却是 gemini——Google 卡片不能跟着显示“✓ 已登录”（登录 M1）
+    const loggedInHere = st.loggedIn && (!st.authMethod || st.authMethod === p.id);
+    const otherNote = st.loggedIn && !loggedInHere
+      ? `<br><span class="tiny">${esc(t("（当前在用 {name}，这家没登录）", { name: pLabel((state.providers || []).find((x) => x.id === st.authMethod) || {}) || st.authMethod }))}</span>` : "";
+    if (loggedInHere) {
+      if (p.id === "google") localStorage.setItem("agy-ever-google-login", "1");   // LG-21：本机曾经 Google 登录成功过（token 过期与从未登录的区分依据）
       el.className = "prov-state ok";
             el.innerHTML = (st.email ? t("✓ 已登录：<b>{email}</b>", { email: esc(st.email) }) : t("✓ 已登录")) +
         (st.plan ? ` · ${esc(st.plan)}` : "") + (st.org ? `<br><span class="tiny">${esc(st.org)}</span>` : "") + staleNote;
     } else {
       el.className = "prov-state warn";
-      el.textContent = st.pending ? t("等待浏览器里完成授权…") : st.unknown ? t("查询失败：{msg}", { msg: st.error || "" }) : t("未登录");
+      el.textContent = st.pending ? t("等待浏览器里完成授权…") : st.unknown ? t("查询失败：{msg}", { msg: st.error || "" }) : localStorage.getItem("agy-ever-google-login") ? t("登录已过期，请重新登录") : t("未登录");
       if (staleNote && !st.pending) el.innerHTML += staleNote;
+      if (otherNote && !st.pending) el.innerHTML += otherNote;
     }
     $("login-actions").innerHTML = (st.pending
       ? `<button class="btn sm ghost" data-act="cancel">${t("取消登录")}</button>`
-      : `<button class="btn sm" data-act="login">${st.loggedIn ? t("换个账户登录") : t("登录 Google 账户")}</button>` +
+      : `<button class="btn sm" data-act="login">${loggedInHere ? t("换个账户登录") : t("登录 Google 账户")}</button>` +
         `<button class="btn sm ghost" data-act="login-apikey">${t("用 Gemini API Key 登录")}</button>` +
-        (st.loggedIn ? `<button class="btn sm ghost danger" data-act="logout">${t("退出登录")}</button>` : "")) +
-      (st.loggedIn ? useBtn(p) : "");
+        (loggedInHere ? `<button class="btn sm ghost danger" data-act="logout">${t("退出登录")}</button>` : "")) +
+      (loggedInHere ? useBtn(p) : "");
     $("login-actions").onclick = (e) => {
       const act = e.target.dataset && e.target.dataset.act;
       if (act === "login") startLogin(p, "google");
@@ -326,11 +333,12 @@
   }
   async function logout(p) {
     if (!confirm(t("退出这台设备上的 Antigravity 账户登录？"))) return;
-    const r = await post("/api/login/logout").catch((e) => ({ ok: false, output: e.message }));
+    // 带上这张卡是哪家：网关只退这一边，别把 Gemini Key 也清了（登录 M2）
+    const r = await post("/api/login/logout", { provider: p.id }).catch((e) => ({ ok: false, output: e.message }));
     toast(r.ok ? t("已退出登录") : t("退出失败：{msg}", { msg: r.output || r.message || "" }), !r.ok);
     renderProvCard();
     // 退出成功后顶栏 / 用量页的用量要跟着撤掉，不能留着上一个账户的数（195-O.9）
-    if (r.ok) { refreshStatus(); qbLoad(); loadQuota().catch(() => {}); }
+    if (r.ok) { localStorage.removeItem("agy-ever-google-login"); refreshStatus(); qbLoad(); loadQuota().catch(() => {}); }
   }
 
   // ── 密钥卡（Antigravity API Key 与第三方厂商）──
@@ -690,7 +698,9 @@
         let r;
         try { r = await post("/api/providers/save", body); } catch (e2) { return toast(e2.message, true); }
         // 线路失效后只重选、没填新 Key：网关把旧 Key 清掉了（196-凭据.1）
-        const msg = r && r.keyCleared ? t("换了线路，旧 Key 已清掉，请重新填") : t("已保存");
+        // Key 样子不像 Gemini Key 时网关在回执里带 warning，只提醒不拦（L2）：跟在“已保存”后面说
+        const msg = r && r.keyCleared ? t("换了线路，旧 Key 已清掉，请重新填")
+          : r && r.warning ? t("已保存") + " · " + r.warning : t("已保存");
         if (!live()) return toast(msg);                          // 卡已切走：只报结果，不动当前卡
         if (keyEl.value.trim() !== body.apiKey) return toast(msg); // 同卡提交后又敲了新内容：留着
         keyEl.value = "";

@@ -479,7 +479,7 @@
       state.settings.agentMode = (r.settings && r.settings.agentMode) ?? am;
       setPermChip(state.settings.toolPermission, state.settings.agentMode);
       revertSel();
-      toast(t("已切到「{m} · {a}」", { m: tpLabel(state.settings.toolPermission), a: amLabel(state.settings.agentMode) }));
+      toast(t("已切到「{m} · {a}」（下一轮生效）", { m: tpLabel(state.settings.toolPermission), a: amLabel(state.settings.agentMode) }));   // M3：正在跑的 agy 不重读 settings.json，中途切只对下一轮生效
     } catch (err) {
       revertSel();
       toast(err.message, true);
@@ -529,7 +529,7 @@
     // 记录是原地重写的，删点之后的字节偏移都会挪：把手里的游标交给网关一起换算（#153-1）
     const pages = [...histPages()], gen = view.gen;
     const offs = [view.next, view.cursor, ...pages.flatMap((p) => [p.dataset.from, p.dataset.to])].filter((x) => x != null && x !== "").map(Number);
-    if (!confirm(which === "user" ? t("删掉这条提问？Antigravity 之后就看不到它了（它的回复保留）。") : t("删掉这条回复？连同它的工具调用和结果一起删，Antigravity 之后就看不到了。"))) return;
+    if (!confirm(which === "user" ? t("删掉这条提问？只从本应用的会话记录里删掉，Antigravity 恢复会话时可能还记得它（它的回复保留）。") : t("删掉这条回复？连同它的工具调用和结果一起从本应用的会话记录里删掉，Antigravity 恢复会话时可能还记得它。"))) return;
     try {
       const r = await api("/api/session/" + encodeURIComponent(sid) + "/delmsg", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -693,7 +693,7 @@
           return t("连接出错，第 {a}/{m} 次重试", { a: phEv.attempt || 1, m: phEv.max || "?" }) + (why ? "：" + (why.length > 120 ? why.slice(0, 120) + "…" : why) : "");
         }
         case "think":   return t("思考中") + sec;
-        // 官方接口默认把工具参数攒成大块才下发（不像 DeepSeek 逐字流），字数常常一下跳到底就不动了；
+        // 官方接口默认把工具参数攒成大块才下发（不是逐字流），字数常常一下跳到底就不动了；
         // 后面跟上这一步的用时，不动的时候也看得出没卡住
         case "tool":    return t("正在写 {name} 的参数", { name: phEv.name || "?" }) + (phEv.chars ? " · " + fmtChars(phEv.chars) : "") + sec;
       }
