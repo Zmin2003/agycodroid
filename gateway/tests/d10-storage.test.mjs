@@ -41,6 +41,9 @@ test("rmChecked：只删允许目录里面的；目录本身、外面的、软�
   const key = put(path.join(root, "agyapp-key-x"));
   assert.equal(rmChecked(key, [root]).why, "protected");
   assert.equal(rmChecked(H(".ssh"), [CFG.home]).why, "protected");
+  const gemFile = put(H(".gemini", "oauth.json"));   // LG-16：先建出来再断言（不存在的路径回 gone，不是 protected）
+  assert.equal(rmChecked(H(".gemini"), [CFG.home]).why, "protected", "LG-16：~/.gemini 整棵都在永不碰名单里");
+  assert.equal(rmChecked(gemFile, [CFG.home]).why, "protected");
   assert.equal(rmChecked(inside, [root]).ok, true);
 });
 

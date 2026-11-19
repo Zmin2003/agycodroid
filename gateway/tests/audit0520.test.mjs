@@ -267,6 +267,14 @@ test("04-011 首次补算：since 所在小时里 since 之前的消息也补上
   const url = `http://127.0.0.1:${srv.address().port}`;
   const post = async (op, b = {}) => (await fetch(url + "/api/usage/" + op, { method: "POST", body: JSON.stringify(b) })).json();
   const get = async () => (await fetch(url + "/api/usage")).json();
+  // 隔离扫描目录：池内各测试文件共享同一个临时 HOME，排在前面的文件（a0610-main-run 等）
+  // 会在真正的 agyapp-sessions 里留下带时间戳的会话记录，import 会把它们也算进来，
+  // 绝对值断言（m===1）就没法成立。把 PATHS.projects 临时指到一个空目录，补算只看到本用例写的那一条。
+  // （同文件里别的用例改 PATHS.agy 也是这个路数；usageImport 每次调用都现读 PATHS.projects。）
+  const keepProjects = PATHS.projects;
+  const isoDir = fs.mkdtempSync(path.join(CFG.home, "a0520-iso-"));
+  PATHS.projects = isoDir;
+  try {
   await post("clear", { all: true });                 // since = 现在
   const { since } = await get(), h = Math.floor(since / 3600e3), hourStart = h * 3600e3;
   if (since - hourStart < 2000) return;              // 正好整点：没有交界可测
@@ -278,5 +286,8 @@ test("04-011 首次补算：since 所在小时里 since 之前的消息也补上
   assert.equal((await get()).hours[h].m, 1);
   await post("import");
   assert.equal((await get()).hours[h].m, 1, "重补不重复加");
-  fs.rmSync(dir, { recursive: true, force: true });
+  } finally {
+    PATHS.projects = keepProjects;
+    fs.rmSync(isoDir, { recursive: true, force: true });
+  }
 });

@@ -117,15 +117,17 @@ export function usageAdd(d, sid, model, ts) {
 // 一个 agy 进程的 token 计量：边跑边记进当前刻钟。以前等 result 才整轮一次性记，三处漏算（10-30 实测）：
 //   跑几个小时的一轮要到结束才显示、全记在结束那个小时；中断 / 被杀的那一轮没有 result，整轮丢掉；
 //   result.usage 只算主会话，子代理花的 token 一个都没记。
-// agy 的 step_update 带 usage：按 step_index 记见过的最大值，涨多少记多少（官方文档的例子里
+// agy 的 step_update 带 usage：按“轮次号 + step_index”记见过的最大值，涨多少记多少（M2/M4：
+// step_index 若跨轮复用，旧键会把新一轮子代理的增量吞掉；轮次在 result() 里 +1，见下面）。
 // duration_seconds 是单步的耗时，所以按「单步用量」理解；如果某天发现它是会话累计的，
-// result() 的对账会把多记的差额扣回来——见下面 result）。
+// result() 也只补流里少记的正差额，多记的不会扣回（见下面 result）。
 //   result 时和这一轮的 usage 对一次账，流里没看到的补上差额。
 // 子代理：子代理步骤（带 subagent_info）的 usage 单独记，不进 tot——result.usage 是主会话的会话累计，
 // 拿它对账时不能把子代理的也算进去，否则会把主会话的差额抵掉（和以前 message lane 的做法一样）。
 export function usageMeter(ctx) {
   const add = ctx.add || usageAdd;   // 测试换成收集器
   const seen = new Map(), tot = { i: 0, o: 0, c: 0 };   // tot：主会话上次对账以来流里记了多少
+  let turnN = 0;   // 当前轮次：每出一个 result +1，bump 的键带上它（M4）
   const num = (x) => Number.isFinite(x) && x > 0 ? x : 0;
   const bump = (key, u, model, main) => {
     if (!key || !u) return;
@@ -144,7 +146,7 @@ export function usageMeter(ctx) {
       const sub = !!(st.subagent_info && Array.isArray(st.subagent_info.subagents) && st.subagent_info.subagents.length);
       // agy 的 usage 用 cache_read_tokens，bump 按 Claude 形状（cache_read_input_tokens）读：
       // 这里先归一化，否则缓存命中 token 在流里永远记不上，只在 result() 对账时补回。
-      bump("step:" + (Number.isInteger(st.step_index) ? st.step_index : "?"), normUsage(st.usage), undefined, !sub);
+      bump("turn:" + turnN + ":step:" + (Number.isInteger(st.step_index) ? st.step_index : "?"), normUsage(st.usage), undefined, !sub);
     },
     result(r, turn) {
       const u = r.usage || {};
@@ -152,7 +154,10 @@ export function usageMeter(ctx) {
       const d = turn ? { t: 1 } : {};
       for (const k of ["i", "o", "c"]) { if (all[k] > tot[k]) d[k] = all[k] - tot[k]; tot[k] = 0; }   // 后台任务回报会在同一进程再出一轮 result，各对各的
       if (Object.keys(d).length) add(d, ctx.sid(), ctx.model());
+      turnN++;   // 这一轮对完账：下一轮的 bump 键换一个轮次号（M4）
     },
+    // 流结束时收尾：这里本来就没事可做——子代理的 token 已在 feed() 里随流实时记入，
+    // result() 也已经对过主会话的账（M4：别再补一遍，重复计）。
     close() {},
   };
 }
@@ -206,7 +211,7 @@ function usageImport(extraOnly) {
             if (m.id && m.usage) msgs.set(m.id, [q, m.usage, m.model, e.sessionId]);
           }
         }
-        // 子代理的 token 记在 <会话>/subagents/*.jsonl：实时统计（usageMeter 的 scanSubs）算它们，补算也要算，不然历史偏低（审查 B29）。
+        // 子代理的 token 记在 <会话>/subagents/*.jsonl：实时统计（usageMeter.feed 里带 subagent_info 的 step 单独 bump）算它们，补算也要算，不然历史偏低（审查 B29）。
         // 只算 token；提问数、轮数、工具数照旧只看主会话
         const sid = f.slice(0, -6), sub = path.join(PATHS.projects, d, sid, "subagents");
         let subs = [];
@@ -224,8 +229,11 @@ function usageImport(extraOnly) {
         }
       }
     }
-    for (const [q, u, model, sid] of msgs.values()) {
+    for (const [q, u0, model, sid] of msgs.values()) {
       const b = usageBucket(quarters, q);
+      // agy 原生字段是 cache_read_tokens（不是 Claude 的 cache_read_input_tokens）：补算前先归一化，
+      // 否则缓存命中 token 在历史统计里永远漏掉（Q-03）
+      const u = normUsage(u0) || {};
       const i = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), o = u.output_tokens || 0;
       b.i += i; b.o += o; b.c += u.cache_read_input_tokens || 0;
       if (model) b.mt[model] = (b.mt[model] || 0) + i + o;

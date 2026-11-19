@@ -272,6 +272,47 @@ test("B19 全局是 Gemini API Key、某个会话单独用 Google 登录账户�
   } finally { RUNS.delete("b19"); }
 });
 
+test("B8 API Key 模式登出：key 真清掉才报成功", async (t) => {
+  const { routeLogin } = await import("../gw/login.mjs");
+  const { providerById, keyOf, upsertProvider } = await import("../gw/providers.mjs");
+  // 先存一个 Key：旧代码登出时 upsertProvider({ ...P, key: "" }) 传参错了
+  // （签名是 (id, b, prepare)，对象当 id 传直接 early return），key 根本没清却回 200“已清除”
+  const prev = keyOf(providerById("gemini"));
+  const saved = upsertProvider("gemini", { apiKey: "AIzaSyB8logouttestkey00000000000000000" });
+  assert.equal(saved.ok, true, "测试前置：Key 应存上");
+  t.after(() => {
+    if (prev) upsertProvider("gemini", { apiKey: prev });
+    else upsertProvider("gemini", { clearKey: true });
+  });
+  const go = await serve(routeLogin);
+  const r = await go("/api/login/logout", {});
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true);
+  assert.ok(!keyOf(providerById("gemini")), "登出后 Key 必须已经清掉");
+});
+
+test("LG-17 取消登录清缓存：cancel 后 30 秒内不显旧的已登录态", async (t) => {
+  const login = await import("../gw/login.mjs");
+  const { routeLogin } = login;
+  const go = await serve(routeLogin);
+  // 假 agy：flag 文件在就报 authentication required，否则成功
+  const flag = path.join(CFG.home, "lg17-expired");
+  const f = await _fakeAgy("fake-agy-lg17.sh", `if [ -f "${flag}" ]; then echo "Error: authentication required"; exit 1; else echo "ping ok"; exit 0; fi\n`);
+  t.after(() => { f.restore(); fs.rmSync(flag, { force: true }); });
+  // 1. 探针成功：缓存里是已登录（30 秒有效）
+  const r1 = await (await fetch(go.url + "/api/login/status?refresh=1")).json();
+  assert.equal(r1.loggedIn, true, JSON.stringify(r1));
+  // 2. 之后 agy 改报未登录（模拟 token 过期）
+  fs.writeFileSync(flag, "1");
+  // 3. 取消登录
+  const rc = await go("/api/login/cancel", {});
+  assert.equal(rc.status, 200, JSON.stringify(rc.body));
+  assert.equal(rc.body.ok, true, JSON.stringify(rc.body));
+  // 4. 30 秒内再查：不该再显缓存里的旧已登录
+  const r2 = await (await fetch(go.url + "/api/login/status")).json();
+  assert.equal(r2.loggedIn, false, "cancel 后缓存应已清掉，应重新探针并返回未登录，不能显 30 秒内的旧状态：" + JSON.stringify(r2));
+});
+
 test("B29 历史补算把子代理的 token 也算上（和实时统计同一口径）", async () => {
   const { routeUsage } = await import("../gw/usage.mjs");
   const go = await serve(routeUsage);
@@ -429,4 +470,113 @@ test("复核 中-1/中-2 定时任务已入队：条目被 ✕ 掉不再一直�
   assert.ok(!S.running().some((x) => x.taskId === "dsk-b") || QUEUE.includes(ib));
   QUEUE.splice(QUEUE.indexOf(ib), 1);
   S.DB.tasks.splice(S.DB.tasks.indexOf(a), 1);
+});
+
+
+// ── 登录 M2 / M1 / Q-04 补漏（qa-fix-missed-login）─────────────────────
+// 假 agy 脚本：PATHS.agy 指过去（audit0520 同款路数），runAntigravity 照调它。
+const _sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
+async function _fakeAgy(name, body) {
+  const { PATHS } = await import("../gw/config.mjs");
+  const fake = path.join(CFG.home, name);
+  fs.writeFileSync(fake, `#!${_sh}\n${body}\n`, { mode: 0o700 });
+  const prev = PATHS.agy;
+  PATHS.agy = fake;
+  return { fake, restore() { PATHS.agy = prev; fs.rmSync(fake, { force: true }); } };
+}
+
+test("M2 Google 卡片退出：只退 OAuth，不清 Gemini Key", async (t) => {
+  const { routeLogin } = await import("../gw/login.mjs");
+  const { providerById, keyOf, upsertProvider } = await import("../gw/providers.mjs");
+  const prev = keyOf(providerById("gemini"));
+  assert.equal(upsertProvider("gemini", { apiKey: "AIza-m2-google-test" }).ok, true, "测试前置：Key 应存上");
+  t.after(() => {
+    if (prev) upsertProvider("gemini", { apiKey: prev });
+    else upsertProvider("gemini", { clearKey: true });
+  });
+  const mark = path.join(CFG.home, "m2-google-called");
+  const f = await _fakeAgy("fake-agy-m2-google.sh", `echo "$@" >> "${mark}"\nexit 0\n`);
+  t.after(() => { f.restore(); fs.rmSync(mark, { force: true }); });
+  const go = await serve(routeLogin);
+  const r = await go("/api/login/logout", { provider: "google" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  assert.equal(r.body.results.google.ok, true, JSON.stringify(r.body));
+  assert.equal(r.body.results.gemini, undefined, "指名 google 就不该碰 key 那边：" + JSON.stringify(r.body));
+  assert.equal(fs.readFileSync(mark, "utf8").trim(), "auth logout", "应调 agy auth logout");
+  assert.ok(keyOf(providerById("gemini")), "Google 卡片退出不能把 Gemini Key 清了");
+});
+
+test("M2 Gemini 退出：只清 Key，不调 agy auth logout", async (t) => {
+  const { routeLogin } = await import("../gw/login.mjs");
+  const { providerById, keyOf, upsertProvider } = await import("../gw/providers.mjs");
+  const prev = keyOf(providerById("gemini"));
+  assert.equal(upsertProvider("gemini", { apiKey: "AIza-m2-gemini-test" }).ok, true, "测试前置：Key 应存上");
+  t.after(() => {
+    if (prev) upsertProvider("gemini", { apiKey: prev });
+    else upsertProvider("gemini", { clearKey: true });
+  });
+  const mark = path.join(CFG.home, "m2-gemini-called");
+  const f = await _fakeAgy("fake-agy-m2-gemini.sh", `echo "$@" >> "${mark}"\nexit 1\n`);
+  t.after(() => { f.restore(); fs.rmSync(mark, { force: true }); });
+  const go = await serve(routeLogin);
+  const r = await go("/api/login/logout", { provider: "gemini" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  assert.equal(r.body.results.gemini.ok, true, JSON.stringify(r.body));
+  assert.equal(r.body.results.google, undefined, "指名 gemini 就不该调 agy auth logout：" + JSON.stringify(r.body));
+  assert.equal(fs.existsSync(mark), false, "不该调 agy");
+  assert.ok(!keyOf(providerById("gemini")), "登出后 Key 必须已经清掉");
+});
+
+test("M1 key 模式探针成功不写 LOGGED_IN；指名探 google 才认 Google 登录", async (t) => {
+  const login = await import("../gw/login.mjs");
+  const { noteLoggedIn, providerList } = await import("../gw/models.mjs");
+  const { providerById, keyOf, upsertProvider, applyProvider } = await import("../gw/providers.mjs");
+  const { SETTINGS } = await import("../gw/settings-store.mjs");
+  const { PATHS } = await import("../gw/config.mjs");
+  // 全局切到 gemini 并存 key：默认探针靠 key 成功
+  const prevKey = keyOf(providerById("gemini"));
+  const wasProvider = SETTINGS.provider;
+  assert.equal(upsertProvider("gemini", { apiKey: "AIza-m1-test" }).ok, true, "测试前置：Key 应存上");
+  SETTINGS.provider = "gemini"; applyProvider();
+  t.after(() => {
+    SETTINGS.provider = wasProvider; applyProvider();
+    if (prevKey) upsertProvider("gemini", { apiKey: prevKey });
+    else upsertProvider("gemini", { clearKey: true });
+  });
+  noteLoggedIn(null);   // 复位 Google 登录态：下面断言 key 探针成功不能把它写成 true
+  // 假 agy：环境里有 GEMINI_API_KEY（key 模式）就成功，没有就报 authentication required
+  const f = await _fakeAgy("fake-agy-m1.sh", `if [ -n "$GEMINI_API_KEY" ]; then echo "ping ok"; exit 0; else echo "Error: authentication required"; exit 1; fi\n`);
+  t.after(() => f.restore());
+  const v = await login.authStatus(true);
+  assert.equal(v.loggedIn, true, JSON.stringify(v));
+  assert.equal(v.authMethod, "gemini", JSON.stringify(v));
+  assert.equal(providerList().find((p) => p.id === "google").usable, false, "key 探针成功不能让 Google 卡片变成可用");
+  // 同一次缓存不能串家：刚才是 gemini 的成功，指名 google 必须重探、探出未登录
+  const g = await login.authStatus(true, "google");
+  assert.equal(g.loggedIn, false, JSON.stringify(g));
+  assert.equal(g.authMethod, "none", JSON.stringify(g));
+  // Google 那边真登录着时：指名探 google 成功，才写 LOGGED_IN
+  const f2 = await _fakeAgy("fake-agy-m1-google.sh", `echo "ping ok"\nexit 0\n`);
+  t.after(() => f2.restore());
+  const g2 = await login.authStatus(true, "google");
+  assert.equal(g2.loggedIn, true, JSON.stringify(g2));
+  assert.equal(g2.authMethod, "google", JSON.stringify(g2));
+  assert.equal(providerList().find((p) => p.id === "google").usable, true, "google 探针成功才认 Google 登录");
+});
+
+test("Q-04 ping 输出里的 result.usage 进 authStatus().usage（前端短字段）；没 usage 就不带该字段", async (t) => {
+  const login = await import("../gw/login.mjs");
+  const f = await _fakeAgy("fake-agy-q04.sh",
+    `echo '{"event":"result","result":{"status":"SUCCESS","usage":{"input_tokens":100,"output_tokens":20,"thinking_tokens":5,"cache_read_tokens":30,"total_tokens":125}}}'\nexit 0\n`);
+  t.after(() => f.restore());
+  const v = await login.authStatus(true);
+  assert.equal(v.loggedIn, true, JSON.stringify(v));
+  assert.deepEqual(v.usage, { input: 100, output: 20, thinking: 5, cache_read: 30, total: 125 }, JSON.stringify(v));
+  const f2 = await _fakeAgy("fake-agy-q04-plain.sh", `echo "some ping output, not json"\nexit 0\n`);
+  t.after(() => f2.restore());
+  const v2 = await login.authStatus(true);
+  assert.equal(v2.loggedIn, true, JSON.stringify(v2));
+  assert.equal(v2.usage, undefined, "ping 输出里没有 usage 就不编字段：" + JSON.stringify(v2));
 });

@@ -46,10 +46,12 @@ test("工具步骤：主会话的出 tool_use/tool_result；子代理的工具�
     step(1, "tool", { state: "DONE", tool_info: { name: "Bash", parameters: { command: "ls" }, output: "ok" }, ...sub("sub-1") }),
   ]);
   const uses = out.filter((e) => e.type === "tool_use");
-  assert.deepEqual(uses.map((e) => [e.id, e.name]), [["agy-tool-0", "Read"], ["agy-tool-1", "Bash"]]);
+  // 工具 id 是 G1 本轮定的 "agy-tool-<轮次>-<step_index>"（旧 "agy-tool-<step_index>" 跨轮复用会撞 id）；
+  // 本用例只有第 0 轮，step 0/1 对应 agy-tool-0-0 / agy-tool-0-1。
+  assert.deepEqual(uses.map((e) => [e.id, e.name]), [["agy-tool-0-0", "Read"], ["agy-tool-0-1", "Bash"]]);
   assert.equal(uses[1].parent, "agy-sub-sub-1");
   const res = out.filter((e) => e.type === "tool_result");
-  assert.deepEqual(res.map((e) => [e.id, e.ok, e.text]), [["agy-tool-0", true, "文件内容"], ["agy-tool-1", true, "ok"]]);
+  assert.deepEqual(res.map((e) => [e.id, e.ok, e.text]), [["agy-tool-0-0", true, "文件内容"], ["agy-tool-0-1", true, "ok"]]);
   assert.equal(res[1].parent, "agy-sub-sub-1");
 });
 

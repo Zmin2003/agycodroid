@@ -64,16 +64,27 @@ export function permView(p) {
   return { ...p, input: out, ...(Object.keys(cut).length ? { inputCut: cut } : {}) };
 }
 
-const runInfo = (r) => r && {
-  id: r.id, cid: r.cid, text: r.text.slice(0, 2000), sessionId: r.sessionId, follow: r.follow, startedAt: r.startedAt,
-  perms: r.perms ? [...r.perms.values()].map(permView) : [],
-  // sealed：答完了、后台任务还在，但 stdin 已关——插话、停单个任务都送不进去，只能等它结束或整个停掉
-  idle: !!r.idle, sealed: !!r.idle && !r.inputOpen && !r.ended, bg: r.bgTasks || 0, bgList: r.bgList || [], auto: r.auto || null, permMode: r.permMode || null,
+// 后台任务（子代理）现算：run.agents.agents 是子代理联络簿，status === "running" 的就是还在跑的。
+// run.bgTasks / run.bgList 从来没人赋值过（M1），别再读它们。
+const bgOf = (r) => {
+  try { return [...(r.agents?.agents?.values() || [])].filter((a) => a && a.status === "running").map((a) => a.name || a.id); } catch { return []; }
+};
+const runInfo = (r) => {
+  if (!r) return null;
+  const bgList = bgOf(r);
+  return {
+    id: r.id, cid: r.cid, text: r.text.slice(0, 2000), sessionId: r.sessionId, follow: r.follow, startedAt: r.startedAt,
+    perms: r.perms ? [...r.perms.values()].map(permView) : [],
+    // sealed：答完了、后台任务还在，但 stdin 已关——插话、停单个任务都送不进去，只能等它结束或整个停掉
+    idle: !!r.idle, sealed: !!r.idle && !r.inputOpen && !r.ended, bg: bgList.length, bgList, auto: r.auto || null,
+    permMode: r.permMode || null, toolPermission: r.permMode || null, agentMode: r.agentMode || null,
+  };
 };
 
-/** 改权限模式：存进设置（下一轮沿用），正在跑的那一轮当场切（set_permission_mode） */
+/** 改权限模式：存进设置，下一轮生效。正在跑的 agy 进程不重读 settings.json（agy 没有 set_permission_mode
+ *  控制请求）：这里只改内存里记的模式与重放给界面的 init 事件，真正生效是下一轮起进程时重写 settings.json。 */
 /** 切全局权限模式。模式不认识回 false；否则回 { mode: 实际生效的, saved: 落盘没有 }——
- *  安全模式下不问人的几档会退回 default，接口要回生效的那个，别让界面显示「已切到全部放行」（0.6.9 审计 195-A.6） */
+ *  安全模式下 always-proceed 会退回 request-review，接口要回生效的那个，别让界面显示「已切到全部放行」（0.6.9 审计 195-A.6） */
 export function setPermMode(mode, { persist = true } = {}) {
   if (!PERM_MODES.includes(mode)) return false;
   if (SETTINGS.permissionMode !== mode) log(`权限模式 ${SETTINGS.permissionMode} → ${mode}`);   // 排障时看得出是谁、何时切的
@@ -86,7 +97,7 @@ export function setPermMode(mode, { persist = true } = {}) {
     // 重放（切回会话、断线重连）时 init 里还是起跑时的模式，会把界面改回去，用户想收紧也发不出去（安全通告 GHSA-2w6p）
     for (const e of r.log || []) if (e.type === "init") e.permissionMode = eff;
   }
-  publish({ type: "perm_mode", mode: eff });
+  publish({ type: "perm_mode", mode: eff, toolPermission: eff, agentMode: SETTINGS.agentMode });
   return { mode: eff, saved };
 }
 // 恢复失败得让用户看见（FIND-041）：以前只写进 gateway.log，界面上既没有中断卡、也没有任何提示。
@@ -140,12 +151,11 @@ export function saveRunMark() {
         // 还没起进程（等确认卡、等桥、核验程序…）：claude 根本没收到这条，恢复后只能「重发」不能「继续」（195-P.3）
         ...(r.preSpawn ? { unstarted: true } : {}),
         ...(r.sealBase?.hash && r.sealBase.sid === r.sessionId ? { sealBase: { size: r.sealBase.size, hash: r.sealBase.hash } } : {}),
-        ...(r.idle && !r.bgTasks ? { done: true } : {}) })),
+        ...(r.idle && !bgOf(r).length ? { done: true } : {}) })),
       // 已经写进 stdin、claude 还没吃进去的插话也算排队的：一起留下
       // 新会话首条还没拿到会话号时跟着发的（只有 follow）：首条已经结束、不在 runs 里了，重启后就认不出属于哪个会话。
       // 落盘时把会话号补实（#97 02-005；跟的那条被撤销时按车道找首条跑出来的会话，#120-1）
-      // 送进去还没等到结果的斜杠命令也留下，挂起（可能已经办了一半，等用户点 ⚡ 再发）
-      queue: [...live.flatMap((r) => [...(r.pendingInject || []).map((it) => ({ ...it, injected: false })), ...(r.slashFlight || []).map((it) => ({ ...it, injected: false, held: true }))]), ...QUEUE]
+      queue: [...live.flatMap((r) => [...(r.pendingInject || []).map((it) => ({ ...it, injected: false }))]), ...QUEUE]
         .map((q) => { const sid = q.sessionId || sidForItem(q); return sid ? { ...q, sessionId: sid } : q; }),
     }));
     if (!ok) warnRecover("运行状态没保存上（存储可能满了或没有权限）：App 被系统结束时，这一轮可能没法恢复或继续。");

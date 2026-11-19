@@ -76,7 +76,9 @@ function regularJson(file, max) {
     let length = 0, n;
     while (length < bytes.length && (n = fs.readSync(fd, bytes, length, bytes.length - length, null))) length += n;
     const after = fs.fstatSync(fd, { bigint: true });
-    if (length !== Number(stat.size) || ["dev", "ino", "mode", "size", "mtimeNs", "ctimeNs"].some((k) => stat[k] !== after[k])) throw failure("invalid_component");
+    // 不比 ctimeNs：与 managed-bridge.mjs 的 stamp 同一道理，本机 overlayfs 上文件的 ctime 会在内容、
+    // 权限、大小、mtime 全都不变时自己往前跳，读一半的稳定校验会把它当成“文件被换过”误判。
+    if (length !== Number(stat.size) || ["dev", "ino", "mode", "size", "mtimeNs"].some((k) => stat[k] !== after[k])) throw failure("invalid_component");
     return JSON.parse(bytes.subarray(0, length).toString("utf8"));
   } finally { fs.closeSync(fd); }
 }
@@ -598,7 +600,7 @@ function repairFile(file, max) {
     let length = 0, n;
     while (length < bytes.length && (n = fs.readSync(fd, bytes, length, bytes.length - length, null))) length += n;
     const b = fs.fstatSync(fd, { bigint: true }), c = fs.lstatSync(file, { bigint: true });
-    const keys = ["dev", "ino", "mode", "nlink", "size", "mtimeNs", "ctimeNs"];
+    const keys = ["dev", "ino", "mode", "nlink", "size", "mtimeNs"];
     if (length !== Number(a.size) || keys.some(k => a[k] !== b[k] || a[k] !== c[k])) throw repairFailure();
     return keys.map(k => String(a[k])).join(":") + ":" + crypto.createHash("sha256").update(bytes.subarray(0, length)).digest("hex");
   } catch { throw repairFailure(); }
@@ -626,7 +628,7 @@ function repairSnapshot() {
   // 包文件可能为 0644；它们仍需 NOFOLLOW/普通文件及稳定读，不能套用私有凭据的 0600 要求。
   const component = regularJson(path.join(path.dirname(PREFIX), "components", ID + ".json"), 4 << 20);
   const st = fs.lstatSync(entry, { bigint: true });
-  return JSON.stringify([identities, protectedFiles, component, String(st.dev), String(st.ino), String(st.mtimeNs), String(st.ctimeNs)]);
+  return JSON.stringify([identities, protectedFiles, component, String(st.dev), String(st.ino), String(st.mtimeNs)]);
 }
 function repairBusy(id, baseUrl) {
   return [...RUNS.values()].some(run => !run.ended && (run.provider === id || PROVIDERS_CFG.providers[run.provider]?.baseUrl === baseUrl));

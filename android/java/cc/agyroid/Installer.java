@@ -27,9 +27,18 @@ final class Installer {
     Installer(Env env, Progress ui) { this.env = env; this.ui = ui; }
     void step(String m) { ui.step(m); }
 
+    /** 下载中途被取消（点了停止 / 服务停住）：不是网络错，不重试、不换源，直接中断（gateway L3） */
+    static final class Cancelled extends IOException { Cancelled() { super("cancelled"); } }
+
+    /** 下载取消钩子：网关取回时 GwRuntime 挂上 () -> stopping || paused；其他下载（工具包更新等）不挂，不影响 */
+    volatile java.util.function.BooleanSupplier cancelCheck;
+    private boolean cancelled() { java.util.function.BooleanSupplier c = cancelCheck; return c != null && c.getAsBoolean(); }
+
     // ── devkit 下载 ────────────────────────────────────────────────────
-    /** 工具包镜像（VPS 直连，不过 Cloudflare 代理）：dl.cccodroid.net/devkit/<tag>/ 与 GitHub Release 里的文件逐字节相同 */
-    static final String DEVKIT_MIRROR = "https://dl.cccodroid.net/devkit/";
+    /** 没有自己的镜像站：这个常量不再指向镜像，只是拼 GitHub Release 目录的另一种写法
+     *  （GwRuntime 取回网关运行库时仍在引用它，先留着名字；拼出来的地址与 devkit-pin.json 的 base 是同一份文件，照样核 sha256）。
+     *  工具包的下载源以 devkit-pin.json 的 base 为准。 */
+    static final String DEVKIT_MIRROR = "https://github.com/" + Updater.REPO + "/releases/download/";
 
     /**
      * 首次安装：按 APK 自带的清单（assets/devkit-pin.json：gz 的文件名、大小、sha256）下载 .tar.gz 到私有目录 ——
@@ -117,9 +126,11 @@ final class Installer {
         tried.add(url);
         boolean noRange = false;   // 来源不认 Range 后退回单线：本次下载只回退一次，避免删段→重建→再删的死循环
         for (int attempt = 1; ; ) {
+            if (cancelled()) throw new Cancelled();
             for (; size <= 0 || part.length() < size || seg.isFile(); attempt++) {
                 try { if (size >= 2 * MIN_SEG && !noRange && (seg.isFile() || rangeOk(url))) fetchSegmented(url, part, seg, size); else { fetchRange(url, part, size); if (size <= 0) break; } }
                 catch (IOException e) {
+                    if (e instanceof Cancelled) throw e;   // 点了停止 / 停住：直接中断，别当成网络错重试换源
                     // 残留 .part.seg 但来源不认 Range（回 200）：fetchSegmented 每段都要求 206，会永远失败。
                     // 删掉分段状态，退回单线 fetchRange，别让更新永久卡住（审查 11-05）
                     String em = String.valueOf(e.getMessage());
@@ -178,7 +189,7 @@ final class Installer {
     static final int PROBE = 256 << 10;
     private java.util.List<String> hostRank;
 
-    private java.util.List<String> rank(java.util.List<String> cands, long size) {
+    private java.util.List<String> rank(java.util.List<String> cands, long size) throws IOException {
         if (hostRank != null) {
             java.util.List<String> r = new java.util.ArrayList<>(cands);
             java.util.Collections.sort(r, (a, b) -> Integer.compare(rankOf(a), rankOf(b)));     // 稳定排序：没测过的主机保持原顺序排在后面
@@ -200,6 +211,7 @@ final class Installer {
         long t0 = System.currentTimeMillis(), firstOk = 0;
         synchronized (lk) {
             for (;;) {
+                if (cancelled()) throw new Cancelled();   // 测速最多等 15 秒：点了停止别等满
                 boolean all = true;
                 for (int i = 0; i < n; i++) { all &= fin[i]; if (fin[i] && ms[i] > 0 && firstOk == 0) firstOk = System.currentTimeMillis(); }
                 long now = System.currentTimeMillis();
@@ -277,7 +289,7 @@ final class Installer {
     static final long SMALL_MAX = 32L << 20;
 
     // ── 分段并行下载 ──
-    // 单个连接常被限速（实测 dl.cccodroid.net 单线 2.7 MB/s，4 路并行 14 MB/s）：文件够大、服务器认 Range 时，
+    // 单个连接常被限速（实测单线 2.7 MB/s，4 路并行 14 MB/s）：文件够大、服务器认 Range 时，
     // 把没下的部分切成几段、各开一条连接同时下，按偏移写进同一个 .part（先占满到总大小）。
     // 每段进度记在 .part.seg（每行「起 止 已下」，每秒落盘，只会比实际写入的少），被打断、换来源后按它续传；
     // 几个来源是逐字节同一份文件，最后照样核 sha256。和 gw/pget.mjs 是同一套做法
@@ -327,6 +339,7 @@ final class Installer {
                 for (int a = 0; sg[2] < sg[1] - sg[0] + 1; a++) {
                     try { fetchPiece(url, part, sg); }
                     catch (IOException e) {
+                        if (e instanceof Cancelled) { synchronized (err) { if (err[0] == null) err[0] = e; } return; }   // 点了停止：立即收手，别睡两秒再重试
                         if (a >= 2) { synchronized (err) { if (err[0] == null) err[0] = e; } return; }
                         try { Thread.sleep(2000L * (a + 1)); } catch (InterruptedException ie) { return; }
                     }
@@ -337,6 +350,7 @@ final class Installer {
         for (boolean alive = true; alive; ) {
             alive = false;
             for (Thread t : ts) { try { t.join(1000); } catch (InterruptedException e) { throw new IOException(e); } alive |= t.isAlive(); }
+            if (cancelled()) throw new Cancelled();   // 段线程在 fetchPiece 里也会查到，自己停；这里不等它们慢慢下完
             saveSegs(segF, S);
             long left = 0; for (long[] sg : S) left += sg[1] - sg[0] + 1 - sg[2];
             ui.bytes(size - left, size);
@@ -352,7 +366,7 @@ final class Installer {
     }
 
     /** 下一段：从 sg 已下的位置接着要到段尾，按偏移写进 part */
-    private static void fetchPiece(String url, File part, long[] sg) throws IOException {
+    private void fetchPiece(String url, File part, long[] sg) throws IOException {
         HttpURLConnection c = open(url);
         c.setRequestProperty("Range", "bytes=" + (sg[0] + sg[2]) + "-" + sg[1]);
         try {
@@ -362,6 +376,7 @@ final class Installer {
                 byte[] buf = new byte[1 << 16];
                 Slow slow = new Slow();
                 for (int r; (r = in.read(buf)) > 0; ) {
+                    if (cancelled()) throw new Cancelled();   // 每 64 KB 查一次：点了停止就中断这段，别等整段下完
                     slow.add(r);
                     long room = sg[1] - sg[0] + 1 - sg[2];
                     int n = (int) Math.min(r, room);
@@ -396,7 +411,7 @@ final class Installer {
                     slow.add(r);
                     // 每秒报一次进度：以前每 2 MB 报一次，慢的时候界面一直停在 0%，看着像死了
                     long now = System.currentTimeMillis();
-                    if (now - tick >= 1000) { tick = now; ui.bytes(have, size); }
+                    if (now - tick >= 1000) { tick = now; ui.bytes(have, size); if (cancelled()) throw new Cancelled(); }
                 }
             }
             ui.bytes(have, size);
@@ -513,6 +528,10 @@ final class Installer {
 
     /** 从流解包安装。tarSha 非空时边解边核，对不上整个丢掉、旧工具包不动（读两遍之间文件被换掉也拦得住） */
     void installDevkit(InputStream raw, long total, boolean gzip, String base, String sha, String tarSha) throws IOException {
+        // 入口校验（H2/M4）：没有来源记录（base 为空）的包不装；没解压的 .tar 又没有 tar 校验值时也不装 ——
+        // .gz 的 tar 是从已核过 sha256 的 gz 里解出来的，内容有间接保证；.tar 没有这层保证
+        if (base == null || base.isEmpty()) throw new IOException(Tr.t("工具包没有来源记录（不知道是哪一版），不安装"));
+        if (!gzip && (tarSha == null || tarSha.isEmpty())) throw new IOException(Tr.t("工具包清单里没有 tar 校验值，不安装"));
         ui.step(Tr.t("解包开发工具包…"));
         File tmp = usrNew();
         deleteTree(tmp);
@@ -528,12 +547,18 @@ final class Installer {
 
     /** 解一个 tar(.gz) 到 dir（叠加，不先清空），边解边算 tar 的 sha256；tarSha 非空时对不上就整个删掉 dir、抛错。返回实得的 sha256 */
     String extractInto(File dir, InputStream raw, long total, boolean gzip, String tarSha) throws IOException {
+        return extractInto(dir, raw, total, gzip, tarSha, null);
+    }
+
+    /** @param only 非空时只解包里解包后相对路径在 only 里的条目（网关取回：只要 missing 的 45 个文件，不解整包）。
+     *  跳过的条目照样从流里读过去，tar 的 sha256 校验不受影响（skip 是读不是跳）。目录条目跳过无妨，文件条目自己建父目录 */
+    String extractInto(File dir, InputStream raw, long total, boolean gzip, String tarSha, java.util.Set<String> only) throws IOException {
         Counting in = new Counting(new BufferedInputStream(raw, 1 << 20), total);
         MessageDigest md;
         try { md = MessageDigest.getInstance("SHA-256"); } catch (java.security.NoSuchAlgorithmException e) { throw new IOException(e); }
         java.security.DigestInputStream s = new java.security.DigestInputStream(gzip ? new GZIPInputStream(in, 1 << 16) : in, md);
         try {
-            untar(s, dir, "usr/");
+            untar(s, dir, "usr/", only);
             byte[] sink = new byte[1 << 16];
             while (s.read(sink) > 0) { }            // tar 末尾的填充块也算进校验和
         } catch (IOException | RuntimeException e) {     // 畸形包抛的运行时异常也要清掉半成品（审查 v0.5.7 L9）
@@ -584,11 +609,13 @@ final class Installer {
      * @param mjBytes modules.json 原文（调用方已核过来源：钉子的 sha256 或 modules.json.sig 签名）
      * @param want 用户勾的模块（基础块和依赖自动带上）
      * @param base Release 目录（GitHub）；identity 这份快照整包 gz 的 sha256（写进 .devkit-ok，组件按它匹配）
-     * @param mirrorFirst 先走 dl.cccodroid.net 镜像
      */
-    void installModules(byte[] mjBytes, java.util.Collection<String> want, String base, String identity, boolean mirrorFirst) throws IOException {
+    void installModules(byte[] mjBytes, java.util.Collection<String> want, String base, String identity) throws IOException {
         JSONObject mj;
         try { mj = new JSONObject(new String(mjBytes, StandardCharsets.UTF_8)); } catch (org.json.JSONException e) { throw new IOException(Tr.t("模块清单坏了"), e); }
+        // 入口校验（H2）：模块清单必须指明是给本应用的，错 target / 接口版本直接拒装
+        if (!env.pkg.equals(mj.optString("target")) || mj.optInt("compat", 1) != Updater.DEVKIT_COMPAT)
+            throw new IOException(Tr.f("模块清单不是给本应用的（target 是 {0}），不安装", mj.optString("target")));
         java.util.List<JSONObject> order = moduleOrder(mj, want);
         long dl = 0, unpacked = 0;
         for (JSONObject m : order) {
@@ -602,13 +629,12 @@ final class Installer {
         long need = Math.max(0, dl) + unpacked + (400L << 20);
         long free = new android.os.StatFs(env.files.getPath()).getAvailableBytes();
         if (free < need) throw new NoSpace(need, free);
-        String tag = base.replaceAll("/+$", ""); tag = tag.substring(tag.lastIndexOf('/') + 1);
         java.util.List<File> gzs = new java.util.ArrayList<>();
         for (JSONObject m : order) {
             JSONObject gz = m.optJSONObject("gz");
-            String file = gz.optString("file"), gh = base + file, mirror = DEVKIT_MIRROR + tag + "/" + file;
+            String file = gz.optString("file"), gh = base + file;
             ui.step(Tr.f("下载模块「{0}」{1} MB…", moduleName(m), String.valueOf(gz.optLong("bytes") >> 20)));
-            gzs.add(download(mirrorFirst ? mirror : gh, mirrorFirst ? gh : mirror, new File(env.files, file), gz.optLong("bytes"), gz.optString("sha256")));
+            gzs.add(download(gh, new File(env.files, file), gz.optLong("bytes"), gz.optString("sha256")));
         }
         File tmp = usrNew();
         deleteTree(tmp);
@@ -649,12 +675,24 @@ final class Installer {
         }
     }
 
-    /** 基础块和给出的各模块依次跑 first-run，再按改动时间剔除本机校验基线（见 pruneManifest）。返回各模块的目录 */
-    private java.util.List<File> firstRuns(java.util.List<JSONObject> modList) throws IOException {
-        long since = System.currentTimeMillis() - 2000;      // 文件系统时间戳精度留点余量
+    /** 基础块在 modules.json 里的 id（devkit.json 里 required 的那个模块） */
+    static final String BASE_MODULE_ID = "base";
+    /** 最近一次 firstRuns 里失败的包：包名 → 返回码。B10：记入修复账本，基础块失败时 finish() 不写 .devkit-ok */
+    final java.util.Map<String, Integer> firstRunFailed = new java.util.LinkedHashMap<>();
+    /** .devkit-ok 旁边的 first-run 失败标记（J2 的 devkitReady 读它）：内容是失败的包名，每行一个 */
+    static final String FIRSTRUN_FAILED = ".devkit-firstrun-failed";
+
+    /** 基础块和给出的各模块依次跑 first-run，再按 first-run 前后的快照剔除本机校验基线（见 pruneManifest）。返回各模块的目录 */
+    private java.util.List<File> firstRuns(java.util.List<JSONObject> modList, String ledgerKind) throws IOException {
+        // L3：不用时间窗口了 —— first-run 之前先给各份清单里的文件拍个快照（mtime + 大小），跑完按快照比对，
+        // 改过的文件才重算哈希记进基线。时钟跳变、时间戳粒度粗都不会再漏记或误记
+        java.util.Map<String, long[]> snapBase = snapshotManifest(new File(env.usr, MANIFEST));
+        java.util.Map<String, java.util.Map<String, long[]>> snapMods = new java.util.HashMap<>();
+        for (JSONObject m : modList) snapMods.put(m.optString("id"), snapshotManifest(new File(new File(env.usr, m.optString("dir")), "MANIFEST")));
+        firstRunFailed.clear();
         ui.step(Tr.t("首次运行配置…"));
         int rc = run(env.bin("bash").getPath(), new File(env.usr, "libexec/devkit/first-run.sh").getPath());
-        if (rc != 0) ui.step(Tr.f("（first-run 返回 {0}，不影响使用）", rc));
+        if (rc != 0) { firstRunFailed.put(BASE_MODULE_ID, rc); ui.step(Tr.f("（基础块首次配置失败，返回 {0}）", rc)); }
         java.util.List<File> modDirs = new java.util.ArrayList<>();
         for (JSONObject m : modList) {
             File dir = new File(env.usr, m.optString("dir"));
@@ -663,14 +701,55 @@ final class Installer {
             if (fr.isFile()) {
                 ui.step(Tr.f("「{0}」首次配置…", moduleName(m)));
                 int r2 = run(env.bin("bash").getPath(), fr.getPath());
-                if (r2 != 0) ui.step(Tr.f("（first-run 返回 {0}，不影响使用）", r2));
+                if (r2 != 0) { firstRunFailed.put(m.optString("id"), r2); ui.step(Tr.f("（「{0}」首次配置失败，返回 {1}）", moduleName(m), r2)); }
             }
         }
         // Guile 的编译缓存必须比源码新（哪怕包里两者同一秒），否则 gdb 启动时陷入重编译死循环
         run(env.bin("bash").getPath(), "-c", "find \"$PREFIX/lib/guile\" -name '*.go' -exec touch {} + 2>/dev/null; true");
-        pruneManifest(new File(env.usr, MANIFEST), new File(env.usr, LOCAL_MANIFEST), since);
-        for (File dir : modDirs) pruneManifest(new File(dir, "MANIFEST"), new File(dir, "MANIFEST.local"), since);
+        pruneManifest(new File(env.usr, MANIFEST), new File(env.usr, LOCAL_MANIFEST), snapBase);
+        for (JSONObject m : modList) {
+            File dir = new File(env.usr, m.optString("dir"));
+            pruneManifest(new File(dir, "MANIFEST"), new File(dir, "MANIFEST.local"), snapMods.get(m.optString("id")));
+        }
+        if (!firstRunFailed.isEmpty())
+            Ledger.add(env, ledgerKind, false, Tr.f("首次配置失败：{0}", firstRunFailedText()), null);
         return modDirs;
+    }
+
+    /** firstRunFailed 的账本写法：包名（rc=返回码），用顿号隔开 */
+    private String firstRunFailedText() {
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, Integer> e : firstRunFailed.entrySet()) {
+            if (sb.length() > 0) sb.append("、");
+            sb.append(e.getKey()).append("（rc=").append(e.getValue()).append("）");
+        }
+        return sb.toString();
+    }
+
+    /** 同步 first-run 失败标记（.devkit-ok 同目录）：有失败就写上包名，没失败就清掉旧的 */
+    void syncFirstRunFailedMarker() {
+        File f = new File(env.usr, FIRSTRUN_FAILED);
+        if (firstRunFailed.isEmpty()) { f.delete(); return; }
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (String id : firstRunFailed.keySet()) sb.append(id).append('\n');
+            write(f, sb.toString());
+        } catch (Exception ignored) {}
+    }
+
+    /** 清单里每个文件的 first-run 前快照（mtime + 大小）：pruneManifest 靠它认出 first-run 改过的文件，不再用时间窗口（L3） */
+    private java.util.Map<String, long[]> snapshotManifest(File man) {
+        java.util.Map<String, long[]> snap = new java.util.HashMap<>();
+        if (!man.isFile()) return snap;
+        try {
+            for (String l : java.nio.file.Files.readAllLines(man.toPath(), StandardCharsets.UTF_8)) {
+                String[] f = l.split(" ", 3);
+                if (f.length != 3) continue;
+                File file = new File(env.usr, f[2]);
+                if (file.isFile()) snap.put(f[2], new long[]{ file.lastModified(), file.length() });
+            }
+        } catch (IOException ignored) {}
+        return snap;
     }
 
     /** 0.4.17 及以前：36 的包首次安装时，first-run 跑在「部署界面与网关」之前，LD_PRELOAD 要的 app/lib/exec-shim-bionic.so
@@ -690,7 +769,10 @@ final class Installer {
             JSONObject m = all.optJSONObject(i);
             if (m != null && !"base".equals(m.optString("kind")) && new File(new File(env.usr, m.optString("dir")), ".ok").isFile()) modList.add(m);
         }
-        firstRuns(modList);
+        firstRuns(modList, "repair");
+        syncFirstRunFailedMarker();
+        if (firstRunFailed.containsKey(BASE_MODULE_ID))
+            throw new IOException(Tr.f("首次配置失败（{0}），下次启动会重跑", firstRunFailedText()));
     }
 
     /** 换名之后的几步。可重入：中途被打断，下次启动 recover() 会再跑一遍 */
@@ -700,6 +782,9 @@ final class Installer {
         try { p = new JSONObject(new String(java.nio.file.Files.readAllBytes(pend.toPath()), StandardCharsets.UTF_8)); }
         catch (Exception e) { p = new JSONObject(); }
         if (old.isDirectory()) carryOverOnce(old, sameDevkit(old, p), p.optString("sha256", ""));
+        // M1：Python 小版本变了、整棵 lib/python3.X 没搬的，在账本里记一笔（升级后自检能看到）
+        if (!carryPythonSkipped.isEmpty())
+            Ledger.add(env, "install", true, Tr.f("Python 小版本变了，没搬 {0}（里面的扩展要重装）", android.text.TextUtils.join("、", carryPythonSkipped)), null);
         new File(env.usr, "tmp").mkdirs();
         env.home.mkdirs();
 
@@ -711,13 +796,19 @@ final class Installer {
             JSONObject m = moduleById(mj, mods.optString(i));
             if (m != null && !"base".equals(m.optString("kind"))) modList.add(m);
         }
-        java.util.List<File> modDirs = firstRuns(modList);
+        java.util.List<File> modDirs = firstRuns(modList, "install");
+        // B10：基础块首次配置失败时不写 .devkit-ok、不删 .devkit-pending，下次启动 recover() 重跑；只留失败标记
+        if (firstRunFailed.containsKey(BASE_MODULE_ID)) {
+            syncFirstRunFailedMarker();
+            throw new IOException(Tr.f("开发工具包首次配置失败（{0}），下次启动会重跑", firstRunFailedText()));
+        }
         writeResolvConf();
         for (File dir : modDirs) write(new File(dir, ".ok"), "{\"at\":" + System.currentTimeMillis() + "}\n");
         try { p.put("at", System.currentTimeMillis()); } catch (org.json.JSONException ignored) {}
         // 这一版的 carryOver 已经按相对路径认主了：告诉网关别对这份工具包做「旧版残留」清理（见 gw/orphans.mjs）
         write(new File(env.files, ".orphans-v1"), "{\"by\":\"installer\",\"at\":" + System.currentTimeMillis() + "}\n");
         write(new File(env.usr, ".devkit-ok"), p + "\n");       // 从这一刻起才算装好
+        syncFirstRunFailedMarker();   // 只有可选模块失败时留标记；全成功就清掉旧标记
         pend.delete();
         new File(env.files, CARRY_TRY).delete();
         if (old.exists()) { ui.step(Tr.t("清理旧版本…")); deleteTree(old); }
@@ -795,7 +886,9 @@ final class Installer {
     /** 卸载删到一半被打断留下的 usr.trash：启动时顺手删掉 */
     void dropTrash() { deleteTree(usrTrash()); }
 
-    /** 卸载 agy：删掉 install-agy.mjs 装的各个版本，记下「用户卸了」（不再自动装回）。~/.claude 里的登录、会话、设置不动 */
+    /** 卸载 agy：删掉 install-agy.mjs 装的各个版本，记下「用户卸了」（不再自动装回）。
+     *  home 里的登录（agyapp-providers.json）、会话（agyapp-sessions/）、设置（agyapp-settings.json）不动。
+     *  FL-14：旧注释说的 ~/.claude 是 Claude 时代的路径，agy 不用它；agy CLI 自身凭据的落盘位置尚未在真机确认（LG-08），这里只写网关侧已确认的路径 */
     void uninstallAgy() throws IOException {
         write(env.agyOffFlag(), "{\"at\":" + System.currentTimeMillis() + "}\n");
         deleteTree(new File(env.home, ".local/share/agycodroid/agy"));
@@ -838,10 +931,10 @@ final class Installer {
 
     /**
      * 本机校验基线：包里的清单 + first-run 的改动。postinst 会删掉个别文件（剔除），也会现场重写一些
-     * （例如 git-delta 重新生成补全脚本 —— 按改动时间认出来，按实际内容重记）。tar 里的文件保留了打包时的
-     * 修改时间，first-run 写过的才是现在的时间，所以拿 since 一比就分得开。
+     * （例如 git-delta 重新生成补全脚本 —— 按 first-run 前后的快照认出来，按实际内容重记）。
+     * 只看 mtime + 大小，不逐个算哈希：没动过的文件不碰；动过的再算一次哈希二次确认（L3）。
      */
-    private void pruneManifest(File man, File out, long since) {
+    private void pruneManifest(File man, File out, java.util.Map<String, long[]> snap) {
         if (!man.isFile()) return;
         try {
             StringBuilder sb = new StringBuilder();
@@ -851,7 +944,10 @@ final class Installer {
                 if (f.length != 3) continue;
                 File file = new File(env.usr, f[2]);
                 if (!file.isFile()) { dropped++; continue; }
-                if (file.lastModified() >= since) {
+                // 快照里没有（first-run 新建的）或 mtime/大小变了，才是 first-run 动过的文件：重算哈希二次确认，内容没变就不改行
+                long[] s = snap == null ? null : snap.get(f[2]);
+                boolean touched = s == null || file.lastModified() != s[0] || file.length() != s[1];
+                if (touched) {
                     String h = sha256(file);
                     if (!h.equals(f[0])) { l = h + " " + file.length() + " " + f[2]; rebased++; }
                 }
@@ -860,6 +956,20 @@ final class Installer {
             write(out, sb.toString());
             if (dropped + rebased > 0) ui.step(Tr.f("（首次配置删掉 {0} 个、改写 {1} 个文件，校验基线已按实际情况记下）", dropped, rebased));
         } catch (IOException e) { ui.step(Tr.f("（校验基线没写成：{0}）", e.getMessage())); }
+    }
+
+    /** modules.json 里 kind=="base" 的那块的 gz sha256（按块装时的工具包身份，见 Updater L1）；没有返回 null */
+    static String baseModuleSha(JSONObject mj) {
+        org.json.JSONArray all = mj == null ? null : mj.optJSONArray("modules");
+        if (all == null) return null;
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject m = all.optJSONObject(i);
+            if (m == null || !"base".equals(m.optString("kind"))) continue;
+            JSONObject gz = m.optJSONObject("gz");
+            String sha = gz == null ? "" : gz.optString("sha256", "");
+            return sha.matches("[0-9a-f]{64}") ? sha : null;
+        }
+        return null;
     }
 
     /** 已装工具包的 modules.json；整包工具包没有，返回 null */
@@ -939,12 +1049,28 @@ final class Installer {
      * Python 小版本变了就不搬 lib/python3.X（编译过的扩展对不上新解释器）；tmp 与安装器自己的标记不搬。
      */
     private void carryOver(File old, File neu, boolean keepComponents, String identity) {
-        carryOver(old, neu, env.files, keepComponents, identity, ui);
+        carryOver(old, neu, env.files, keepComponents, identity, ui, "cc.codroid", env.pkg);
+        carryPythonSkipped = new java.util.ArrayList<>(lastCarryPythonSkipped);
+        if (!carryPythonSkipped.isEmpty() && ui != null)
+            ui.step(Tr.f("Python 小版本变了，没搬 {0}（里面的扩展要重装）", android.text.TextUtils.join("、", carryPythonSkipped)));
     }
 
+    /** 这次 carryOver 里因 Python 小版本变了而没搬的目录（finish() 记进账本，升级后自检能看到） */
+    java.util.List<String> carryPythonSkipped = new java.util.ArrayList<>();
+    /** 这次静态 carryOver 搬过来的相对路径（给前缀改写用）与因 Python 小版本变了没搬的目录 */
+    static final java.util.List<String> lastCarryMoved = new java.util.ArrayList<>();
+    static final java.util.List<String> lastCarryPythonSkipped = new java.util.ArrayList<>();
+
     /** carryOver 的实体。静态、只收目录：回归测试直接调，不用造 Android Context。
-     *  identity 是本版工具包的身份（.devkit-pending 的 sha256）；keepComponents 时只认领这个身份上的组件记录。 */
+     *  identity 是本版工具包的身份（.devkit-pending 的 sha256）；keepComponents 时只认领这个身份上的组件记录。
+     *  oldPkg/newPkg：1.0 的包名 → 现在的包名；都给且等长时，搬过来的文本文件里嵌的旧前缀会改写成新的 */
     static void carryOver(File old, File neu, File filesDir, boolean keepComponents, String identity, Progress ui) {
+        carryOver(old, neu, filesDir, keepComponents, identity, ui, "cc.codroid", null);
+    }
+
+    static void carryOver(File old, File neu, File filesDir, boolean keepComponents, String identity, Progress ui, String oldPkg, String newPkg) {
+        lastCarryMoved.clear();
+        lastCarryPythonSkipped.clear();
         // 组件记录 / 包内 MANIFEST 认领的路径：同一版重装时要跟着搬；换版本时要当旧工具包的东西删掉。
         // 以前同一版重装只跳过了「把它们加进 owned」这一步，但组件自己的 dpkg 清单（gh.list 等）仍被当成底座，
         // 清单里的文件照样不搬 —— gh 这类经 dpkg 装的组件重装后仍然是坏的（0.6.11 补丁漏的就是这条路径）
@@ -978,6 +1104,66 @@ final class Installer {
         for (String rel : owned) for (int i = rel.lastIndexOf('/'); i > 0; i = rel.lastIndexOf('/', i - 1)) ownedDirs.add(rel.substring(0, i));
         int n = moveUser(old, neu, "", owned, ownedDirs);
         if (n > 0 && ui != null) ui.step(Tr.f("保留了你自己装进工具包的 {0} 项", n));
+        int rewritten = rewritePrefixes(neu, lastCarryMoved, oldPkg, newPkg);
+        if (rewritten > 0 && ui != null) ui.step(Tr.f("把搬过来的 {0} 个文件里的旧包名改成了新的", rewritten));
+    }
+
+    /**
+     * 搬过来的文件里嵌的旧包名前缀（/data/data/&lt;旧包名&gt;、/data/user/0/&lt;旧包名&gt;）改写成新包名。
+     * 等长改写，文件大小不变；只改文本文件（二进制文件不动，免得改坏编译产物）；只走这次搬过来的路径，不碰新工具包自己的文件。
+     * 新旧包名不等长时没法等长改写，直接跳过（cc.codroid 与 cc.agyroid 都是 10 字符，正常走改写）。
+     */
+    private static int rewritePrefixes(File neu, java.util.List<String> moved, String oldPkg, String newPkg) {
+        if (oldPkg == null || newPkg == null || oldPkg.length() != newPkg.length() || oldPkg.equals(newPkg)) return 0;
+        byte[] oldData = ("/data/data/" + oldPkg).getBytes(StandardCharsets.UTF_8);
+        byte[] oldUser = ("/data/user/0/" + oldPkg).getBytes(StandardCharsets.UTF_8);
+        byte[] newData = ("/data/data/" + newPkg).getBytes(StandardCharsets.UTF_8);
+        byte[] newUser = ("/data/user/0/" + newPkg).getBytes(StandardCharsets.UTF_8);
+        int n = 0;
+        for (String rel : moved) n += rewritePrefixesIn(new File(neu, rel), oldData, newData, oldUser, newUser);
+        return n;
+    }
+
+    private static int rewritePrefixesIn(File f, byte[] oldData, byte[] newData, byte[] oldUser, byte[] newUser) {
+        if (f == null || isSymlink(f)) return 0;
+        if (f.isDirectory()) {
+            int n = 0;
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) n += rewritePrefixesIn(k, oldData, newData, oldUser, newUser);
+            return n;
+        }
+        if (!f.isFile() || f.length() > (64L << 20)) return 0;   // 超大文件不碰，免得全读进内存
+        try {
+            byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
+            if (!looksText(b)) return 0;
+            if (!containsBytes(b, oldData) && !containsBytes(b, oldUser)) return 0;
+            replaceBytes(b, oldData, newData);
+            replaceBytes(b, oldUser, newUser);
+            java.nio.file.Files.write(f.toPath(), b);
+            return 1;
+        } catch (Exception ignored) { return 0; }
+    }
+
+    /** 文本文件启发式判断：前 8 KB 里没有 NUL 字节（和网关侧判断二进制的口径一致） */
+    private static boolean looksText(byte[] b) {
+        int n = Math.min(b.length, 8192);
+        for (int i = 0; i < n; i++) if (b[i] == 0) return false;
+        return true;
+    }
+
+    private static boolean containsBytes(byte[] b, byte[] needle) { return indexOfBytes(b, needle, 0) >= 0; }
+
+    private static int indexOfBytes(byte[] b, byte[] needle, int from) {
+        outer: for (int i = from; i + needle.length <= b.length; i++) {
+            for (int j = 0; j < needle.length; j++) if (b[i + j] != needle[j]) continue outer;
+            return i;
+        }
+        return -1;
+    }
+
+    private static void replaceBytes(byte[] b, byte[] old, byte[] neu) {
+        int at = 0;
+        while ((at = indexOfBytes(b, old, at)) >= 0) { System.arraycopy(neu, 0, b, at, neu.length); at += neu.length; }
     }
 
     /** 组件认领的路径：包内 MANIFEST + 界面那边的安装记录（files/components/<id>.json 的 files / shared）。
@@ -1042,14 +1228,14 @@ final class Installer {
                 || rel.equals("var/lib/dpkg") || rel.equals("libexec/devkit/modules.json")
                 || (rel.startsWith("libexec/devkit/modules/") && (rel.endsWith("/.ok") || rel.endsWith("/MANIFEST.local")))) continue;
             // 解释器小版本变了：编译过的扩展搬过去也加载不了，整棵 lib/python3.X 不动（和以前的 site-packages 口径一致）
-            if (rel.matches("lib/python3\\.\\d+") && !new File(neu, rel).isDirectory()) continue;
+            if (rel.matches("lib/python3\\.\\d+") && !new File(neu, rel).isDirectory()) { lastCarryPythonSkipped.add(rel); continue; }
             boolean dir = k.isDirectory() && !isSymlink(k);
             boolean mine = !owned.contains(rel) && !(dir && ownedDirs.contains(rel));
             File to = new File(neu, rel);
             if (mine && !to.exists() && !isSymlink(to)) {
                 File p = to.getParentFile();
                 if (p != null) p.mkdirs();
-                if (k.renameTo(to)) { n++; continue; }
+                if (k.renameTo(to)) { lastCarryMoved.add(rel); n++; continue; }
             }
             if (dir) n += moveUser(old, neu, rel, owned, ownedDirs);
         }
@@ -1093,7 +1279,10 @@ final class Installer {
     }
 
     // ── tar（ustar + GNU 长名 + pax）────────────────────────────────────
-    private void untar(InputStream in, File root, String strip) throws IOException {
+    private void untar(InputStream in, File root, String strip) throws IOException { untar(in, root, strip, null); }
+
+    /** @param only 非空时只解出解包后相对路径在 only 里的条目，其余跳过（不写盘、不建链接） */
+    private void untar(InputStream in, File root, String strip, java.util.Set<String> only) throws IOException {
         byte[] h = new byte[512];
         String longName = null, longLink = null;
         String rootPath = root.getCanonicalPath();
@@ -1134,6 +1323,7 @@ final class Installer {
             if (!name.startsWith(strip)) { skip(in, size); continue; }
             name = name.substring(strip.length());
             if (name.isEmpty() || name.equals("/")) { skip(in, size); continue; }
+            if (only != null && !only.contains(name)) { skip(in, size); continue; }   // 白名单外不解，只跳过
             File f = new File(root, name);
             // 比前缀要带上分隔符：只比 rootPath 的话 usr.newEvil/x 也算在 usr 里头（审查 低5）
             // 链接条目查的是它「放在哪」（父目录），指向哪不限：工具包里本来就有指到 usr 外的链接，顺着它写文件时上面这条照样拦（审查 10-29 L11）
@@ -1154,6 +1344,9 @@ final class Installer {
                         if (target.startsWith(strip)) target = target.substring(strip.length());
                         File tf = new File(root, target);
                         if (!inside(tf, rootPath)) throw new IOException(Tr.t("越界条目: ") + name);
+                        // 白名单模式：硬链接的目标可能没解出来（不在 only 里），Os.link 会抛错导致整个取回失败；
+                        // 跳过这一条，调用方解包后的逐个核对会报出缺了哪个文件（全量安装时 only 为 null，目标一定在，不受影响）
+                        if (only != null && !tf.isFile()) { android.util.Log.w("Installer", "跳过硬链接 " + name + "：目标 " + target + " 不在白名单里"); break; }
                         f.getParentFile().mkdirs();
                         f.delete();
                         Os.link(tf.getPath(), f.getPath());

@@ -4,7 +4,8 @@ import android.content.Context;
 import java.io.File;
 import java.util.Map;
 
-/** 目录布局与子进程环境。前缀固定为 /data/data/cc.agyroid/files/usr —— devkit 按它等长改写过。 */
+/** 目录布局与子进程环境。前缀以 pin 文件为准：devkit-pin.json / gwpin.json 里钉的 target/base 决定实际前缀与来源
+ *  （见 GwRuntime.fetchBase 与 Installer）；别凭这里的注释推断某一版 devkit 是否已发——新 devkit 没发之前，树里的 pin 仍指向上游旧版。 */
 final class Env {
     static final int PORT = 8791;
     /** 界面和 App 访问网关用的地址。不用 127.0.0.1：Cookie 不按端口隔离，种在 127.0.0.1 上会被同机别的应用
@@ -30,8 +31,10 @@ final class Env {
         }
     }
 
-    /** 网关访问令牌（server.mjs 首次启动时生成，0600，存在应用私有目录）。见 server.mjs「访问控制」 */
-    private static volatile File tokenFile = new File("/data/data/cc.agyroid/files/home/.gateway-token");
+    /** 网关访问令牌（server.mjs 首次启动时生成，0600，存在应用私有目录）。见 server.mjs「访问控制」。
+     *  初始值 null：没构造过 Env 就不知道 files 目录在哪，token() 在那之前返回空串；构造器按实际 files 目录填好。
+     *  以前这里写死 /data/data/cc.agyroid/files/...，开发版（包名不同）会读错路径 */
+    private static volatile File tokenFile = null;
 
     /** 这次拉起网关时现造的随机数（GatewayService.spawnGateway 经 stdin 交给网关，不落盘）。
      *  证明身份、静态资源签名、Cookie 用「令牌 + 它」派生的钥匙：令牌同 uid 读得到，另起的冒牌网关有令牌也算不出这个（反破甲 11-03，
@@ -46,7 +49,9 @@ final class Env {
     }
 
     static String token() {
-        try { return new String(java.nio.file.Files.readAllBytes(tokenFile.toPath()), "UTF-8").trim(); }
+        File f = tokenFile;
+        if (f == null) return "";   // 还没构造过 Env（L7）：不知道 files 目录在哪，不按写死的包名路径去读
+        try { return new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8").trim(); }
         catch (Exception e) { return ""; }
     }
 
@@ -225,6 +230,8 @@ final class Env {
     final File files, usr, home, app, log;
     /** 「经加载器」执行方式：数据目录里的程序一律经 /system/bin/linker64（bionic）或 APK 里的 glibc ld.so 起 */
     final boolean loader;
+    /** 要求经加载器（.exec-mode 写了 loader，或 targetSdk ≥ 29）：loader 为 false 时靠它分辨是“本来就直接执行”还是“ld.so 对不上退回来的” */
+    final boolean wantLoader;
     /** APK 原生库目录（libldlinux.so 在这里；targetSdk 36 只能 exec 这里的文件） */
     final String nativeLib;
     final String pkg;
@@ -241,7 +248,8 @@ final class Env {
         app = new File(files, "app");
         log = new File(home, "gateway.log");
         tokenFile = new File(home, ".gateway-token");
-        loader = useLoader(c) && (mustLoader(c) || ldsoMatches());   // 放最后：ldsoMatches 要用到 usr
+        wantLoader = useLoader(c);
+        loader = wantLoader && (mustLoader(c) || ldsoMatches());   // 放最后：ldsoMatches 要用到 usr
     }
 
     /**
@@ -254,6 +262,18 @@ final class Env {
         catch (Exception e) { return ""; }
     }
     static boolean useLoader(Context c) { return mustLoader(c) || "loader".equals(execPref(c)); }
+
+    /**
+     * 实际执行方式（供启动日志/诊断）：direct 还是 loader，以及 ld.so 是否与工具包里的 glibc 同一份。
+     * 28 包过渡期 ldsoMatches() 为 false 时：要求经加载器却对不上就退回 direct；36 包没得退，仍经加载器、网关启动自检会报
+     */
+    String execModeNote() {
+        if (loader) return ldsoMatches()
+            ? "经加载器，APK 的 ld.so 与工具包 glibc 是同一份"
+            : "经加载器，但 APK 的 ld.so 与工具包里的 glibc 不是同一份（APK 先升级、工具包还没跟上；网关启动自检会报）";
+        if (wantLoader && !ldsoMatches()) return "直接执行：要求经加载器，但 ld.so 与工具包 glibc 对不上，28 包退回直接执行（先升工具包再升 APK 可避免）";
+        return "直接执行";
+    }
 
     /**
      * APK 里的 ld.so 和工具包里现装的是不是同一份。glibc 要求 ld.so 与 libc.so.6 出自同一次构建：
@@ -287,8 +307,70 @@ final class Env {
     /** APK 原生库目录里的文件（/data/app/…/lib/arm64，安装时系统解出来，应用 uid 只读） */
     String nlib(String name) { return new File(nativeLib, name).getPath(); }
 
+    /** first-run 失败标记（与 .devkit-ok 同一目录；Installer 的 first-run 失败时写，文件名就定这个，这里只读） */
+    File devkitFirstrunFailed() { return new File(usr, ".devkit-firstrun-failed"); }
+
+    /** devkitReady() 为 false 时的原因（"" = 就绪）：界面/通知直接拿去显示，省得只写一句“工具链未安装” */
+    private volatile String lastProblem = "";
+    String devkitProblem() { devkitReady(); return lastProblem; }
+
+    /** 探活失败时回调（GatewayService 挂上：记修复账本 + 让 Updater 把 devkit 标 damaged并发修复通知，界面据此引导修复）；没人挂也不影响返回 false。
+     *  注意：Updater 的 devkit "damaged" 状态 + 通知只能由 Updater 自己写（devkit 字段是私有的），这里只发回调、不直接写那边 */
+    static volatile java.util.function.Consumer<String> onDevkitDamaged;
+    /** 探活缓存：bash --version 这类试跑不要每次 devkitReady() 都跑一遍（supervise 每 3 秒问一次，主界面 onCreate 也在 UI 线程问） */
+    private static volatile long probeAtMs;
+    private static volatile boolean probeOkCache;
+    private static volatile String probeProblem = "";
+    private static volatile boolean probeDamagedNoted;
+    private static final long PROBE_TTL_MS = 30_000;
+
     // 经加载器时程序不会被直接执行，只看文件在不在（canExecute 走 access(X_OK)，不该拿它判断能不能跑）
-    boolean devkitReady() { return new File(usr, ".devkit-ok").isFile() && (loader ? bin("node").isFile() : bin("node").canExecute()); }
+    boolean devkitReady() {
+        if (!new File(usr, ".devkit-ok").isFile()) { lastProblem = Tr.t("工具链未安装"); return false; }
+        if (devkitFirstrunFailed().isFile()) { lastProblem = Tr.t("开发工具包首次配置没跑完，请在设置里修复工具包"); return false; }
+        if (loader ? !bin("node").isFile() : !bin("node").canExecute()) { lastProblem = Tr.t("开发工具包不完整：找不到 node"); return false; }
+        if (!probeOk()) { lastProblem = probeProblem; return false; }
+        lastProblem = "";
+        return true;
+    }
+
+    /** 实质探活：bash --version 能跑起来才算就绪（B10：只查 .devkit-ok + node 文件在不在，1.0“就绪却起不来”能原样重现）。
+     *  结果缓存 30 秒；bash 起不来时再试 curl --version，分辨是 bash 坏了还是整包坏了。失败只在 ok→失败的翻转时回调一次 onDevkitDamaged */
+    private boolean probeOk() {
+        long now = System.currentTimeMillis();
+        if (now - probeAtMs < PROBE_TTL_MS) return probeOkCache;
+        boolean bash = runQuiet(cmd(bin("bash").getPath(), "--version"));
+        String problem;
+        boolean ok = bash;
+        if (!bash) {
+            boolean curl = runQuiet(cmd(bin("curl").getPath(), "--version"));
+            problem = curl ? Tr.t("bash 起不来（curl 正常），开发工具包可能不完整")
+                           : Tr.t("bash、curl 都起不来，开发工具包已损坏，请在设置里修复工具包");
+        } else problem = "";
+        probeAtMs = now; probeOkCache = ok; probeProblem = problem;
+        if (!ok && !probeDamagedNoted) {
+            probeDamagedNoted = true;
+            java.util.function.Consumer<String> cb = onDevkitDamaged;
+            if (cb != null) cb.accept(problem);
+        } else if (ok) probeDamagedNoted = false;
+        return ok;
+    }
+
+    /** 静默试跑一条命令：按 Installer.run 同样的方式起（经加载器时前面加 linker64 + apply 环境），5 秒内退出码 0 算成。
+     *  Env 里原来没有执行命令的 helper，Installer.run 要 Progress 且把每行输出报给界面，不适合静默探活，这里只借它的起法 */
+    private boolean runQuiet(java.util.List<String> argv) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(argv);
+            apply(pb.environment());
+            pb.directory(home);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            // --version 输出只有几行，管道不会堵：先等退出，再把剩余输出读掉
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) { p.destroyForcibly(); return false; }
+            try (java.io.InputStream in = p.getInputStream()) { byte[] b = new byte[4096]; while (in.read(b) > 0) { } }
+            return p.exitValue() == 0;
+        } catch (Exception e) { return false; }
+    }
 
     /** 已装工具包的来历（Installer 写的 JSON：base、sha256）。早期版本里只有一行 "ok" → 空对象 */
     org.json.JSONObject devkitInfo() {

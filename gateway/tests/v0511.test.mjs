@@ -86,15 +86,21 @@ import { forEachLine, rewriteLines, zipEntries, zipExtract, zipToFile } from "..
 import { zipBuild, zipRead } from "../gw/sessionops.mjs";
 const T = (n) => path.join(process.env.AGAPP_TMP, n);
 
-test("forEachLine 与 split 逐行一致（跨块的长行、结尾有无换行、中文）", () => {
+test("forEachLine 与 split 逐行一致（跨块的长行、结尾有无换行、中文；以换行结尾不补空行）", () => {
   for (const tail of ["", "\n"]) {
     const text = ["a", "中文一行", "x".repeat(3 << 20), "", "末行"].join("\n") + tail;
     fs.writeFileSync(T("l.txt"), text);
     const got = []; const n = forEachLine(T("l.txt"), (l) => { got.push(l); });
-    assert.deepEqual(got, text.split("\n")); assert.equal(n, got.length);
+    // files L1：以换行结尾时 split 会多出一个尾 ""，forEachLine 不补这个空行（行数按真实行数）
+    const want = tail === "\n" ? text.split("\n").slice(0, -1) : text.split("\n");
+    assert.deepEqual(got, want); assert.equal(n, got.length);
     rewriteLines(T("l.txt"), T("l2.txt"), (l) => l.toUpperCase());
     assert.equal(fs.readFileSync(T("l2.txt"), "utf8"), text.toUpperCase());
   }
+  // 空文件一次也不回调
+  fs.writeFileSync(T("l.txt"), "");
+  assert.equal(forEachLine(T("l.txt"), () => { throw new Error("空文件不该回调"); }), 0);
+  fs.writeFileSync(T("l.txt"), "a\nb\nc");   // 恢复内容，再测中途停
   const seen = []; forEachLine(T("l.txt"), (l, i) => { seen.push(i); if (i === 1) return false; });
   assert.deepEqual(seen, [0, 1]);
 });
@@ -181,12 +187,12 @@ test("1.1 GB 的会话：能分叉、能导出导入", { skip: !process.env.BIG 
   assert.ok(fs.statSync(file).size > 1.1e9);
   const fk = ops.forkSession(sid, "", 0, { uuid: keep, before: true });
   assert.equal(fk.ok, true, fk.message);
-  assert.equal(forEachLine(findSessionFile(fk.id).file, () => {}), 1001);
+  assert.equal(forEachLine(findSessionFile(fk.id).file, () => {}), 1000);   // files L1：1000 行实数，不再 +1 幻影空行
   const ex = await ops.exportSessions([sid]);
   fs.rmSync(file); fs.rmSync(findSessionFile(fk.id).file);
   const r = await ops.importSessions(ex.file);
   assert.deepEqual(r.imported, [sid]);
-  assert.equal(forEachLine(findSessionFile(sid).file, () => {}), 1101);
+  assert.equal(forEachLine(findSessionFile(sid).file, () => {}), 1100);   // files L1：1100 行实数
 });
 
 // 日志脱敏：stderr / 报错原文里的密钥

@@ -12,6 +12,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
@@ -59,25 +60,52 @@ final class GwRuntime {
         return s == null || !java.util.regex.Pattern.compile("(?m)^let SEALED = false;").matcher(s).find();   // 认不出按发行版，宁严勿松
     }
 
-    /** glibc 那组的钉子（文件名 → sha256），交给网关在起 claude 前再核 */
+    /** gw 那组的钉子（文件名 → sha256），交给网关在起 claude 前再核。
+     *  拿不到有效钉子返回 null（不是 ""）：网关侧 GWPIN 为 null 时按 fail-closed 处理，这一轮不起
+     *  Antigravity CLI（见 gwpin.mjs 的 gw 组缺钉子分支，和 glibc 组同一条路，只是不调 APP.restart）；
+     *  钉子一到就按它复核 files/gw 下的 node、libz 等 13 个文件 */
+    String gwPin() {
+        JSONObject p = pin(ctx);
+        JSONObject g = p == null ? null : p.optJSONObject("gw");
+        if (g == null) return null;
+        JSONObject o = new JSONObject();
+        try { for (java.util.Iterator<String> it = g.keys(); it.hasNext(); ) { String k = it.next(); o.put(k, g.getJSONObject(k).getString("sha256")); } }
+        catch (Exception e) { return null; }
+        return o.toString();
+    }
+
+    /** glibc 那组的钉子（文件名 → sha256），交给网关在起 claude 前再核。
+     *  拿不到有效钉子返回 null（不是 ""）："" 在网关侧会被当成“没有钉子、直接放行”，null 由网关按 fail-closed 处理 */
     String glibcPin() {
         JSONObject p = pin(ctx);
         JSONObject g = p == null ? null : p.optJSONObject("glibc");
-        if (g == null) return "";
+        if (g == null) return null;
         JSONObject o = new JSONObject();
         try { for (java.util.Iterator<String> it = g.keys(); it.hasNext(); ) { String k = it.next(); o.put(k, g.getJSONObject(k).getString("sha256")); } }
-        catch (Exception e) { return ""; }
+        catch (Exception e) { return null; }
         return o.toString();
     }
 
     /** 进度（通知栏、启动页上的那行字）；可为 null。bytes：下载的字节进度 */
     interface Say { void say(String s); default void bytes(long done, long total) {} }
 
+    /** 这次 ensure() 是否真的尝试过联网取回（进过 fetchBase）；GatewayService 据此决定要不要记一次取回节流——
+     *  整理阶段就失败（put 拷失败之类）不算取回，别一次 put 失败就锁 30 分钟 */
+    boolean fetchAttempted;
+    /** 取回失败的原因：null=没试或成功，"nospace"=空间不足，"network"=网络或其他 */
+    String fetchFailKind;
+    /** 取回因空间不足失败时：需要 / 当时可用（字节），给界面写明数字用 */
+    long fetchNeedBytes, fetchFreeBytes;
+    /** 停止 / 停住时中断下载：GatewayService.spawnGateway 在 ensure() 前挂上 () -> stopping || paused */
+    volatile java.util.function.BooleanSupplier cancelCheck;
+
     /**
      * 让 files/gw 和钉子一致。返回 null 表示好了；否则是给人看的原因。
      * @param fetch 本地凑不齐时可以联网取钉住那版的基础模块包
+     * @throws Installer.Cancelled 下载中途点了停止 / 服务停住：不是取回失败，直接中断，调用方别记节流
      */
-    String ensure(boolean fetch, Say say) {
+    String ensure(boolean fetch, Say say) throws Installer.Cancelled {
+        fetchAttempted = false; fetchFailKind = null; fetchNeedBytes = fetchFreeBytes = 0;
         JSONObject p = pin(ctx);
         if (p == null) return Tr.t("安装包里没有网关运行库的清单（gwpin.json）");
         if (!ctx.getPackageName().equals(p.optString("target"))) return Tr.f("网关运行库的清单是给 {0} 的", p.optString("target"));
@@ -97,7 +125,13 @@ final class GwRuntime {
                     String want = e.getString("sha256"), src = e.getString("src");
                     if (want.equals(shaCached(dst))) continue;
                     File from = new File(env.usr, src);
-                    if (want.equals(shaCached(from))) { put(from, dst, want, null); continue; }
+                    if (want.equals(shaCached(from))) {
+                        try { put(from, dst, want, null); continue; }
+                        catch (Exception ex) {
+                            // M6：一个文件拷失败就整个放弃、连 fetchBase 都不跑 —— 改成记入 missing，扫完统一取回
+                            Log.w(TAG, "从 $PREFIX 拷 " + name + " 失败，改走联网取回", ex);
+                        }
+                    }
                     missing.add(new String[] { dst.getPath(), src, want });
                 }
             }
@@ -111,10 +145,20 @@ final class GwRuntime {
         try {
             fetchBase(missing, say);
             return null;
+        } catch (Installer.Cancelled e) {
+            throw e;
         } catch (Exception e) {
             Log.w(TAG, "联网取网关运行库失败", e);
+            fetchFailKind = isNoSpace(e) ? "nospace" : "network";
             return Tr.t("网关运行库和安装包对不上，联网取回也没成：") + e.getMessage();
         }
+    }
+
+    /** 空间不足吗：Installer.NoSpace，或解包/写盘时报的 ENOSPC（No space left on device） */
+    private static boolean isNoSpace(Exception e) {
+        if (e instanceof Installer.NoSpace) return true;
+        String m = String.valueOf(e.getMessage());
+        return m.contains("No space") || m.contains("ENOSPC") || m.contains("存储空间不够");
     }
 
     /** 删掉目录里钉子以外的东西（top：网关目录，glibc 子目录留着） */
@@ -147,9 +191,8 @@ final class GwRuntime {
         catch (android.system.ErrnoException e) { throw new IOException(e.getMessage()); }
         long ino;
         try (InputStream in = new FileInputStream(from); FileOutputStream o = new FileOutputStream(fd)) {
-            byte[] all = swap == null ? null : readAll(in);
-            if (all != null) { swapInPlace(all, swap[0], swap[1]); md.update(all); o.write(all); }
-            else { byte[] b = new byte[1 << 20]; for (int n; (n = in.read(b)) > 0; ) { md.update(b, 0, n); o.write(b, 0, n); } }
+            if (swap == null) { byte[] b = new byte[1 << 20]; for (int n; (n = in.read(b)) > 0; ) { md.update(b, 0, n); o.write(b, 0, n); } }
+            else swapCopy(in, o, md, swap[0], swap[1]);   // L1：边读边换，不把整个文件读进内存
             o.flush();
             Os.fsync(fd);
             Os.fchmod(fd, 0700);
@@ -175,9 +218,11 @@ final class GwRuntime {
 
     /**
      * 联网取钉住那版工具包的基础模块包（devkit-pin.json 钉 modules.json 的 sha256，modules.json 钉包的 sha256 与 tar 的 sha256），
-     * 解到 files/gw-stage，取出要的文件按钉子核过放进来，然后把下载的包和解出的东西都删掉
+     * 解到 files/gw-stage，取出要的文件按钉子核过放进来。解出的 stage 当场删；下载的 gz 在 45 个文件全部落盘核对通过后才删，
+     * 中途失败留着，下次重试直接复用/续传，不重下 655 MB（B7）。只解 missing 里那 45 个条目，不解整包（M1）。
      */
     private void fetchBase(java.util.List<String[]> missing, Say say) throws Exception {
+        fetchAttempted = true;
         JSONObject dp = Updater.devkitPin(ctx);
         JSONObject mref = dp == null ? null : dp.optJSONObject("modules");
         if (mref == null) throw new IOException(Tr.t("安装包里的工具包清单没有模块表"));
@@ -196,18 +241,33 @@ final class GwRuntime {
             public void step(String m) { if (say != null) say.say(m); }
             public void bytes(long done, long total) { if (say != null) say.bytes(done, total); }
         });
-        long need = gz.optLong("bytes") + tar.optLong("bytes") + (100L << 20);
-        long free = new android.os.StatFs(env.files.getPath()).getAvailableBytes();
-        if (free < need) throw new Installer.NoSpace(need, free);
+        ins.cancelCheck = () -> cancelCheck != null && cancelCheck.getAsBoolean();
         String file = gz.optString("file");
+        File dest = new File(env.files, "gw-" + file);
+        // M1：门槛不再按整包算（gz 655 MB + tar 1810 MB + 100 MB ≈ 2.5 GiB）。只解 missing 的 45 个文件，
+        // pin 里没有单文件大小：45 个文件解开后约 100 MB 出头（node、ICU、glibc），按 150 MB 估 + 100 MB 余量。
+        // 已下好的 gz / .part 不再重复算（download() 会复用），空间不够时直接报“需要约 X MB、当前可用 Y MB”
+        long have = dest.isFile() && dest.length() == gz.optLong("bytes") ? gz.optLong("bytes")
+            : new File(dest.getPath() + ".part").length();
+        long need = Math.max(0, gz.optLong("bytes") - have) + (150L << 20) + (100L << 20);
+        long free = new android.os.StatFs(env.files.getPath()).getAvailableBytes();
+        if (free < need) {
+            fetchFailKind = "nospace"; fetchNeedBytes = need; fetchFreeBytes = free;
+            throw new IOException(Tr.f("取回网关运行库需要约 {0} MB，手机里目前只剩 {1} MB。清理出空间后会再试（已下载的部分会保留）。",
+                String.valueOf(need >> 20), String.valueOf(free >> 20)));
+        }
         if (say != null) say.say(Tr.f("取回网关运行库：下载 {0} MB…", String.valueOf(gz.optLong("bytes") >> 20)));
-        File got = ins.download(Installer.DEVKIT_MIRROR + tag + "/" + file, base + file, new File(env.files, "gw-" + file), gz.optLong("bytes"), gz.optString("sha256"));
+        File got = ins.download(Installer.DEVKIT_MIRROR + tag + "/" + file, base + file, dest, gz.optLong("bytes"), gz.optString("sha256"));
         File stage = new File(env.files, "gw-stage");
         Installer.deleteTree(stage);
+        boolean ok = false;
         try {
             stage.mkdirs();
             if (say != null) say.say(Tr.t("取回网关运行库：解包…"));
-            ins.extractInto(stage, new FileInputStream(got), got.length(), true, tar.optString("sha256"));
+            // M1：白名单，只解 missing 里那 45 个条目（untar 里按解包后相对 usr/ 的路径比对，即 pin 里的 src）
+            java.util.Set<String> only = new java.util.HashSet<>();
+            for (String[] m : missing) only.add(m[1]);
+            ins.extractInto(stage, new FileInputStream(got), got.length(), true, tar.optString("sha256"), only);
             // 包是给 devkit-pin 的目标包名做的；本应用包名不同（开发版）就等长改前缀，和 devkit.mjs gwpin 算钉子时一样
             String from = dp.optString("target"), to = ctx.getPackageName();
             byte[][] swap = null;
@@ -217,10 +277,14 @@ final class GwRuntime {
                 swap = new byte[][] { a, b };
             }
             for (String[] m : missing) put(new File(stage, m[1]), new File(m[0]), m[2], swap);
+            // B7：全部落盘后再逐个核对，通过了才算取回成功；没通过就留着 gz 下次重试，不重下
+            for (String[] m : missing) {
+                if (!m[2].equals(shaCached(new File(m[0])))) throw new IOException(Tr.f("{0} 取回来以后对不上", new File(m[0]).getName()));
+            }
+            ok = true;
         } finally {
             Installer.deleteTree(stage);
-            got.delete();
-            new File(got.getPath() + ".sha256").delete();
+            if (ok) { got.delete(); new File(got.getPath() + ".sha256").delete(); }
         }
     }
 
@@ -245,19 +309,38 @@ final class GwRuntime {
         try { return MessageDigest.getInstance("SHA-256"); } catch (java.security.NoSuchAlgorithmException e) { throw new RuntimeException(e); }
     }
 
-    private static byte[] readAll(InputStream in) throws IOException {
-        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-        byte[] b = new byte[1 << 20];
-        for (int n; (n = in.read(b)) > 0; ) bo.write(b, 0, n);
-        return bo.toByteArray();
+    /**
+     * 边读边改前缀（等长）：一次只留一个 1 MB 块 + 不到一个前缀长度的尾巴在内存里，不整文件读进来
+     * （L1：node 几十 MB，整文件读内存有 OOM 风险）。语义与以前的整文件做法完全一致（最左、不重叠）：
+     * 只有凑满一个前缀长度才能确认一个位置是不是匹配，所以每轮只处理到 buf.length - a.length，
+     * 剩下的尾巴留到下一轮；流尾不足一个前缀长度，不可能再有匹配，原样写出。md 按换过的内容算。
+     */
+    static void swapCopy(InputStream in, OutputStream o, MessageDigest md, byte[] a, byte[] b) throws IOException {
+        if (a.length == 0) { byte[] buf = new byte[1 << 20]; for (int n; (n = in.read(buf)) > 0; ) { md.update(buf, 0, n); o.write(buf, 0, n); } return; }
+        byte[] chunk = new byte[1 << 20];
+        byte[] tail = new byte[0];   // 上一轮末尾、还不能确认的字节（不到 a.length 个）
+        for (int r; (r = in.read(chunk)) > 0; ) {
+            byte[] buf = new byte[tail.length + r];
+            System.arraycopy(tail, 0, buf, 0, tail.length);
+            System.arraycopy(chunk, 0, buf, tail.length, r);
+            int limit = buf.length - a.length + 1;   // 起始位置 < limit 的都能判定（a.length 个字节都在）
+            int i = 0, run = 0;   // run：还没写出的连续原样段起点
+            while (i < limit) {
+                if (matchAt(buf, i, a)) {
+                    if (i > run) { md.update(buf, run, i - run); o.write(buf, run, i - run); }
+                    md.update(b); o.write(b);
+                    i += a.length; run = i;
+                } else i++;
+            }
+            if (i > run) { md.update(buf, run, i - run); o.write(buf, run, i - run); }
+            // [i, buf.length) 不足 a.length 个字节，留到下一轮再判定
+            tail = java.util.Arrays.copyOfRange(buf, i, buf.length);
+        }
+        md.update(tail); o.write(tail);
     }
 
-    private static void swapInPlace(byte[] buf, byte[] a, byte[] b) {
-        outer:
-        for (int i = 0; i + a.length <= buf.length; i++) {
-            for (int j = 0; j < a.length; j++) if (buf[i + j] != a[j]) continue outer;
-            System.arraycopy(b, 0, buf, i, b.length);
-            i += a.length - 1;
-        }
+    private static boolean matchAt(byte[] buf, int i, byte[] a) {
+        for (int j = 0; j < a.length; j++) if (buf[i + j] != a[j]) return false;
+        return true;
     }
 }

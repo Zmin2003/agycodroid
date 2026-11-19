@@ -20,7 +20,7 @@ export const CFG = {
   runtime: process.env.AGAPP_RUNTIME || path.join(HERE, "..", "runtime"),
   home: process.env.AGAPP_HOME || process.env.HOME || HERE,
   workspace: process.env.AGAPP_WORKSPACE || path.join(HERE, "..", "workspace"),
-  port: Number(process.argv[2] || process.env.AGAPP_PORT || 8790),
+  port: Number(process.argv[2] || process.env.AGAPP_PORT || 8791),   // 与 Env.java:9 的 PORT = 8791 一致（L5）
   bridgePort: Number(process.env.AGAPP_BRIDGE_PORT || 8788),
   // agy 直连 Google，不再经本地 DNS 桥转上游：这个字段只留作兼容，默认空。
   upstream: process.env.AGAPP_UPSTREAM || "",

@@ -113,8 +113,9 @@ export async function reconcileNow() {
   const add = (key, level, k, v, fix, samples, act) => F.push({ key, level, k, v: v || null, fix: fix || "", ...(samples && samples.length ? { samples: samples.slice(0, 8) } : {}), act: act && actOk(act) ? act : null });
   const dk = devkitIdentity();
   if (!dk) add("devkit", "error", tz("找不到工具包的安装标记（.devkit-ok），工具包可能没装完"), null, tz("设置 → 更新：修复工具包"), null, DEVKIT);
-  // 用户主动卸载 Antigravity CLI 会留 files/.claude-uninstalled：这是正常状态，别再报红教人重装（0.6.9 审计 195-M.7）
-  const claudeUninstalled = PREFIX && exists(path.join(path.dirname(PREFIX), ".claude-uninstalled"));
+  // 用户主动卸载 Antigravity CLI 会留 files/.agy-uninstalled：这是正常状态，别再报红教人重装（0.6.9 审计 195-M.7）。
+  // Env.java 写的是 .agy-uninstalled；旧名 .claude-uninstalled 也认一次（1.0 升级上来的，files M3）
+  const claudeUninstalled = PREFIX && (exists(path.join(path.dirname(PREFIX), ".agy-uninstalled")) || exists(path.join(path.dirname(PREFIX), ".claude-uninstalled")));
   // 注意：诊断 key 与修复动作仍是 "claude"——它要和 Java Updater.java 里的 Item id 对得上（安装器那块负责改名，这里别单方面改）。
   if (PATHS.agy && !fs.existsSync(PATHS.agy) && !claudeUninstalled) add("claude", "error", tz("找不到 Antigravity CLI 程序"), null, tz("设置 → 更新：重装 Antigravity CLI"), [PATHS.agy], CLAUDE);
 

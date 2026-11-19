@@ -144,7 +144,9 @@ export function fileRoots() {
   add(UPLOAD_DIR);
   add(CFG.workspace);
   add(process.env.AGAPP_SHARED);
-  add("/sdcard/DeepSeekHarness");
+  // files L6：/sdcard/DeepSeekHarness 是别家应用的目录，不该出现在文件面板根目录里——
+  // 全仓 grep 只剩 providers.mjs 的 SEED_FILE（种子文件导入，读的是文件本身、不走 fileRoots）和
+  // 一个 Java 测试里的示例路径、一个 devkit 脚本里的日志行，都与面板根目录无关，已确认无用才去掉
   add("/sdcard/Pictures"); add("/sdcard/DCIM/Camera"); add("/sdcard/Download"); add("/sdcard/Documents");
   add("/sdcard");
   for (const d of SETTINGS.addDirs || []) add(d);
@@ -388,7 +390,7 @@ export async function routeFiles(req, res, u, p) {
   if (req.method === "POST" && p === "/api/upload") {
     const rawName = u.searchParams.get("name") || "";
     const safe = path.basename(rawName)
-      .replace(/[^\w.\-()一-鿿]+/g, "_")   // 空格也换成 _：路径带空格在提示词里很难引用
+      .replace(/[^\w.\-()一-鿿\u{3040}-\u{309F}\u{30A0}-\u{30FF}\u{3400}-\u{4DBF}\u{AC00}-\u{D7A3}\u{3131}-\u{318E}\u{1F300}-\u{1FAFF}\u{20000}-\u{2A6DF}]+/gu, "_")   // 空格也换成 _：路径带空格在提示词里很难引用；白名单与 MainActivity SAFE_NAME_CHARS / 01-core PATH_RE 同档（假名、韩文、扩展 A/B、emoji，带 /u 的码点范围）
       .replace(/^[.\s]+/, "")
       .slice(0, 120);
     // 流式落盘，不进内存（以前整份读进 64 MB 缓冲，大附件直接失败）。超过门限的附件 App 壳一般直接递路径、不走这里；
@@ -477,7 +479,7 @@ export async function routeFiles(req, res, u, p) {
         if (q && !it.name.toLowerCase().includes(q)) continue;
         // 共享存储（/sdcard）不区分大小写，大小写变体也能指到同一个密钥名，过滤不能只认小写（196 网关安全二轮）
         if (SECRET_NAMES.has(it.name.toLowerCase())) continue;
-        let isDir = it.isDirectory(), size = 0, mtime = 0;
+        let isDir = it.isDirectory(), size = 0, mtime = 0, broken = false;
         try {
           const full = path.join(real, it.name), st = fs.statSync(full);
           // 软链指向被挡的地方（私有目录、令牌文件）：目标的类型、大小、时间都不报（DeepSeek 复核 低-1，旧代码就跟链取了 size/mtime）
@@ -485,8 +487,12 @@ export async function routeFiles(req, res, u, p) {
           // 目录软链：Dirent 不跟链，按目标算，不然面板里点不进去（#106 07-007）；进去时 /api/files 照样过 realpath + pathBlocked
           if (!isDir && !hid && st.isDirectory()) isDir = true;
           if (!hid) { size = isDir ? 0 : st.size; mtime = st.mtimeMs; }
-        } catch {}
-        out.entries.push({ name: it.name, dir: isDir, size, mtime, kind: fileKind(it.name, isDir) });
+        } catch (e) {
+          // 悬空软链：目标没了，stat 抛 ENOENT——以前被空 catch 吞掉，列成 0 字节文件（files L3）。
+          // 标成断链让用户看得见、能删；前端暂时不特殊渲染（只当普通文件列出）
+          if (it.isSymbolicLink() && e && (e.code === "ENOENT" || e.code === "ENOTDIR")) broken = true;
+        }
+        out.entries.push({ name: it.name, dir: isDir, size, mtime, kind: fileKind(it.name, isDir), ...(broken ? { broken: true } : {}) });
         // 超过 1000 项：明说还有没列出来的，别让界面以为目录就这么多（195-C.5）
         if (out.entries.length >= 1000) { if (i < items.length - 1) out.truncated = true; break; }
       }

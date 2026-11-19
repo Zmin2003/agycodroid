@@ -74,6 +74,7 @@ function sessionKindOf(file, st) {
     fd = fs.openSync(file, "r");
     // 和 Antigravity CLI 读 /resume 元数据一样：只看文件开头 64 KB 里第一条带 parentUuid 的记录。sessionKind
     // 就在这条记录上；不整份读，免得几千个会话时列表被磁盘拖住。找不到就当普通会话（宁可多显示，不误藏）。
+    // 网关自己写的 agy 记录没有 parentUuid / sessionKind：这段只对导入的 Claude 记录生效，别删（L2）。
     const buf = Buffer.alloc(65536);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     const head = buf.toString("utf8", 0, n);

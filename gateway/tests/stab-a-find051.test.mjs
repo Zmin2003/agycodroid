@@ -60,7 +60,9 @@ test("改权限模式：整次请求只在最后写一次盘，不在中途单�
     return orig.call(fs, from, to);
   });
   try {
-    const r = await call("/api/settings", { permissionMode: "acceptEdits" });
+    // 例子的档位必须是 PERM_MODES 里的合法值（旧 "acceptEdits" 是 Claude 时代的模式名，
+    // 本轮 Q-06 起非法值回 400，测试意图不变：合法改模式时整次请求只在最后写一次盘）。
+    const r = await call("/api/settings", { permissionMode: "always-proceed" });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(saves, 1, `一次设置请求写了 ${saves} 次盘；permissionMode 不能先单独落盘，最后失败时就成了半套设置`);
   } finally {

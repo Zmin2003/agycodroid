@@ -523,7 +523,7 @@ if (PREFIX && LIVE) installLocalSkill();
 /** 把应用界面叫回前台。agycodroid 由 App 进程做（Shizuku 或通知）；开发端直接 priv am start */
 export function toFront(text) {
   if (PREFIX) return privCall({ op: "to_front", text }, 8000);
-  return new Promise((ok) => execFile("priv", ["am start --activity-reorder-to-front -n li.dsh.claudecli/.MainActivity"],
+  return new Promise((ok) => execFile("priv", ["am start --activity-reorder-to-front -n cc.agyroid/.MainActivity"],
     { timeout: 8000, env: process.env }, (e) => ok(e ? { message: e.message.slice(0, 120) } : { via: "priv" })));
 }
 

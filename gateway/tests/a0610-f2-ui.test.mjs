@@ -9,9 +9,16 @@ const has = (text, re, label) => assert.match(text, re, label);
 
 test("195-O.9 退出登录成功后刷新状态与额度；登录状态查询失败不清掉已显示的额度", () => {
   const s = src("09-settings.js");
-  has(s, /if \(r\.ok\) \{ refreshStatus\(\); qbLoad\(\); loadQuota\(\)\.catch/, "退出成功要撤额度");
+  has(s, /if \(r\.ok\) \{ (localStorage\.removeItem\("agy-ever-google-login"\); )?refreshStatus\(\); qbLoad\(\); loadQuota\(\)\.catch/, "退出成功要撤额度");
   has(s, /if \(failed && QB\.cur && QB\.cur\.id === cur\.id\) return QB\.cur;/, "查询失败保留旧额度");
   has(s, /try \{ st = await api\("\/api\/login\/status"\); \} catch \{ failed = true; \}/, "区分失败与未登录");
+});
+
+test("登录 M1/M2 Google 卡片按自己这家问登录态、按这家退出：authMethod 不对不显示已登录，退出带 provider", () => {
+  const s = src("09-settings.js");
+  has(s, /api\("\/api\/login\/status\?provider=" \+ encodeURIComponent\(p\.id\)\)/, "登录卡按卡片那家问登录态");
+  has(s, /const loggedInHere = st\.loggedIn && \(!st\.authMethod \|\| st\.authMethod === p\.id\);/, "已登录只认这张卡那家的 authMethod");
+  has(s, /post\("\/api\/login\/logout", \{ provider: p\.id \}\)/, "退出登录带上卡片那家");
 });
 
 test("195-N.7/M.8/O.8 原生跳转失败回 200+ok:false 要提示；更新状态取不到要显示重试；电池电流一律换算 mA", () => {

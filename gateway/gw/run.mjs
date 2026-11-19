@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { CFG, LAST_LANG, PATHS, log, tr, tz } from "./config.mjs";
 import { SETTINGS, capList, settingsDiskCheck } from "./settings-store.mjs";
 import { PERM_MODES, PROVIDER, billAfterRun, keyOf, noteTokenDelta, providerById, providersDiskCheck } from "./providers.mjs";
-import { ALIAS_SEEN, effortLevelsOf, normEffort } from "./models.mjs";
+import { ALIAS_SEEN, effortLevelsOf, isLoginMode, loginState, normEffort } from "./models.mjs";
 import { agyBlocked, agyCmd, agyEnv, currentModelInfo, safeMode, safeModePerm, writeAgySettings } from "./agy.mjs";
 import { sealStillValid } from "./agyseal.mjs";
 import { setLastInit } from "./caps.mjs";
@@ -272,6 +272,13 @@ export async function startRun(item) {
     emit({ type: "error", message: tr(LAST_LANG, tz("未配置 API 密钥。请在设置里填入 {name} 的密钥。", { name: P.label || P.id })) });
     return endRun(run, { failed: true });
   }
+  // LG-15：走 Google 登录、且网关已经探过明确没登录时，别再起一轮 agy 等它报 authentication required，
+  // 直接回一句能照着做的提示。只认“探过且没登录”（loginState() === false）：还没问过（null）不拦，
+  // 免得网关刚起、用户其实登着时误拦；探登录态本身要起一次 agy ping，这里只读缓存、不新起探针。
+  if (isLoginMode(P) && loginState() === false) {
+    emit({ type: "error", message: tr(LAST_LANG, tz("还没登录 Google 账号，这一轮没有发出去。请先到「设置」里登录 Google 账号（或改用 Gemini API Key），再重新发送。")) });
+    return endRun(run, { failed: true });
+  }
   // 用户在设置里卸了 Antigravity CLI（之后自己选版本装）：说清楚，别让加载器报一句看不懂的找不到文件
   if (!fs.existsSync(PATHS.agy)) {
     emit({ type: "error", message: tr(LAST_LANG, tz("Antigravity CLI 未安装。到 设置 → 更新 里点「安装…」选一个版本装上。")) });
@@ -312,6 +319,7 @@ export async function startRun(item) {
   // 安全模式下不问人的那档退回 request-review
   if (safeModePerm(permMode) !== permMode) { log(`安全模式：权限模式 ${permMode} → request-review`); permMode = safeModePerm(permMode); }
   run.permMode = permMode;
+  run.agentMode = SETTINGS.agentMode || "";   // 这一轮起跑时的代理模式（init 回推与状态快照用，见 runInfo）
 
   // agy 的启动参数：长驻单进程 + stream-json 双向流。
   //   --input-format stream-json --output-format stream-json：stdin 一直开着，跑到一半还能再递消息进去（插话）。
@@ -485,6 +493,7 @@ export async function startRun(item) {
   writeUser(withNotes(message, firstExtra || null, imgs0), message);
   run.inputOpen = true;
   run.pendingInject = [];      // 已写进 stdin、还没被 agy 吃进去的插话
+  run.replays = 0;             // agy 回显的 user_input 步数：第一条是本轮原消息，之后每条是一条送达的插话（L7）
   const WROTE = new WeakMap();  // 普通插话 → 写进 stdin 的文字（回显按它认，复核 v067b-1）
   const textOf = (c) => (typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x && x.type === "text").map((x) => x.text).join("\n") : "").trim();
   run.usageTools = new Set();   // 使用统计：本轮见过的工具调用（流式会重复报同一个）
@@ -552,10 +561,10 @@ export async function startRun(item) {
     }
     if (st.step_type === "tool") {
       const info = st.tool_info || {};
-      const id = "agy-tool-" + idx;
-      if (st.state !== "DONE") { acc.tools.set(idx, { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} }); return; }
-      const known = acc.tools.get(idx) || { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} };
-      acc.tools.delete(idx);
+      const id = "agy-tool-" + (flags.turn || 0) + "-" + idx;   // 轮次号 + step_index：step_index 跨轮复用时工具 id 不撞车（M2）
+      if (st.state !== "DONE") { acc.tools.set(id, { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} }); return; }
+      const known = acc.tools.get(id) || { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} };
+      acc.tools.delete(id);
       record({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: known.id, name: known.name, input: known.input }] },
         uuid: crypto.randomUUID(), timestamp: new Date().toISOString(), cwd, sessionId: run.sessionId || null });
       const err = info.error;
@@ -568,7 +577,7 @@ export async function startRun(item) {
 
   // lastResult 只证明「它那一轮」答完了：插话会在同一进程里再起一轮，
   // 那一轮还没出 result 就异常退出时，不能拿旧的 result 报成功（#96 02-002）。resultStale 记「之后又动起来了」
-  let buf = "", stderr = "", lastResult = null, resultStale = false;
+  let buf = "", stderr = "", lastResult = null, resultStale = false, prevTurns = 0;   // prevTurns：上一个 result 报的 num_turns，核对轮数用（L7）
   // agy 的 step_update 就是逐字增量，没有单独的 assistant 事件需要去重。
   const flags = { isCmd };
   // 新会话的记录文件是网关在 init 之后才建的：等它在磁盘上真正出现再广播 session_created。
@@ -613,6 +622,8 @@ export async function startRun(item) {
       sessionId: init.session_id,
       model: init.model,
       permissionMode: init.permissionMode,
+      toolPermission: run.permMode || null,   // 前端只认 toolPermission / agentMode：以网关为准（这一轮实际在用的模式）
+      agentMode: run.agentMode || null,
       outputStyle: init.output_style,
       version: init.version,
     });
@@ -634,6 +645,11 @@ export async function startRun(item) {
     }
     if (rk) { seenResults.add(rk); if (seenResults.size > 200) seenResults.delete(seenResults.keys().next().value); }
     lastResult = r; resultStale = false;
+    // 轮次号：本轮的 result 到了，下一轮的 step_index 从这个数起算（M2：工具 id 与 toolsSeen 的键是“轮次号 + step_index”）
+    flags.turn = (flags.turn || 0) + 1;
+    // 轮数核对（L7）：num_turns 回退说明回显/续接可能错位，只记日志——agy 的计数口径未经真机确认，不当成错误
+    if (r.num_turns && prevTurns && r.num_turns < prevTurns) log(`${runTag(run)} ⚠️ result 的 num_turns 回退（${prevTurns} → ${r.num_turns}），插话回显可能错位`);
+    if (r.num_turns) prevTurns = Math.max(prevTurns, r.num_turns);
     // 真实占用（agy 的 usage 是 Claude 形状：input + cache_read + cache_creation）
     flags.contextTokens = (r.usage?.input_tokens || 0) + (r.usage?.cache_read_input_tokens || 0) + (r.usage?.cache_creation_input_tokens || 0);
     // 这一轮走到了结果（答完或报错）：不再是「没跑完」（FIND-040）
@@ -650,6 +666,7 @@ export async function startRun(item) {
       }
     }
     if (run.pendingInject.length) { resultStale = true; return; }   // 插话还没送到：agy 接着还要答一轮
+    run.idle = true;      // 这一轮答完了（M1）：进程可能还留着等后台任务，状态快照与“只剩后台任务”的分支靠它
     return closeInput();
   };
   const onReplay = () => {
@@ -663,11 +680,16 @@ export async function startRun(item) {
     const it = run.pendingInject[0];
     if (it && usageIsPrompt(it.message)) usageAdd({ m: 1 }, run.sessionId);
     run.replays++;
+    // 排着的插话已经空了，agy 又回显一条 user_input：恢复续接时重放了历史，或某条插话被拒收却仍回显。
+    // user_input 步不带正文，按顺序认领在这里就会错位（L7）：只记日志，别把没送达的记成已送达。
+    if (!run.pendingInject.length) log(`${runTag(run)} ⚠️ agy 回显了一条 user_input，但没有排着的插话（可能是恢复续接时重放历史），插话送达确认可能错位`);
     const shifted = run.pendingInject.shift();
     if (shifted) { emit({ type: "inject", text: shifted.message, cid: shifted.cid, itemId: shifted.id }); saveRunMark(); }
   };
   const feed = (line) => {
     let ev; try { ev = JSON.parse(line); } catch { return; }
+    // 后台任务回报又起一轮：这一轮不再空闲（M1：idle 只表示“刚答完、等后台任务”）
+    if (run.idle && ev.event === "step_update") run.idle = false;
     // 上一条事件之后文件可能已经建好：先核一次
     noteSessionFile(ev.event);
     if (!run.tFirst && run.tInit && ev.event === "step_update" && ev.step_update?.step_type === "agent_response" && typeof ev.step_update.text_delta === "string" && ev.step_update.text_delta) {
@@ -718,11 +740,35 @@ export async function startRun(item) {
   run.requeuePending = requeuePending;
 
   const finish = (code, signal) => {
-    if (buf.trim()) feed(buf.trim());
+    // 尾部残行：stdout 回调只按 \n 切行，进程退出瞬间最后一段没换行的内容留在这里。
+    // 解析失败不能静默丢掉——那可能正是 result 事件（L9）：记一笔（含前 200 字），下面按“未收到结果”处理。
+    let tailFailed = false, tailPreview = "";
+    if (buf.trim()) {
+      const tail = buf.trim();
+      try { JSON.parse(tail); } catch { tailFailed = true; tailPreview = tail.slice(0, 200); }
+      feed(tail);
+    }
     buf = "";
+    if (tailFailed) log(`${runTag(run)} ⚠️ 尾部残行解析失败，已丢弃（前 200 字）: ${tailPreview}`);
+    const hadPartialText = !!acc.text;   // M5：有没有攒下半截正文（下面无 result 时提示“发一句『继续』”）
     flushText();                       // 进程死在半截时，累积的正文也要落进记录
+    // agy 没发 init（或 init 里没给会话号）：攒下的记录没处落盘。按“未建会话的孤儿消息”另存一份，
+    // 别静默丢掉首条消息（B9-H2）；同时明确告诉用户这一轮没建起会话。
+    if (pendingRecords.length && !run.sessionId) {
+      const recs = pendingRecords.splice(0);
+      try {
+        const dir = path.join(CFG.home, "agyapp-orphans");
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, `orphan-${Date.now()}.jsonl`);
+        fs.writeFileSync(file, recs.map((r) => JSON.stringify(r)).join("\n") + "\n");
+        log(`${runTag(run)} ⚠️ agy 没给会话号，${recs.length} 条消息没能进会话记录，已另存到 ${file}`);
+      } catch (e) { log(`${runTag(run)} ⚠️ 孤儿消息另存失败: ${e.message}`); }
+      // detail 也带上 stderr 尾部：这条报错往往是本轮的第一个 error 事件（后面收尾还会再报一次退出原因），
+      // 不带 detail，前端只看到“没建起会话”却看不到 agy 临死前说了什么（FIND-045：stderr 留最后一段）。
+      emit({ type: "error", message: tr(LAST_LANG, tz("Antigravity 没有返回会话号，这一轮的消息没能存进会话记录。请新开一轮重发。")), detail: exitDetail(stderr) });
+    }
     noteSessionFile("finish");           // 记录只在退出前才落盘的情况：收尾前再核一次
-    run.meter.close();                   // 中断 / 被杀也走这里：子代理记录最后扫一遍
+    run.meter.close();                   // 中断 / 被杀也走这里：子代理已随流实时记入，收尾无补扫（见 usageMeter.close）
     try { run.agents?.close(); } catch (e) { log(`${runTag(run)} 子代理收尾出错: ${e.message}`); }
     // agy 已经退出，这时的记录就是下一轮的基准；提醒这一轮已经交出去（正常答完）才清掉标记
     if (!lastResult || lastResult.is_error) run.giveNotesBack?.();
@@ -774,6 +820,9 @@ export async function startRun(item) {
     const hint = code !== 0 || signal ? exitHint(code, signal) : tz("生成结束但没有返回结果");
     log(`${runTag(run)} ✖ ${hint}${stderr ? " :: " + stderr.trim().slice(-300) : ""}`);
     emit({ type: "error", message: tr(LAST_LANG, hint), detail: exitDetail(stderr) });
+    // streamfix 已死（M5）：无 result 时这里直接提示。已有部分正文但没等到收尾，回答可能不完整；
+    // 有会话号才能“继续”（没会话号时上面孤儿分支已经报错，让用户新开一轮）。
+    if (hadPartialText && run.sessionId) emit({ type: "note", key: "run-incomplete", text: tr(LAST_LANG, tz("只收到了一部分回答，可能不完整：发一句「继续」让它接着说")) });
     endRun(run, { failed: true, durationMs: ms, ...spent() });
   };
 

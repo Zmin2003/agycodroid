@@ -2,7 +2,7 @@
 // 三个来源：
 //   · app     应用（Java）起网关前逐文件核 files/app，对不上就按安装包重铺，清单经环境变量 AGAPP_TAMPERED 交过来（不落盘，模型删不掉）
 //   · runtime 网关跑着时 appfiles.mjs 把被改的小目录文件写回、多出来的删掉；界面文件对不上不发并等空闲重启
-//   · claude  claude 程序和版本目录里存的官方清单（Anthropic 签名）对不上，这一轮不起（见 claudeseal.mjs）
+//   · agy   agy 程序和版本目录里存的官方清单对不上，这一轮不起（见 agyseal.mjs）
 // 只在内存里：网关重启后，应用那边再核一遍、再交一次。
 import { log } from "./config.mjs";
 

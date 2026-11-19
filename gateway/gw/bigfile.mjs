@@ -10,7 +10,8 @@ import { tz } from "./config.mjs";
 
 const CHUNK = 1 << 20;
 
-/** 逐行回调 fn(line, i)，返回 false 就停。最后一行没有换行符也照交；行号和 split("\n") 的一致 */
+/** 逐行回调 fn(line, i)，返回 false 就停。最后一行没有换行符也照交；行号按真实行数：
+ *  空文件一次也不回调，以换行结尾的文件不补一个空行（files L1：以前总多回调一次空行，行数 +1） */
 // 单行上限：内存只跟最长的一行有关，这里给最长的一行也封个顶（没有换行的超大文件别整个读进来，审查 v0513b 低-5）
 const LINE_MAX = 256 << 20;
 /** 写满为止：fs.writeSync 写进一部分后再出错（比如满盘）会返回不足的正数而不是抛错，只写一次会把半截当成写完（#150-1）。
@@ -39,7 +40,8 @@ export function forEachLine(file, fn) {
       }
       if (s < n) { rest.push(Buffer.from(buf.subarray(s, n))); restLen += n - s; if (restLen > LINE_MAX) throw new Error(tz("文件里有一行超过 {n} MB，处理不了", { n: LINE_MAX >> 20 })); }
     }
-    fn(restLen ? Buffer.concat(rest).toString("utf8") : "", i++);
+    // files L1：只有最后一行确实没换行符（restLen > 0）才交出去；空文件、或以换行结尾的文件不补空行
+    if (restLen) fn(Buffer.concat(rest).toString("utf8"), i++);
     return i;
   } finally { fs.closeSync(fd); }
 }
@@ -71,13 +73,22 @@ export function lineWriter(file) {
 
 /** 逐行改写 src → dst，换行结构原样保留（结尾有没有换行都照旧） */
 export function rewriteLines(src, dst, fn) {
-  const fd = fs.openSync(dst, "w");
+  const srcStat = fs.statSync(src);
+  // files M6：原样保留两样东西——结尾有没有换行（以前会给无尾换行的文件补一个）、原文件权限（以前 openSync 不传 mode，跟着 umask 走）。
+  // forEachLine 不再补最后那个空行（files L1），尾换行这里自己记下来
+  let trailingNL = false;
+  if (srcStat.size > 0) {
+    const rfd = fs.openSync(src, "r");
+    try { const b = Buffer.alloc(1); trailingNL = fs.readSync(rfd, b, 0, 1, srcStat.size - 1) === 1 && b[0] === 10; } finally { fs.closeSync(rfd); }
+  }
+  const fd = fs.openSync(dst, "w", srcStat.mode & 0o777);
   let parts = [], len = 0, prev = null;
   const put = (s) => { const b = Buffer.from(s, "utf8"); parts.push(b); len += b.length; if (len >= CHUNK) { writeAll(fd, Buffer.concat(parts, len)); parts = []; len = 0; } };
   try {
     forEachLine(src, (l) => { if (prev !== null) put(prev + "\n"); prev = fn(l); });
-    if (prev) put(prev);
+    if (prev !== null) put(prev + (trailingNL ? "\n" : ""));
     if (len) writeAll(fd, Buffer.concat(parts, len));
+    fs.fsyncSync(fd);   // 落盘后再关：fsync 出错要抛出来，调用方（moveSession）才不会把原文件删了
   } finally { fs.closeSync(fd); }
 }
 

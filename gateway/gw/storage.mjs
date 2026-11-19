@@ -35,6 +35,7 @@ const STATE_FILE = () => H("agyapp-storage.json");
 // ── 永不碰：设置与状态、密钥、技能、插件、记忆、说明文件、审计与网关日志（落在这些下面的一律不删，哪怕规则算错了） ──
 const NEVER = () => [H(".keys"), H(".ssh"), H(".gateway-token"), H(".bldtools"), H(".claude", "skills"), H(".claude", "plugins"),
   H(".claude", "projects"), H(".claude", "CLAUDE.md"), H(".claude", "settings.json"), H(".claude", ".credentials.json"), H(".claude.json"),
+  H(".gemini"),   // LG-16：Gemini CLI 的家目录（凭据/配置）：和 .claude 那几条一样，清理永不碰
   H(".cache", "agyapp-login"), H(".cache", "llama-api-key"), H("priv-audit.jsonl"), H("gateway.log"), H(".agyapp-userconf"), H(".config")];
 const NEVER_NAME = /^(agyapp-key.*|\.gateway-token|.*\.pem|id_[a-z0-9]+(\.pub)?|known_hosts|hosts\.yml)$/;
 
@@ -233,10 +234,11 @@ function pkgSizes() {
 }
 async function programs() {
   const f = FILES_DIR();
-  const claudeDir = H(".local", "share", "agycodroid", "claude");
-  let cur = ""; try { cur = path.basename(fs.realpathSync(path.join(claudeDir, "current"))); } catch {}
+  // agy 的安装目录：…/agycodroid/agy（Env.java agy()、install-agy.mjs、Updater.java 三处一致；以前错写成 claude，装好的 agy 永远不显示，files H2）
+  const agyDir = H(".local", "share", "agycodroid", "agy");
+  let cur = ""; try { cur = path.basename(fs.realpathSync(path.join(agyDir, "current"))); } catch {}
   const versions = [];
-  try { for (const v of fs.readdirSync(claudeDir)) if (v !== "current" && fs.lstatSync(path.join(claudeDir, v)).isDirectory()) versions.push({ version: v, current: v === cur, bytes: await du(path.join(claudeDir, v)) }); } catch {}
+  try { for (const v of fs.readdirSync(agyDir)) if (v !== "current" && fs.lstatSync(path.join(agyDir, v)).isDirectory()) versions.push({ version: v, current: v === cur, bytes: await du(path.join(agyDir, v)) }); } catch {}
   const known = new Set([".claude", ".cache", ".npm", ".local", ".agyapp-trash", ".agycodroid", path.basename(CFG.workspace)]);
   const homeDirs = [];
   try {

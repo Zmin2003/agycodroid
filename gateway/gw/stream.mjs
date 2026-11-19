@@ -124,7 +124,7 @@ const type = ev.event;
 if (type === "init") {
 const init = ev.init || {};
 onInit({
-session_id: ev.conversation_id,
+session_id: ev.conversation_id || init.session_id || init.conversation_id,
 model: init.model || null,
 permissionMode: init.permission_mode || null,
 output_style: null,
@@ -155,7 +155,7 @@ return;
 }
 if (st.step_type === "tool") {
 const info = st.tool_info || {};
-const id = "agy-tool-" + stepIdx;
+const id = "agy-tool-" + ((flags && flags.turn) || 0) + "-" + stepIdx;   // 轮次号 + step_index：step_index 跨轮复用时工具卡不被吞（M2）
 const name = String(info.name || st.tool_name || "");
 // 第一次见到这一步（ACTIVE 或 DONE）：先出工具卡；DONE 时再出结果。
 // 同一步的 ACTIVE 和 DONE 各来一次：只出一次卡。
@@ -185,11 +185,12 @@ return;
 if (type === "result") {
 const r = ev.result || {};
 const status = String(r.status || "");
-const ok = status === "SUCCESS";
+// 成功判定大小写不敏感（M6）：“SUCCESS”之外的值代码/测试里没见过，不凭空认——真机抓到新取值再补。
+const ok = status.toUpperCase() === "SUCCESS";
 const usage = normUsage(r.usage);
 if (usage) contextUsage(usage, flags, sse);
 const norm = {
-uuid: "agy-" + String(ev.conversation_id || "") + "-" + String(r.num_turns?? 0),
+uuid: "agy-" + String(ev.conversation_id || "") + "-" + String(r.num_turns?? 0) + (r.duration_seconds ? "-" + String(r.duration_seconds) : ""),
 session_id: ev.conversation_id || null,
 is_error:!ok,
 result: typeof r.response === "string"? r.response: "",

@@ -80,6 +80,20 @@ test("195-K.1：指定的工作目录不在了 → 这一轮不跑、报出来�
   assert.equal(fs.existsSync(path.join(root, "ran-k1")), false);
 });
 
+test("LG-15：已知没登录 Google 时不启动 agy，直接回友好提示", async () => {
+  const { noteLoggedIn } = await import("../gw/models.mjs");
+  noteLoggedIn(false);   // 模拟设置页探过、明确没登录（login.mjs 的 authStatus 会这样写）
+  try {
+    script([{ raw: `: > ${root}/ran-lg15` }, init(crypto.randomUUID()), result(crypto.randomUUID())], 0);
+    await startRun({ id: "a0610-lg15", message: "fixture", cwd: root });
+    await until(() => endOf("a0610-lg15"));
+    assert.equal(endOf("a0610-lg15").failed, true);
+    assert.ok(events.some((e) => e.type === "error" && /还没登录/.test(e.message || "")),
+      JSON.stringify(events.filter((e) => e.type === "error")));
+    assert.equal(fs.existsSync(path.join(root, "ran-lg15")), false, "假 CLI 没跑起来：没起 agy");
+  } finally { noteLoggedIn(null); }   // 复位：null = 还没问过，后面的轮次照常跑
+});
+
 test("195-O.1/O.4：接口账本跟着运行中的计量记——没出 result 就被结束的那轮、子代理的都记上", async () => {
   const P = await import("../gw/providers.mjs");
   const tok = () => P._billForTest.billOf("google").tok.reduce((a, r) => [a[0] + r[1], a[1] + r[2], a[2] + r[3]], [0, 0, 0]);

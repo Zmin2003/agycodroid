@@ -14,14 +14,20 @@ import { NEXT, readBody, sendJson } from "./http.mjs";
 // 安卓既没有 /bin/sh 也没有 bash：agy 跑命令要调 shell，
 // 它认 SHELL 环境变量 —— 于是造个名叫 bash 的包装转发给 mksh。
 let SHELL_PATH = null;
+let SHELL_REAL = null;      // 包装当前指到的真 shell（terminal M1：缓存的包装可能过期）
+let SHELL_FALLBACK = false; // 配好的真 bash 文件不在，已回落到系统 sh
 // 非安卓环境（CI 的 Linux）没有 /system/bin/sh：包装脚本的 shebang 和最终 exec 都要回落到 /bin/sh
 const SYS_SH = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 export function ensureShell() {
-  if (SHELL_PATH) return SHELL_PATH;
   // 开发端（旧布局）没有 AGAPP_SHELL：有 files/cbash/bash（glibc 版真 bash）就用它。
   const cbash = path.join(CFG.runtime, "..", "cbash", "bash");
   const want = process.env.AGAPP_SHELL || (!PREFIX && fs.existsSync(cbash) ? cbash : "");
   const real = want && fs.existsSync(want) ? want : SYS_SH;
+  // terminal M1：以前 SHELL_PATH 一旦算出来就再也不校验——工具包卸了/换了，包装还指着不存在的 bash，
+  // 终端起不来还静默。每次都校验一次包装和它指到的真 shell，变了就重造
+  if (SHELL_PATH && SHELL_REAL === real && fs.existsSync(SHELL_PATH)) return SHELL_PATH;
+  if (want && !fs.existsSync(want)) log(`[shell] 配好的 shell 不在（${want}），已回落到系统 sh`);
+  SHELL_FALLBACK = !!want && !fs.existsSync(want);
 
   const dir = PREFIX ? path.join(CFG.home, ".cache", "agyapp-shell") : path.join(CFG.runtime, "bin");
   const sh = path.join(dir, "bash");
@@ -39,12 +45,18 @@ export function ensureShell() {
     if (need) fs.writeFileSync(sh, body, { mode: 0o755 });
     fs.chmodSync(sh, 0o755);
     SHELL_PATH = sh;
+    SHELL_REAL = real;
   } catch (e) {
     log(`造 shell 包装失败: ${e.message}`);
     SHELL_PATH = SYS_SH;
+    SHELL_REAL = SYS_SH;
+    SHELL_FALLBACK = !!want;   // 包装造不出来也一样回落到了系统 sh
   }
   return SHELL_PATH;
 }
+/** 上次 ensureShell 是不是回落到了系统 sh（配好的 bash 不在，或包装造不出来）。
+ *  终端拿它决定首屏要不要提示、标题写 bash 还是 sh（terminal M1） */
+export function shellIsFallback() { return SHELL_FALLBACK; }
 
 // ── agy 进程 ────────────────────────────────────────────────────────
 /** 某个模型（缺省 = 全局设置里的）在某家（缺省 = 当前生效的）那边的真实参数。
@@ -357,17 +369,22 @@ export async function agyBlocked() {
 
 /** 跑一次 agy 并收集全部 stdout（用于取 CLI 状态类输出）。
  *  一次性调用走 -p + --output-format json（单次模式，跑完即退）；管理子命令（mcp list / doctor / auth status / --version）
- *  直接传，不加 -p。调用前先写一遍网关管理的 settings.json（和开会话同一份）。 */
-export async function runAntigravity(args, { cwd, timeoutMs = 60000 } = {}) {
+ *  直接传，不加 -p。调用前先写一遍网关管理的 settings.json（和开会话同一份）。
+ *  o.provider：指定用哪家跑（默认全局生效那家）。不认就等于没传——providers.mjs 的
+ *  testProvider 传了 provider 却一直被忽略，测的其实是全局那家（登录 M1 连带修掉）；login.mjs
+ *  的 authStatus 靠它按 google / gemini 分开探。每次调用都先按这家重写 settings 再起进程，
+ *  所以探针写一次不会污染下一轮（run.mjs 起 agy 前也会按本轮那家重写）。 */
+export async function runAntigravity(args, { cwd, timeoutMs = 60000, provider } = {}) {
   const blocked = await agyBlocked();
   if (blocked) return { out: "", err: blocked, error: true };
-  try { writeAgySettings(PROVIDER, { safe: safeMode() }); } catch {}
+  const p = provider || PROVIDER;
+  try { writeAgySettings(p, { safe: safeMode() }); } catch {}
   return new Promise((resolve) => {
     let out = "", err = "", done = false;
     const [cmd0, args0] = agyCmd([...args]);
     const child = spawn(cmd0, args0, {
       cwd: cwd || (fs.existsSync(CFG.workspace) ? CFG.workspace : CFG.home),
-      env: agyEnv(),
+      env: agyEnv({ provider: p }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,          // 当进程组长，中断时好整组带走（见 killTree）
     });

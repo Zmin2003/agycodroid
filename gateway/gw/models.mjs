@@ -21,6 +21,9 @@ const EXAMPLE_MODELS = [
 // agy 的凭据不在那里）。用户还能在设置里把某家从选单里藏起来（hidden），配置照留
 let LOGGED_IN = null;
 export function noteLoggedIn(v) { LOGGED_IN = v == null ? null : !!v; }   // null = 当没问过（测试复位用）
+// 发送前预检（LG-15）只读这个值：true = 探过，已登录；false = 探过，明确没登录；
+// null = 还没问过，不能当没登录（网关刚起、用户又确实登着时拦了就是误拦）。
+export const loginState = () => LOGGED_IN;
 const loginReady = () => LOGGED_IN === true;
 export function providerList() {
   const hide = new Set(Array.isArray(SETTINGS.hiddenProviders) ? SETTINGS.hiddenProviders : []);

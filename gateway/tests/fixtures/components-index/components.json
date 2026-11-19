@@ -16,7 +16,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44,
      "baseDeps": [
@@ -162,7 +162,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44,
      "baseDeps": [
@@ -308,7 +308,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44,
      "baseDeps": [
@@ -454,7 +454,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44,
      "baseDeps": [
@@ -600,7 +600,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44,
      "baseDeps": [
@@ -746,7 +746,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44
     },
@@ -763,7 +763,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 44
     },
@@ -780,7 +780,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 74
     },
@@ -797,7 +797,7 @@
       "chromium-headless",
       "chromium-browser"
      ],
-     "skill": "usr/share/cccodroid/components/chromium/skill",
+     "skill": "usr/share/agycodroid/components/chromium/skill",
      "selftest": "chromium-headless --dump-dom 'data:text/html,<p id=ok>ok</p>'",
      "packages": 83
     }

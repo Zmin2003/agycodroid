@@ -676,6 +676,44 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    /** 文件名白名单：字母数字 + 常用符号 + 中文（M1：与网关 01-core.js 的 PATH_RE 同档，补了假名、韩文、扩展 A 区汉字；
+     *  增补平面用 \x{...} 写进字符类（Java 正则支持，代理对范围写法易错不用）：emoji U+1F300–U+1FAFF、CJK 扩展 B 区 U+20000–U+2A6DF；
+     *  与网关 files.mjs 的上传白名单同一范围，两边一起改） */
+    private static final String SAFE_NAME_CHARS = "\\w.\\-()\\u3040-\\u309f\\u30a0-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uac00-\\ud7a3\\u3131-\\u318e\\x{1F300}-\\x{1FAFF}\\x{20000}-\\x{2A6DF}";
+
+    /** 文件名脱敏（M1）：白名单外的字符换成 _，再去掉开头的 . 与空白。分享接收与文件选择器两处共用 */
+    static String safeFileName(String s) {
+        if (s == null) return "";
+        return s.replaceAll("[^" + SAFE_NAME_CHARS + "]+", "_").replaceAll("^[.\\s]+", "");
+    }
+
+    /** 按 UTF-8 字节截断（照网关 files.mjs 的 clipBytes）：不切开多字节字符，emoji 不会从中间断开 */
+    static String clipBytes(String s, int max) {
+        if (s == null) return "";
+        int n = 0;
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            int len = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            if (n + len > max) break;
+            out.appendCodePoint(cp);
+            n += len;
+            i += Character.charCount(cp);
+        }
+        return out.toString();
+    }
+
+    /** 文件名按 UTF-8 字节截断并保留扩展名（H3）：扩展名最多留 32 字节，主名补到总共 maxBytes 字节。
+     *  以前按字符数从前面截（120 个汉字 = 360 字节，加前缀后超 255 字节上限，createNewFile 失败），还可能从中间切开 emoji */
+    static String clipFileName(String name, int maxBytes) {
+        if (name == null) return "";
+        int dot = name.lastIndexOf('.');
+        if (dot <= 0) return clipBytes(name, maxBytes);
+        String ext = clipBytes(name.substring(dot), 32);
+        int extBytes = ext.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        return clipBytes(name.substring(0, dot), Math.max(0, maxBytes - extBytes)) + ext;
+    }
+
     private void copyShares(java.util.ArrayList<android.net.Uri> uris, String text) {
         new Thread(() -> {
           try {
@@ -686,8 +724,7 @@ public class MainActivity extends Activity {
                 // 大文件在共享存储里有真实路径：直接给路径，不拷（附件大小门限，见 BIG_ATTACH）
                 String real = sizeOf(u) > BIG_ATTACH ? realPath(u) : null;
                 if (real != null) { n++; toPage("agyapp-attach", real); continue; }
-                String name = displayName(u).replaceAll("[^\\w.\\-()\\u4e00-\\u9fff]+", "_").replaceAll("^[.\\s]+", "");
-                if (name.length() > 120) name = name.substring(name.length() - 120);
+                String name = clipFileName(safeFileName(displayName(u)), 200);
                 String stamp = new java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US).format(new java.util.Date());
                 String base = name.isEmpty() ? "shared.bin" : name;
                 // 独占创建占住名字（审查 #105 06-011，同 attachBig）：两批分享同一秒进来、同名，以前都过了 exists 检查、写进同一个文件
@@ -804,8 +841,7 @@ public class MainActivity extends Activity {
                     if (real != null) { toPage("agyapp-attach-pick", pickEvent(id, real)); continue; }
                     if (big) ui.post(() -> android.widget.Toast.makeText(this, Tr.t("文件较大，正在收进工作区…"), android.widget.Toast.LENGTH_SHORT).show());
                     dir.mkdirs();
-                    String name = displayName(u).replaceAll("[^\\w.\\-()\\u4e00-\\u9fff]+", "_").replaceAll("^[.\\s]+", "");
-                    if (name.length() > 120) name = name.substring(name.length() - 120);
+                    String name = clipFileName(safeFileName(displayName(u)), 200);
                     String stamp = new java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US).format(new java.util.Date());
                     String base = name.isEmpty() ? "upload.bin" : name;
                     // 独占创建占住名字：同一秒附加两个同名大文件（两批分享）时，后一个不会截断前一个还在写的文件
@@ -910,32 +946,38 @@ public class MainActivity extends Activity {
             + "\")c.openSession(\"" + sid + "\")}" + caught("openSession") + "},n?800:0)}else if(n<50)setTimeout(function(){f(n+1)},200)})(0)", null);
     }
 
-    // ── 工具包从哪装：GitHub / cccodroid.net 镜像 / 本地文件 ──────────────────
-    /** 首装：让用户选来源，照着走。两个下载源互为备用（首选连着失败就换另一个接着续传）；本地文件没选就回到选择 */
+    // ── 工具包从哪装：GitHub / 本地文件 ──────────────────
+    /** 首装：让用户选来源，照着走。只走 GitHub（没有镜像）；本地文件没选就回到选择 */
     private void installFirstDevkit(Installer ins) throws Exception {
         org.json.JSONObject pin = Updater.devkitPin(this);
         if (pin == null || pin.optJSONObject("gz") == null) throw new java.io.IOException(Tr.t("APK 里的工具包清单坏了"));
+        // 入口校验（H2）：APK 里钉的工具包必须是给本应用的，错 target 直接拒装，别把上游的包装进来
+        if (!getPackageName().equals(pin.optString("target")) || pin.optInt("compat", 1) != Updater.DEVKIT_COMPAT)
+            throw new java.io.IOException(Tr.f("APK 里的工具包清单不是给本应用的（target 是 {0}），不安装", pin.optString("target")));
         String file = pin.getJSONObject("gz").getString("file"), base = pin.getString("base");
-        String gh = base + file, mirror = Updater.devkitMirror(base, file);
-        // 以前共享目录里有 devkit-cc.agyroid.tar.gz 就自动多一项「用共享目录里的文件」：那里任何有存储权限的应用都能放，
+        String gh = base + file;
+        // 以前共享目录里有 devkit-cc.codroid.tar.gz 就自动多一项「用共享目录里的文件」：那里任何有存储权限的应用都能放，
         // 等于替人摆好一个诱饵（审查 v0513b 低-24）。离线装照样能走「选择本地文件…」，自己挑的文件才装
         String local = null;
         while (true) {
             String c = chooseDevkitSource(pin, local);
-            if ("github".equals(c) || "mirror".equals(c)) {
-                boolean m = "mirror".equals(c);
+            if ("github".equals(c)) {
                 // 模块化工具包（钉子里有 modules.json）：取清单、按钉子核 sha256，让用户勾模块，再按块装
                 org.json.JSONObject pm = pin.optJSONObject("modules");
                 if (pm != null) {
-                    String mf = pm.optString("file", "modules.json"), mgh = base + mf, mmir = Updater.devkitMirror(base, mf);
-                    File mj = ins.download(m ? mmir : mgh, m ? mgh : mmir, new File(env.files, mf), pm.optLong("bytes"), pm.optString("sha256"));
+                    String mf = pm.optString("file", "modules.json"), mgh = base + mf;
+                    File mj = ins.download(mgh, new File(env.files, mf), pm.optLong("bytes"), pm.optString("sha256"));
                     byte[] bytes = java.nio.file.Files.readAllBytes(mj.toPath());
-                    java.util.List<String> want = chooseModules(new org.json.JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8)));
-                    ins.installModules(bytes, want, base, pin.getJSONObject("gz").getString("sha256"), m);
+                    org.json.JSONObject mjObj = new org.json.JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+                    java.util.List<String> want = chooseModules(mjObj);
+                    // 按块装的身份取 base 块的 gz sha（L1），和更新检查的口径一致；取不到就退回整包 gz sha
+                    String identity = Installer.baseModuleSha(mjObj);
+                    if (identity == null || identity.isEmpty()) identity = pin.getJSONObject("gz").getString("sha256");
+                    ins.installModules(bytes, want, base, identity);
                     mj.delete();
                     return;
                 }
-                File gz = ins.downloadDevkit(pin, m ? mirror : gh, m ? gh : mirror);
+                File gz = ins.downloadDevkit(pin, gh, null);
                 ins.installDevkit(gz.getPath());
                 gz.delete();      // 解完就删，腾出 650 MB
                 return;
@@ -946,7 +988,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 在安装页上摆出来源选择，等用户点一个。返回 github / mirror / local / path */
+    /** 在安装页上摆出来源选择，等用户点一个。返回 github / local / path */
     private String chooseDevkitSource(org.json.JSONObject pin, String local) throws InterruptedException {
         final String[] pick = {null};
         CountDownLatch done = new CountDownLatch(1);
@@ -966,13 +1008,12 @@ public class MainActivity extends Activity {
             q.setPadding(0, dp(4), 0, dp(8));
             String txt = Tr.f("开发工具包约 {0} MB（解开后约 {1} GB），从哪里装？",
                 String.valueOf(gz.optLong("bytes") >> 20), String.format(java.util.Locale.ROOT, "%.1f", (tar != null ? tar.optLong("bytes") : 0) / 1073741824.0));
-            if (part.length() > 0) txt += "\n" + Tr.f("已经下了 {0} MB，两个下载源都能接着续传。", String.valueOf(part.length() >> 20));
+            if (part.length() > 0) txt += "\n" + Tr.f("已经下了 {0} MB，接着续传。", String.valueOf(part.length() >> 20));
             q.setText(txt);
             chooser.addView(q);
             String[][] opts = {
                 {"github", Tr.t("从 GitHub 下载"), Tr.t("海外网络一般最快")},
-                {"mirror", Tr.t("从 cccodroid.net 镜像下载"), Tr.t("GitHub 慢或连不上时用；文件与 GitHub 上的一致，照样核对 sha256")},
-                {"local", Tr.t("选择本地文件…"), Tr.t("已经下好的 devkit-cc.agyroid.tar.gz（或 .tar）；装之前核对是不是发布版")},
+                {"local", Tr.t("选择本地文件…"), Tr.t("已经下好的 devkit-cc.codroid.tar.gz（或 .tar）；装之前核对是不是发布版")},
                 local != null ? new String[]{"path", Tr.t("用共享目录里的文件"), local} : null,
             };
             for (String[] o : opts) {
@@ -1123,24 +1164,8 @@ public class MainActivity extends Activity {
         return -1;
     }
 
-    /** 后台线程里弹一个确认框并等结果 */
-    private boolean askBlocking(String msg, String yes) throws InterruptedException {
-        final boolean[] ok = {false};
-        CountDownLatch l = new CountDownLatch(1);
-        // 和 confirmPriv 一样过 guard：按钮一秒后才能点、被盖住时不收触摸（问的是装不装来源不明的工具包，11-04 报告 A4）
-        ui.post(() -> {
-            android.app.AlertDialog d = new android.app.AlertDialog.Builder(this).setMessage(msg)
-                .setPositiveButton(yes, (x, w) -> ok[0] = true)
-                .setNegativeButton(Tr.t("取消"), null)
-                .setOnDismissListener(x -> l.countDown()).create();
-            if (!guard(d, android.content.DialogInterface.BUTTON_POSITIVE)) l.countDown();
-        });
-        awaitAlive(l);
-        return ok[0];
-    }
-
     /**
-     * 本地工具包：先读一遍算 sha256、对照已发布的清单认身份；认不出就明说风险、让用户决定；认出来但不兼容就不装。
+     * 本地工具包：先读一遍算 sha256、对照已发布的清单认身份；认不出或 target 对不上就拒绝（M4，不再问用户就装）。
      * 第二遍解包时再按清单的 tar sha256 边解边核，两遍之间文件被换掉也会被拦下。
      * @param replacing true = 更新卡片发起、替换已装的（要停网关）；false = 首装
      * @return false = 用户取消
@@ -1153,15 +1178,11 @@ public class MainActivity extends Activity {
         say("sha256 " + scan[0]);
         say(Tr.t("对照已发布的工具包…"));
         org.json.JSONObject id = upd.identifyDevkit(scan[0]);
-        if (id == null) {
-            if (!askBlocking(Tr.f("这个文件不是已发布的工具包（也可能是现在没网、查不到清单）。\n\nsha256 前 12 位：{0}\n\n只在它是你自己构建的、或者确定来源可靠时才继续：工具包里的程序能读写 agycodroid 里的一切。", scan[0].substring(0, 12)),
-                    Tr.t("仍然安装"))) { say(Tr.t("已取消")); return false; }
-            say("⚠ " + Tr.t("没核对上来源，按你的确认继续"));
-        } else {
-            String why = upd.devkitIncompatible(id);
-            if (why != null) throw new java.io.IOException(why);
-            say(Tr.f("✓ 是已发布的 {0}", id.optString("tag")));
-        }
+        // 本地文件必须认得出身份且 target 对得上（M4）：认不出的包不再问用户就装，直接拒绝
+        if (id == null) throw new java.io.IOException(Tr.f("这个文件不是已发布的工具包（也可能是现在没网、查不到清单），不安装。sha256 前 12 位：{0}", scan[0].substring(0, 12)));
+        String why = upd.devkitIncompatible(id);
+        if (why != null) throw new java.io.IOException(why);
+        say(Tr.f("✓ 是已发布的 {0}", id.optString("tag")));
         boolean gzip = "gz".equals(scan[1]);
         if (replacing) upd.applyLocalDevkit(ins, src, total, gzip, scan[0], id);
         else ins.installDevkit(src.open(), total, gzip, id != null ? id.optString("base") : "",
@@ -1771,9 +1792,11 @@ public class MainActivity extends Activity {
                 return shouldOverrideUrlLoading(v, req.getUrl().toString());
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v, String url) {
-                // 网关起不来时的等待页 / 拦截页上的两个自救链接（页面不许跑脚本，只能靠跳转）。都只是弹原生对话框，谁点的都一样要用户确认
+                // 网关起不来时的等待页 / 拦截页上的自救链接（页面不许跑脚本，只能靠跳转）。
+                // 重置 / 诊断只是弹原生对话框，谁点的都一样要用户确认；立即重试直接调服务钩子：清取回节流、叫醒守护线程马上再试
                 if (RESCUE_RESET.equals(url)) { askFactoryReset(); return true; }
                 if (RESCUE_LOGS.equals(url)) { stuck.performClick(); return true; }
+                if (RESCUE_RETRY.equals(url)) { GatewayService.retryGwFetch(); toast(Tr.t("正在立即重试…")); recoverGateway(true); return true; }
                 if (isOwnGateway(url)) return false;
                 // 预览没开「联网」时，网页自己整页跳到外站（top.location、target=_blank）会落到这里，
                 // 交给外部浏览器就等于把地址里夹带的内容送了出去。拦截那层管不到整页跳转，这里先问一句（10-31 复核补）
@@ -2227,10 +2250,11 @@ public class MainActivity extends Activity {
     private boolean squatShown;
 
     // ── 恢复初始设置（FactoryReset）：入口在设置页排障栏、启动页「我卡住了」、网关起不来时的等待页 ──
-    private static final String RESCUE_RESET = "agycodroid-rescue:reset", RESCUE_LOGS = "agycodroid-rescue:logs";
+    private static final String RESCUE_RESET = "agycodroid-rescue:reset", RESCUE_LOGS = "agycodroid-rescue:logs", RESCUE_RETRY = "agycodroid-rescue:retry";
     private static String rescueLinks(String color) {
         String a = "style=\"color:" + color + ";display:inline-block;margin:10px 12px 0\"";
-        return "<p style=\"font-size:14px;margin-top:28px\"><a " + a + " href=\"" + RESCUE_LOGS + "\">" + android.text.TextUtils.htmlEncode(Tr.t("我卡住了：分享诊断")) + "</a>"
+        return "<p style=\"font-size:14px;margin-top:28px\"><a " + a + " href=\"" + RESCUE_RETRY + "\">" + android.text.TextUtils.htmlEncode(Tr.t("立即重试")) + "</a>"
+            + "<a " + a + " href=\"" + RESCUE_LOGS + "\">" + android.text.TextUtils.htmlEncode(Tr.t("我卡住了：分享诊断")) + "</a>"
             + "<a " + a + " href=\"" + RESCUE_RESET + "\">" + android.text.TextUtils.htmlEncode(Tr.t("恢复初始设置")) + "</a></p>";
     }
     private volatile boolean resetting;
@@ -2542,14 +2566,14 @@ public class MainActivity extends Activity {
         if (req == 7 && fileCb == null) {
             // 选文件期间界面被系统收掉重建过（审查 #105 06-010）：网页的回调没了，选的文件照大附件那样递路径 / 收进 uploads，别静默丢掉
             // 重建后拿不到当初的批次号：按旧格式递，网页按当前快照处理
-            Uri[] all = chooserResult(this, res, data);
+            Uri[] all = limitPicker(chooserResult(this, res, data));
             if (all != null && all.length > 0) attachBig(java.util.Arrays.asList(all), false, 0);
             return;
         }
         if (req == 7) {
             // 附件大小门限：超过 BIG_ATTACH 的不交给网页（网页要把整个文件经 fetch 送进网关，几百 MB 时界面和网关都扛不住），
             // 在这边处理 —— 共享存储里有真实路径的只递路径，Antigravity 按路径自己读；没有的（云盘、别的应用私有的）在后台流式拷进 uploads/
-            Uri[] all = chooserResult(this, res, data);
+            Uri[] all = limitPicker(chooserResult(this, res, data));
             ValueCallback<Uri[]> cb = fileCb;
             fileCb = null;
             final long pidN = pickId;
@@ -2567,6 +2591,14 @@ public class MainActivity extends Activity {
                 });
             }, "attach-size").start();
         }
+    }
+
+    /** 网页文件选择器多选上限（M5）：与分享接收的 32 个一致，超了只收前 32 个并 Toast 告知 */
+    private static final int PICK_MAX = 32;
+    private Uri[] limitPicker(Uri[] all) {
+        if (all == null || all.length <= PICK_MAX) return all;
+        android.widget.Toast.makeText(this, Tr.f("一次最多选 {0} 个文件，其余 {1} 个没收", PICK_MAX, all.length - PICK_MAX), android.widget.Toast.LENGTH_LONG).show();
+        return java.util.Arrays.copyOf(all, PICK_MAX);
     }
 
     /** 系统给的 createIntent() 不管网页要不要多选，一律只能选一个：<input multiple> 时补上 EXTRA_ALLOW_MULTIPLE */

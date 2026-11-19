@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { CFG, HERE, PATHS, PREFIX, log, tz } from "./config.mjs";
-import { agyEnv, ensureShell, killTree } from "./agy.mjs";
+import { agyEnv, ensureShell, shellIsFallback, killTree } from "./agy.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 
 // ── 应用内终端 ────────────────────────────────────────────────────────
@@ -62,11 +62,14 @@ _,st=os.waitpid(pid,0)
 sys.exit(os.waitstatus_to_exitcode(st) if hasattr(os,"waitstatus_to_exitcode") else 0)
 `;
 
+/** 有没有可执行位（terminal L4：只认文件存在不认可执行位，权限丢了的 ptyhost 会在 spawn 时才炸） */
+const isExec = (p) => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } };
+
 function ptyCommand() {
   const own = process.env.AGAPP_PTYHOST || path.join(HERE, "lib", "ptyhost");
-  if (fs.existsSync(own)) return [own];
+  if (fs.existsSync(own) && isExec(own)) return [own];
   const py = [PREFIX && path.join(PREFIX, "bin", "python3"), path.join(CFG.runtime, "..", "devbin", "python3")]
-    .find((p) => p && fs.existsSync(p));
+    .find((p) => p && fs.existsSync(p) && isExec(p));
   return py ? [py, "-c", PY_PTY] : null;
 }
 
@@ -131,9 +134,10 @@ function termNew({ cols, rows, login, cwd: want } = {}) {
   const child = spawn(pc[0], [...pc.slice(1), String(rows), String(cols), shell], {
     cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"],
   });
-  if (login) setTimeout(() => { try { child.stdin.write("agy\r"); } catch {} }, 400);
+  // terminal M1：配好的 bash 不在、回落到系统 sh 时，标题就别再写 bash（包装文件还叫 bash，但里面跑的是 sh）
+  const shellName = shellIsFallback() ? "sh" : (path.basename(shell) === "bash" ? "bash" : "sh");
   const t = {
-    id, title: `${path.basename(shell) === "bash" ? "bash" : "sh"} ${seq}`, cols, rows,
+    id, title: `${shellName} ${seq}`, cols, rows,
     created: Date.now(), alive: true, code: null, child,
     buf: "", total: 0, subs: new Set(), dec: new StringDecoder("utf8"),
   };
@@ -143,8 +147,19 @@ function termNew({ cols, rows, login, cwd: want } = {}) {
     if (t.buf.length > TERM_RING) t.buf = t.buf.slice(t.buf.length - TERM_RING);
     for (const r of t.subs) sseSend(r, "o", s, t);
   };
-  child.stdout.on("data", (d) => out(t.dec.write(d)));
-  child.stderr.on("data", (d) => out(d.toString()));     // 只有 ptyhost 自己的报错走这里
+  // terminal L5：登录终端以前固定 400ms 后敲 agy，和用户输入可能交错。
+  // 现在等 shell 吐出第一段输出（说明它活着、提示符出来了）再敲；5 秒还没动静也敲一次（有的 shell 启动不打印）。
+  // 不挂在通用 out() 上：它还会打网关自己的目录提示，那不是 shell 活着的证据
+  let loginSent = false;
+  const sendLogin = () => {
+    if (!login || loginSent || !t.alive || child.exitCode !== null || child.signalCode !== null) return;
+    loginSent = true;
+    try { child.stdin.write("agy\r"); } catch {}
+  };
+  child.stdout.on("data", (d) => { out(t.dec.write(d)); sendLogin(); });
+  child.stderr.on("data", (d) => { out(d.toString()); sendLogin(); });     // 只有 ptyhost 自己的报错走这里
+  if (login) { const loginTimer = setTimeout(sendLogin, 5000); loginTimer.unref?.(); }
+  if (shellIsFallback()) out(`\r\n[${tz("未找到 bash，已回落到系统 sh")}]\r\n`);   // terminal M1：首屏说一声，别让用户以为还在 bash 里
   if (cwdNote) out(`\r\n[${tz("目录不存在：{dir}，已改用 {cwd}", { dir: cwdNote, cwd })}]\r\n`);
   child.stdin.on("error", () => {});
   child.stdio[3]?.on("error", () => {});
@@ -177,7 +192,11 @@ function sseSend(res, ev, data, t) {
 }
 
 /** 这个终端名下还活着的进程（含自己 setsid 跑掉的）：按环境里的 AGAPP_TERM_ID 找。
- *  关闭终端后扫一次，别让 ✕ 只关掉前台、后台还留着一条会话（200-4.04）。只在杀终端时跑，平时不扫 */
+ *  关闭终端后扫一次，别让 ✕ 只关掉前台、后台还留着一条会话（200-4.04）。只在杀终端时跑，平时不扫。
+ *  terminal L6：这里只扫得到环境里还留着 AGAPP_TERM_ID 的进程——终端里起的程序要是把环境清了
+ *  （env -i、或自己 unset），它的后代就扫不到。约定和 AGAPP_RUN 一样：清掉这个标记 = 声明
+ *  “这是常驻的服务，别跟着终端走”（见 agy.mjs 里 AGAPP_RUN 的约定）。
+ *  已知后代的进程组补杀已经在 termKill 里做了（killTree，1500ms 超时）；这里不重复加进程组扫描 */
 function killTermProcs(id) {
   let pids = [];
   try {

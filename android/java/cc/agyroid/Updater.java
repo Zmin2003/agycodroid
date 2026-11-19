@@ -38,12 +38,9 @@ import org.json.JSONObject;
  */
 final class Updater {
     static final String TAG = "agycodroid-upd";
-    static final String REPO = "greyoak111/cccodroid";
-    /** 备用源：cccodroid.net 镜像了最近几个版本的 APK 和一份同形状的发布列表（dl/releases.json）。
-     *  只在 GitHub 连不上 / 下载不顺时用；下来的 APK 照样核 sha256 和签名。工具包太大，没有镜像 */
-    static final String MIRROR = "https://cccodroid.net";
-    /** 同一份 APK 与发布列表的直连线路（不经 Cloudflare；国内有的网络只通其中一条） */
-    static final String DL = "https://dl.cccodroid.net";
+    static final String REPO = "Zmin2003/agycodroid";
+    /** 更新只走 GitHub，没有自己的镜像站：以前的镜像常量已随 1.0.1 去掉。
+     *  下来的 APK 照样核 sha256 和签名。 */
     /** agy 查新与安装共用的唯一来源：官方 manifest（version / url / sha512，运行时现读，不硬编码版本） */
     static final String AGY_MANIFEST_URL = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json";
     /** 工具包与本 APK 的接口版本：lock.json 里的 compat（缺省 1）对不上就不装，防止新工具包配旧外壳 */
@@ -64,6 +61,8 @@ final class Updater {
     /** 最近一次校验的结果（给界面看） */
     private volatile JSONObject lastVerify;
     private volatile boolean repairing;    // 这次下载 / 安装是「修复」发起的（账本里分开记）
+    /** 这次 planModules 里，整包用户升级时不会自动跟着装的模块（full=false，如 go、node）：写进升级文案提醒手动加装（M2） */
+    volatile java.util.List<String> skippedExtraModules = new java.util.ArrayList<>();
 
     static final class Item {
         final String id, name;
@@ -109,7 +108,7 @@ final class Updater {
             if (f.isFile() && f.length() == st.optLong("size")) {
                 devkit.file = f; devkit.base = st.getString("base"); devkit.sha = st.getString("sha256");
                 devkit.size = st.getLong("size"); devkit.url = devkit.base + f.getName(); devkit.latest = tagOf(devkit.base);
-                devkit.alt = devkitMirror(devkit.base, f.getName());
+                devkit.alt = null;   // 没有镜像：只走 GitHub
                 devkit.tarSha = st.optString("tarSha256", null);
                 if (st.has("modSha")) {
                     devkit.modules = java.nio.file.Files.readAllBytes(f.toPath());
@@ -311,11 +310,8 @@ final class Updater {
      */
     String installedDevkitBase() { return env.devkitInfo().optString("base", ""); }
     private String installedDevkitSha() { return env.devkitInfo().optString("sha256", ""); }
-    /** 同一个文件在 dl.cccodroid.net 上的地址：GitHub 下得不顺时接着续传（内容照样核 sha256） */
-    static String devkitMirror(String base, String file) { return Installer.DEVKIT_MIRROR + tagOf(base) + "/" + file; }
-
     /** 本 APK 绑定的那一版工具包的清单（assets/devkit-pin.json，打包时从 Release 的 devkit.lock.json 摘出来）。
-     *  首装从镜像下、本地文件认身份，都拿它当准：校验值跟着 APK 走，不靠下载来源 */
+     *  首装从 GitHub 下、本地文件认身份，都拿它当准：校验值跟着 APK 走，不靠下载来源 */
     static JSONObject devkitPin(Context c) {
         try (java.io.InputStream in = c.getAssets().open("devkit-pin.json")) {
             return new JSONObject(new String(readAll(in), StandardCharsets.UTF_8));
@@ -404,6 +400,10 @@ final class Updater {
     /** 更新卡片的「从本地文件安装」：在 MainActivity 的线程里调，进度打到安装界面。id 为 null = 用户确认过硬装 */
     void applyLocalDevkit(Installer ins, Installer.Source src, long total, boolean gzip, String sha, JSONObject id) throws Exception {
         if (devkitMoving()) throw new IOException(Tr.t("工具包正在下载或安装，等它结束再试"));
+        // 本地文件必须认得出身份且 target 对得上（M4）：认不出、不兼容的都不装，别让旧包 / 来路不明的包换进来
+        if (id == null) throw new IOException(Tr.t("这个文件不是已发布的工具包，不安装"));
+        String incompatible = devkitIncompatible(id);
+        if (incompatible != null) throw new IOException(incompatible);
         // 本地文件也能装旧版（0.6.9 审计 14-03）：认得出是哪一版、又比已装 / APK 钉的旧，就要用户点头
         String tag = id != null ? id.optString("tag") : "";
         if (!allowDevkitDowngrade(tag, Tr.t("从本地文件安装开发工具包")))
@@ -454,82 +454,33 @@ final class Updater {
         lastError = "";
         refreshCurrent();
         String[] ghErr = new String[1];
-        JSONArray[] lists = fetchLists(ghErr);
-        JSONArray rels = lists[0];
-        boolean mirror = false;
+        JSONArray rels = fetchList(ghErr);
         if (rels == null) {
             lastError = Tr.t("连不上 GitHub：") + ghErr[0];
-            rels = lists[1];
-            mirror = rels != null;
-            // GitHub 不通：应用本身改看镜像的发布列表；工具包没有镜像，如实说查不了（别报成"已是最新"）
-            if (rels == null) app.set("error", lastError);
+            // 没有镜像可 fallback：GitHub 不通就如实说查不了（别报成"已是最新"）
+            app.set("error", lastError);
             if (pinnedInstalled()) devkit.set("uptodate", Tr.t("已是本应用配套的版本（GitHub 连不上，暂时查不了更新的）"));
             else devkit.set("error", lastError);
         }
         if (rels != null) {
-            try { checkApp(rels); if (mirror && !"error".equals(app.state)) app.message = app.message.isEmpty() ? Tr.t("来自 cccodroid.net 镜像") : app.message + Tr.t(" · 来自 cccodroid.net 镜像"); }
+            try { checkApp(rels); }
             catch (Exception e) { app.set("error", e.getMessage()); }
             // 首装还没完成（工具包没装好）就别查工具包：那时读不到已装的模块，planModules 会按「整包用户」规划成全部模块，
             // 自动更新在 Wi‑Fi 下把它们全下好，首装刚按勾选装完，启动流程又把这份「已下载的更新」装上 —— 勾了两个、装了八个（群友 10-24）
             if (!env.devkitReady()) devkit.set("uptodate", Tr.t("首次安装进行中"));
-            else if (!mirror) try { checkDevkit(rels); } catch (Exception e) { devkit.set("error", e.getMessage()); }
+            else try { checkDevkit(rels); } catch (Exception e) { devkit.set("error", e.getMessage()); }
         }
         try { checkAgy(); } catch (Exception e) { claude.set("error", Tr.t("连不上官方 manifest：") + e.getMessage()); }
-        prefs().edit().putLong("lastCheck", System.currentTimeMillis()).apply();
+        // 检查失败（连不上 GitHub，rels == null）时不更新 lastCheck：循环 30 分钟后就重试，别让一次失败锁死 6 小时（M6）
+        if (rels != null) prefs().edit().putLong("lastCheck", System.currentTimeMillis()).apply();
         if (auto() && !manual && env.devkitReady()) autoApply();      // 首装期间不自动装任何东西，Antigravity CLI 也由首装流程来装
         releaseApp();         // 工具包停在"已下载"没去装（比如有任务在跑）时，别让 APK 一直等着
     }
 
-    /**
-     * 发布列表三条线同时问：GitHub（App + 工具包）、cccodroid.net 与 dl.cccodroid.net（只有 App，由 GitHub 定时生成）。
-     * 以前先等 GitHub 连接 20 秒 + 读 60 秒超时才看镜像，不开代理的网络里一次检查要卡一分多钟（群友 10-31）。
-     * GitHub 通了就用它（镜像可能晚几分钟）；GitHub 报错立刻看镜像；GitHub 一直挂着，最多等它 15 秒，镜像有了就先用镜像。
-     * 返回 {GitHub 的列表, 镜像的列表}，没取到的是 null
-     */
-    private JSONArray[] fetchLists(String[] ghErr) {
-        final String[] urls = { feed(), MIRROR + "/dl/releases.json", DL + "/dl/releases.json" };
-        final JSONArray[] got = new JSONArray[3];
-        final String[] err = new String[3];
-        final boolean[] fin = new boolean[3];
-        final Object lk = new Object();
-        for (int i = 0; i < 3; i++) {
-            final int k = i;
-            Thread t = new Thread(() -> {
-                JSONArray a = null; String e = null;
-                try { a = new JSONArray(new String(Installer.httpGetSmall(urls[k]), StandardCharsets.UTF_8)); }
-                catch (Exception x) { e = String.valueOf(x.getMessage()); }
-                synchronized (lk) { got[k] = a; err[k] = e; fin[k] = true; lk.notifyAll(); }
-            }, "upd-feed-" + i);
-            t.setDaemon(true);
-            t.start();
-        }
-        long t0 = System.currentTimeMillis();
-        synchronized (lk) {
-            for (;;) {
-                long el = System.currentTimeMillis() - t0;
-                boolean mirOk = got[1] != null || got[2] != null, mirDone = mirOk || fin[1] && fin[2];
-                // GitHub 通了就用；GitHub 失败且镜像都有结果了就收；GitHub 挂过 15 秒、镜像确实拿到了列表才不等它。
-                // 镜像都不通时得接着等 GitHub（慢但能通的梯子），不能 15 秒就放弃
-                if (got[0] != null || fin[0] && mirDone || el >= 15000 && mirOk || el >= 90000) break;
-                try { lk.wait(250); } catch (InterruptedException e) { break; }
-            }
-            ghErr[0] = fin[0] ? err[0] : Tr.t("超时");
-            JSONArray mir = got[1];
-            if (mir == null || got[2] != null && cmpVer(latestApp(got[2]), latestApp(mir)) > 0) mir = got[2];
-            Log.i(TAG, "发布列表：GitHub " + (got[0] != null ? "通" : fin[0] ? "不通" : "未回") + "，镜像 " + (got[1] != null ? "通" : "-") + "/" + (got[2] != null ? "通" : "-"));
-            return new JSONArray[]{ got[0], mir };
-        }
-    }
-
-    /** 列表里最新的 App 版本号（不带 v），没有返回 "0" */
-    static String latestApp(JSONArray rels) {
-        for (int i = 0; i < rels.length(); i++) {
-            JSONObject r = rels.optJSONObject(i);
-            if (r == null) continue;
-            String tag = r.optString("tag_name");
-            if (!r.optBoolean("draft") && tag.matches("v\\d+(\\.\\d+)*")) return tag.substring(1);
-        }
-        return "0";
+    /** 发布列表只问 GitHub 一条线（没有自己的镜像站）。返回 GitHub 的列表，取不到是 null */
+    private JSONArray fetchList(String[] ghErr) {
+        try { return new JSONArray(new String(Installer.httpGetSmall(feed()), StandardCharsets.UTF_8)); }
+        catch (Exception e) { ghErr[0] = String.valueOf(e.getMessage()); return null; }
     }
 
     // 和 apply 同一把锁：apply 占槽与这里改目标不会交错（05-008）
@@ -540,12 +491,16 @@ final class Updater {
         // 刚下完（ready）而工具包在动：下载线程马上就要 deferApp，置 appWaiting 前这一下也不能换（DeepSeek 复核 b7r2 低-1）
         if ("downloading".equals(app.state) || "installing".equals(app.state) || appWaiting
             || "ready".equals(app.state) && devkitMoving()) return;
+        boolean anyVer = false;
+        String name = apkName(wantFlavor());
         for (int i = 0; i < rels.length(); i++) {
             JSONObject r = rels.getJSONObject(i);
             String tag = r.optString("tag_name");
-            if (r.optBoolean("draft") || !tag.matches("v\\d+(\\.\\d+)*")) continue;
+            // 预发布版默认跳过（M1）：不自动推给所有用户；想试预览版的人走手动下载
+            if (r.optBoolean("draft") || r.optBoolean("prerelease") || !tag.matches("v\\d+(\\.\\d+)*")) continue;
+            anyVer = true;
             app.latest = tag.substring(1);
-            String want = wantFlavor(), name = apkName(want);
+            String want = wantFlavor();
             // 版本相同但要换一套（28 ↔ 36）：也算有更新，同版本号覆盖安装系统是认的
             int c = cmpVer(app.latest, app.current);
             boolean swap = c == 0 && !want.equals(flavor());
@@ -555,10 +510,9 @@ final class Updater {
                 JSONObject a = as.getJSONObject(k);
                 if (!a.optString("name").equals(name)) continue;
                 app.url = a.getString("browser_download_url");
-                // 三处都是同一份文件，谁先谁后由下载前测速定（Installer.rank），这里只管都列上
-                String gh = "https://github.com/" + REPO + "/releases/download/" + tag + "/" + name;
-                app.alt = app.url.equals(gh) ? MIRROR + "/dl/" + tag + "/" + name : gh;
-                app.alt2 = DL + "/dl/" + tag + "/" + name;
+                // 没有镜像：只走 GitHub 这一处（下载失败时 Installer.download 还会试 gh-proxy 兜底，内容照样核 sha256）
+                app.alt = null;
+                app.alt2 = null;
                 app.size = a.optLong("size");
                 String d = a.optString("digest", "");
                 app.sha = d.startsWith("sha256:") ? d.substring(7).toLowerCase(java.util.Locale.ROOT) : null;
@@ -569,10 +523,10 @@ final class Updater {
                 app.set(app.file.isFile() && app.file.length() == app.size ? "ready" : "available", note);
                 return;
             }
-            app.set("error", Tr.f("v{0} 里没有 {1}", app.latest, name));
-            return;
+            // 这个 v* release 里没有对应 flavor 的 APK：继续找下一个 v* release，别直接报错（M3）
         }
-        app.set("uptodate", "");
+        if (anyVer) app.set("error", Tr.f("已发布的版本里没有 {0}", name));
+        else app.set("uptodate", "");
     }
 
     private void checkDevkit(JSONArray rels) throws Exception {
@@ -617,7 +571,8 @@ final class Updater {
         JSONObject gz = lock.getJSONObject("gz");
         String sha = gz.getString("sha256");
         String have = installedDevkitSha();
-        if (!have.isEmpty() && have.equals(sha)) {
+        // 按块装的已装身份是 base 块的 gz sha（L1），不是整包 lock 的 gz sha：两种身份都认
+        if (!have.isEmpty() && (have.equals(sha) || have.equals(installedBaseBlockSha(best)))) {
             devkit.current = best;
             if (!"damaged".equals(devkit.state)) devkit.set("uptodate", "");     // 自检查出坏了：同一版本，等用户点修复
             return;
@@ -627,7 +582,7 @@ final class Updater {
         devkit.tarSha = tar != null ? tar.optString("sha256", null) : null;
         devkit.need = tar != null ? tar.optLong("bytes") : devkit.size * 4;
         devkit.url = base + gz.getString("file");
-        devkit.alt = devkitMirror(base, gz.getString("file"));
+        devkit.alt = null;   // 没有镜像：只走 GitHub
         devkit.file = new File(env.files, gz.getString("file"));
         devkit.modules = null; devkit.modSha = null; devkit.moduleIds = null;
         planModules(base);
@@ -639,7 +594,20 @@ final class Updater {
             throw new IOException(Tr.f("{0} 的工具包清单没核实成（签名对不上或没取到）；过会儿再检查更新", best));
         }
         String mb = String.format(java.util.Locale.ROOT, "%.0f MB", devkit.size / 1048576.0);
-        devkit.set("available", have.isEmpty() && env.devkitReady() ? mb + Tr.t(" · 无法确认已装的是哪一版，建议更新一次") : mb);
+        String avail = have.isEmpty() && env.devkitReady() ? mb + Tr.t(" · 无法确认已装的是哪一版，建议更新一次") : mb;
+        // 整包用户升级时 go / node 这类模块不会自动跟着装（M2）：文案里写明，免得升级完才发现没了
+        if (!skippedExtraModules.isEmpty()) avail += Tr.f(" · 升级后 {0} 需在扩展页手动加装", android.text.TextUtils.join("、", skippedExtraModules));
+        devkit.set("available", avail);
+    }
+
+    /** 已装的模块化工具包在 modules.json 里记的 base 块 gz sha（L1 身份）：release 对得上 best 才认，否则返回 null。
+     *  没 release 字段的老清单认不出版本，不拿它当身份，免得把旧版误判成已是最新 */
+    private String installedBaseBlockSha(String best) {
+        try {
+            JSONObject cur = new Installer(env, null).readModules();
+            if (cur == null || !best.equals(cur.optString("release", ""))) return null;
+            return Installer.baseModuleSha(cur);
+        } catch (Exception e) { return null; }
     }
 
     /** 清掉待下载的工具包（地址、哈希、文件）：清单没核实成时用 */
@@ -663,14 +631,11 @@ final class Updater {
         } catch (Exception e) { return false; }
     }
 
-    /** 工具包 Release 里的小文件：先 GitHub，连不上换 dl.cccodroid.net（同一份文件）。返回 true = 来自镜像 */
-    private static boolean fetchDevkitFile(String base, String name, byte[][] out) throws IOException { return fetchDevkitFile(base, name, out, 0); }
-    private static boolean fetchDevkitFile(String base, String name, byte[][] out, long deadline) throws IOException {
-        try { out[0] = Installer.httpGetSmall(base + name, deadline == 0 ? 0 : msLeft(deadline)); return false; }
-        catch (IOException e) {
-            try { out[0] = Installer.httpGetSmall(devkitMirror(base, name), deadline == 0 ? 0 : msLeft(deadline)); return true; }
-            catch (IOException e2) { throw new IOException(Tr.t("GitHub 和 cccodroid.net 镜像都连不上：") + e.getMessage()); }
-        }
+    /** 工具包 Release 里的小文件：只走 GitHub（没有镜像） */
+    private static void fetchDevkitFile(String base, String name, byte[][] out) throws IOException { fetchDevkitFile(base, name, out, 0); }
+    private static void fetchDevkitFile(String base, String name, byte[][] out, long deadline) throws IOException {
+        try { out[0] = Installer.httpGetSmall(base + name, deadline == 0 ? 0 : msLeft(deadline)); }
+        catch (IOException e) { throw new IOException(Tr.t("连不上 GitHub：") + e.getMessage()); }
     }
 
     /** 装着的工具包就是本 APK 钉的那一版 */
@@ -688,6 +653,7 @@ final class Updater {
      * 首装不走这里 —— 那时 modules.json 按 APK 钉的 sha256 核
      */
     private void planModules(String base) {
+        skippedExtraModules = new java.util.ArrayList<>();
         try {
             byte[][] got = new byte[1][];
             fetchDevkitFile(base, "modules.json", got);
@@ -706,6 +672,9 @@ final class Updater {
                 JSONObject pin = devkitPin(ctx), pm = pin == null ? null : pin.optJSONObject("modules");
                 if (pm == null || !sha.equals(pm.optString("sha256"))) { Log.w(TAG, "planModules: modules.json 没写 release、也不是钉的那份"); return; }
             }
+            // 按块装时身份改取 base 块的 gz sha：它来自已验签的 modules.json，不再用未经签名的 lock 里的 gz sha（L1）
+            String baseSha = Installer.baseModuleSha(mj);
+            if (baseSha != null) devkit.sha = baseSha;
             java.util.List<String> ids = installedModuleIds(mj);
             long dl = 0, need = 0;
             for (JSONObject m : Installer.moduleOrder(mj, ids)) { dl += m.getJSONObject("gz").optLong("bytes"); need += m.getJSONObject("tar").optLong("bytes"); }
@@ -724,8 +693,8 @@ final class Updater {
             JSONObject m = all.optJSONObject(i);
             if (m == null || !"module".equals(m.optString("kind"))) continue;
             String id = m.optString("id");
-            // 整包里没有的模块（full=false，比如后加的 Go、Node 生态）不算已装，要用再到扩展页加
-            if (cur == null) { if (m.optBoolean("full", true)) ids.add(id); continue; }
+            // 整包里没有的模块（full=false，比如后加的 Go、Node 生态）不算已装，要用再到扩展页加；记下来写进升级文案（M2）
+            if (cur == null) { if (m.optBoolean("full", true)) ids.add(id); else skippedExtraModules.add(Installer.moduleName(m)); continue; }
             JSONObject old = Installer.moduleById(cur, id);
             if (old != null && new File(env.usr, old.optString("dir") + "/.ok").isFile()) ids.add(id);
         }
@@ -811,7 +780,7 @@ final class Updater {
         boolean debuggable = (ctx.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         try { if (debuggable && f.isFile()) { String u = new String(java.nio.file.Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8).trim(); if (!u.isEmpty()) return u; } }
         catch (Exception ignored) {}
-        return "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
+        return "https://api.github.com/repos/" + REPO + "/releases?per_page=100";
     }
 
     /** 自动模式的规则：见类注释 */
@@ -967,14 +936,14 @@ final class Updater {
         for (JSONObject m : Installer.moduleOrder(mj, it.moduleIds)) {
             JSONObject gz = m.getJSONObject("gz");
             String file = gz.getString("file");
-            ins.download(it.base + file, devkitMirror(it.base, file), new File(env.files, file), gz.optLong("bytes"), gz.getString("sha256"));
+            ins.download(it.base + file, new File(env.files, file), gz.optLong("bytes"), gz.getString("sha256"));
             before[0] += gz.optLong("bytes");
         }
         Installer.write(it.file, new String(it.modules, StandardCharsets.UTF_8));
     }
 
     /** 发布证书（证书 DER 的 SHA-256，同 Apk.signer）。换钥匙时新旧都列上，过渡期后再删旧的 */
-    static final String[] SIGNERS = { "b70361595dd3d8d704dd210ed596fc577014ce2272884fb6980bf69623338fe0" };
+    static final String[] SIGNERS = { "aaf53a2e92507b26fd087b8b2fff3a92310dadad8b54af7622172987845aa1fc" };
     private static boolean isSha(String h) { return h != null && h.matches("[0-9a-f]{64}"); }
 
     /** 下载来的 APK 必须是本应用、同一把签名钥匙。签名不同系统本来也拒装，这里先挡住，免得弹一个必失败的确认框 */
@@ -1103,7 +1072,9 @@ final class Updater {
     }
 
     private static final class Unverified extends IOException {
-        Unverified() { super(Tr.t("已下载的工具包核实不了来源，已删除；重新检查更新会再下一次")); }
+        // DK-14：跨 APK 升级后旧待装包作废（旧 modules.json 无 release 字段、旧钥匙签名核不过）才会走到这里：
+        // 文案直接说清“作废、已删、重下”，用户在更新页看到的就是这句，不另起 UI
+        Unverified() { super(Tr.t("旧待装包已作废，已删除；重新检查更新会再下一次")); }
     }
     /** 待装记录是从 prefs 里读回来的（进程重启过）：那是本应用 uid 的普通文件，同 uid 的脚本写得进去，装之前要重新核来源 */
     private boolean stagedFromPrefs;
@@ -1152,7 +1123,11 @@ final class Updater {
                 try { verifyStaged(); }
                 catch (Exception e) {
                     // 连不上网核不了：留着下次再核；核出来不对：删掉
-                    if (e instanceof Unverified) { devkit.file.delete(); prefs().edit().remove("devkitStaged").apply(); }
+                    if (e instanceof Unverified) {
+                        // DK-14：删之前在修复账本记一笔（更新页的报错文案见 Unverified），用户知道旧包作废要重下
+                        Ledger.add(env, "install", false, Tr.t("旧待装包已作废，已删除，需重新下载"), null);
+                        devkit.file.delete(); prefs().edit().remove("devkitStaged").apply();
+                    }
                     throw e;
                 }
                 stagedFromPrefs = false;
@@ -1161,7 +1136,7 @@ final class Updater {
         GatewayService.pause(true);
         try {
             for (int i = 0; i < 40 && pingGateway(); i++) Thread.sleep(250);
-            if (devkit.modules != null) ins.installModules(devkit.modules, devkit.moduleIds, devkit.base, devkit.sha, false);
+            if (devkit.modules != null) ins.installModules(devkit.modules, devkit.moduleIds, devkit.base, devkit.sha);
             else ins.installDevkit(devkit.file.getPath(), devkit.base, devkit.sha, devkit.tarSha);
             devkit.file.delete();
             prefs().edit().remove("devkitStaged").apply();
@@ -1169,7 +1144,9 @@ final class Updater {
             devkit.set("uptodate", "");
             NotificationManager nm = ctx.getSystemService(NotificationManager.class);
             if (nm != null) nm.cancel(20);
-            Ledger.add(env, repairing ? "repair" : "install", true, (repairing ? Tr.t("修复完成：重装 ") : Tr.t("已装上 ")) + tagOf(devkit.base),
+            String doneMsg = (repairing ? Tr.t("修复完成：重装 ") : Tr.t("已装上 ")) + tagOf(devkit.base);
+            if (!skippedExtraModules.isEmpty()) doneMsg += Tr.f("（{0} 需在扩展页手动加装）", android.text.TextUtils.join("、", skippedExtraModules));
+            Ledger.add(env, repairing ? "repair" : "install", true, doneMsg,
                 new JSONObject().put("sha256", devkit.sha));
         } catch (Exception e) {
             devkit.set("error", e.getMessage());
@@ -1219,12 +1196,32 @@ final class Updater {
                             new JSONObject().put("installed", tagOf(installedDevkitBase())).put("total", v.optInt("total"))
                                 .put("missing", v.optInt("missing")).put("changed", v.optInt("changed")).put("samples", v.optJSONArray("samples")));
                     if (!v.optBoolean("manifest")) {
-                        devkit.set(full ? "damaged" : prev, full ? Tr.t("这一版工具包没带文件清单，没法逐个核对；可以修复（重装同一版本）") : prevMsg);
+                        // B10 补漏：快速核对也别把核对期间探活刚记的 damaged 写回旧状态（同下 bad==0 分支）
+                        boolean probeHit = !full && "damaged".equals(devkit.state);
+                        devkit.set(full ? "damaged" : probeHit ? "damaged" : prev, full ? Tr.t("这一版工具包没带文件清单，没法逐个核对；可以修复（重装同一版本）") : probeHit ? devkit.message : prevMsg);
                         if (!full) recheckAfterVerify();
                         return;
                     }
                     int bad = v.optInt("missing") + v.optInt("changed");
                     if (bad == 0) {
+                        // B10 补漏：文件核对干净不能洗掉探活失败记的 damaged。prev 是核对开始时拍的
+                        // 快照：核对期间探活可能刚失败，notifyDevkitDamaged 已把状态改成 damaged，
+                        // 直接写回 prev 会把它洗回 uptodate；而 Env.probeDamagedNoted 在探活恢复
+                        // 前不会再回调，洗掉后损坏就再也不会提醒。所以清状态前先看实时探活：
+                        // 还失败就保持 damaged（已有 damaged 文案不动——文件核对报的缺文件数比
+                        // 探活原因更具体；还不是 damaged 时才用探活原因新建一条并补发通知），
+                        // 探活恢复了（devkitReady() 为真，Env 侧同时把 probeDamagedNoted 复位，
+                        // 下次再失败会重新回调通知）才按原逻辑清。
+                        if (!env.devkitReady()) {
+                            if (!"damaged".equals(devkit.state)) {
+                                String problem = env.devkitProblem();
+                                if (problem.isEmpty()) problem = Tr.t("开发工具包还没装好");
+                                devkit.set("damaged", problem + Tr.t("，点修复重装同一版本"));
+                                notifyDamagedText(problem + Tr.t("。点此打开设置修复（重装同一版本，你自己装的 pip / npm 包会保留）"));
+                            }
+                            recheckAfterVerify();
+                            return;
+                        }
                         // 之前是「出错」（多半是上次检查 / 下载没成功）也一样：装着的这份完好，就别再挂着出错和一个点了没用的「重试」
                         devkit.set("damaged".equals(prev) || "error".equals(prev) ? "uptodate" : prev, full ? Tr.f("已核对 {0} 个文件，全部完好", v.optInt("total")) : prevMsg);
                         recheckAfterVerify();
@@ -1257,30 +1254,36 @@ final class Updater {
             boolean modular = new Installer(env, null).readModules() != null;
             JSONObject pin = devkitPin(ctx), lock;
             byte[] lockBytes = null;
+            boolean pinUsable = pin != null && pin.optJSONObject("gz") != null;
             if (pin != null && base.equals(pin.optString("base")) && pin.optJSONObject("gz") != null) lock = pin;
             else {
-                lockBytes = Installer.httpGetSmall(base + "devkit.lock.json");
-                lock = new JSONObject(new String(lockBytes, StandardCharsets.UTF_8));
-                // 整包重装同样要清单可信（审查 H3）：没签名的整包旧版，改装本 APK 钉的那版
-                if (!modular && !lockSigned(base, lockBytes) && pin != null && pin.optJSONObject("gz") != null) {
+                try {
+                    lockBytes = Installer.httpGetSmall(base + "devkit.lock.json");
+                    lock = new JSONObject(new String(lockBytes, StandardCharsets.UTF_8));
+                } catch (Exception e) {
+                    // 旧清单取不到（没网、旧 base 已下线）：直接回退到 APK 自带的 pin，不让修复卡在这里（B6）
+                    if (!pinUsable) return r.put("ok", false).put("message", Tr.t("修复没开始：取不到已装工具包的清单，本应用也没有自带的工具包可用。请先检查更新到新版工具包，再点修复。"));
                     base = pin.optString("base"); lock = pin; lockBytes = null;
                 }
             }
+            // lock 的 target 不符（1.0 的旧工具包就是 cc.codroid）：一律回退到 APK 自带的 pin，不限模块化（B6）
+            if (lock != pin && (!ctx.getPackageName().equals(lock.optString("target")) || lock.optInt("compat", 1) != DEVKIT_COMPAT)) {
+                if (!pinUsable) return r.put("ok", false).put("message", Tr.f("已装的工具包 {0} 与本版 agycodroid 不兼容，本应用也没有自带的工具包可用。请先检查更新到新版工具包，再点修复。", tagOf(base)));
+                base = pin.optString("base"); lock = pin; lockBytes = null;
+            }
             if (!ctx.getPackageName().equals(lock.optString("target")) || lock.optInt("compat", 1) != DEVKIT_COMPAT)
-                return r.put("ok", false).put("message", Tr.f("{0} 与本版 agycodroid 不兼容", tagOf(base)));
-            JSONObject gz = lock.getJSONObject("gz"), tar = lock.optJSONObject("tar");
-            devkit.base = base; devkit.latest = tagOf(base);
-            devkit.sha = gz.getString("sha256"); devkit.size = gz.getLong("bytes");
-            devkit.tarSha = tar != null ? tar.optString("sha256", null) : null;
-            devkit.need = tar != null ? tar.optLong("bytes") : devkit.size * 4;
-            devkit.url = base + gz.getString("file");
-            devkit.alt = devkitMirror(base, gz.getString("file"));
-            devkit.file = new File(env.files, gz.getString("file"));
-            devkit.modules = null; devkit.modSha = null; devkit.moduleIds = null;
+                return r.put("ok", false).put("message", Tr.t("本应用自带的工具包与本版 agycodroid 不兼容。请先检查更新（更新应用），再点修复。"));
+            setDevkitPlan(base, lock);
             if (modular) planModules(base);       // 模块化：按已装的块重装
             if (devkit.modules == null && lock != pin && !lockSigned(base, lockBytes)) {
-                dropDevkitPlan();   // 同 checkDevkit：没核实的地址别留着给后面的「更新」「重试」用（审查 A5）
-                return r.put("ok", false).put("message", Tr.f("{0} 的工具包清单没核实成（签名对不上或没取到）；过会儿再试", tagOf(base)));
+                // 清单没核实成（签名对不上或没取到）：回退到 APK 自带的 pin（不限模块化），别让修复死在这里（B6）
+                if (!pinUsable) {
+                    dropDevkitPlan();   // 同 checkDevkit：没核实的地址别留着给后面的「更新」「重试」用（审查 A5）
+                    return r.put("ok", false).put("message", Tr.f("{0} 的工具包清单没核实成（签名对不上或没取到），本应用也没有自带的工具包可用。请先检查更新到新版工具包，再点修复。", tagOf(base)));
+                }
+                base = pin.optString("base"); lock = pin; lockBytes = null;
+                setDevkitPlan(base, lock);
+                if (modular) planModules(base);
             }
             devkit.set("available", Tr.t("修复：重装 ") + devkit.latest);
             repairing = true;
@@ -1294,8 +1297,35 @@ final class Updater {
         }
     }
 
+    /** 把要装的那份清单填进 devkit 待装项（repair 里 pin 回退时要填两次，抽出来） */
+    private void setDevkitPlan(String base, JSONObject lock) throws Exception {
+        JSONObject gz = lock.getJSONObject("gz"), tar = lock.optJSONObject("tar");
+        devkit.base = base; devkit.latest = tagOf(base);
+        devkit.sha = gz.getString("sha256"); devkit.size = gz.getLong("bytes");
+        devkit.tarSha = tar != null ? tar.optString("sha256", null) : null;
+        devkit.need = tar != null ? tar.optLong("bytes") : devkit.size * 4;
+        devkit.url = base + gz.getString("file");
+        devkit.alt = null;   // 没有镜像：只走 GitHub
+        devkit.file = new File(env.files, gz.getString("file"));
+        devkit.modules = null; devkit.modSha = null; devkit.moduleIds = null;
+    }
+
+    /** 探活失败（Env.onDevkitDamaged，经 GatewayService 接过来）：devkit 标 damaged 并发一条修复通知。
+     *  verifyAsync 的 damaged 是另一条路（文件缺 / 内容不对，带校验结果走 notifyDamaged(JSONObject)），这里没有校验结果、只有探活原因。
+     *  工具包正在下载 / 安装时不动：那份旧的本来就要被换掉，别把更新流程的状态盖掉。已经是 damaged 也不动：
+     *  校验刚报过的缺文件数比探活原因更具体，别覆盖、也别重复发通知 */
+    void notifyDevkitDamaged(String reason) {
+        if (devkitMoving() || "damaged".equals(devkit.state)) return;
+        devkit.set("damaged", reason + Tr.t("，点修复重装同一版本"));
+        notifyDamagedText(reason + Tr.t("。点此打开设置修复（重装同一版本，你自己装的 pip / npm 包会保留）"));
+    }
+
     private void notifyDamaged(JSONObject v) {
-        String text = Tr.f("开发工具包缺了 {0} 个文件。点此打开设置修复（重装同一版本，你自己装的 pip / npm 包会保留）", v.optInt("missing"));
+        notifyDamagedText(Tr.f("开发工具包缺了 {0} 个文件。点此打开设置修复（重装同一版本，你自己装的 pip / npm 包会保留）", v.optInt("missing")));
+    }
+
+    /** devkit 损坏通知（id 20，与 notifyReady 的 devkit 通知同 id，后到的盖掉先到的）：点开回主界面 */
+    private void notifyDamagedText(String text) {
         PendingIntent pi = PendingIntent.getActivity(ctx, 23,
             new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -1350,14 +1380,43 @@ final class Updater {
 
     /** 1.2.10 > 1.2.9；非数字段忽略 */
     /** 比版本号。带后缀的预发布版（0.2.0-rc1）排在同号正式版（0.2.0）前面。
-     *  0.2.0 以前把 "0.2.0-rc1" 整串拆成 0.2.0.1，判成比 0.2.0 还新，rc1 用户因此收不到 0.2.0 */
+     *  0.2.0 以前把 "0.2.0-rc1" 整串拆成 0.2.0.1，判成比 0.2.0 还新，rc1 用户因此收不到 0.2.0。
+     *  NT-14：与网关 notices.mjs 的 cmpVer 同一规则（semver §11）：先比数字核心；同核心时带后缀的低于
+     *  不带的；后缀按 "." 分段比 —— 纯数字段按数值、纯数字段小于字母段、字母段按 ASCII 字典序、段少的小；
+     *  "+" 后的构建元数据不参与比较。注意字母段是字典序："rc10" < "rc2"。 */
     static int cmpVer(String a, String b) {
-        String[] pa = a.split("-", 2), pb = b.split("-", 2);
+        String[] pa = stripBuild(a).split("-", 2), pb = stripBuild(b).split("-", 2);
         int c = cmpNums(pa[0], pb[0]);
         if (c != 0) return c;
         boolean sa = pa.length > 1, sb = pb.length > 1;
         if (sa != sb) return sa ? -1 : 1;
-        return sa ? cmpNums(pa[1], pb[1]) : 0;
+        return sa ? cmpPrerelease(pa[1], pb[1]) : 0;
+    }
+
+    /** "+" 后的构建元数据不参与版本比较（semver §10） */
+    private static String stripBuild(String v) {
+        int i = v.indexOf('+');
+        return i < 0 ? v : v.substring(0, i);
+    }
+
+    /** 预发布后缀按 semver §11 分段比较：数字段按数值、数字段 < 字母段、字母段按 ASCII 字典序、段少的小 */
+    private static int cmpPrerelease(String a, String b) {
+        String[] x = a.split("\\."), y = b.split("\\.");
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            if (i >= x.length) return -1;
+            if (i >= y.length) return 1;
+            String p = x[i], q = y[i];
+            if (p.equals(q)) continue;
+            boolean pn = p.matches("[0-9]+"), qn = q.matches("[0-9]+");
+            if (pn && qn) {
+                String pp = p.replaceFirst("^0+", ""), qq = q.replaceFirst("^0+", "");
+                int c = pp.length() != qq.length() ? Integer.compare(pp.length(), qq.length()) : pp.compareTo(qq);
+                if (c != 0) return c;
+            } else if (pn) return -1;
+            else if (qn) return 1;
+            else return p.compareTo(q) < 0 ? -1 : 1;
+        }
+        return 0;
     }
 
     private static int cmpNums(String a, String b) {

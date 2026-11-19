@@ -185,5 +185,5 @@ test("前端修复的源码断言（C.4/C.6/C.9/C.10/C.13、196 预览回执、A
   const viewer = fs.readFileSync(path.join(dir, "16-viewer-git.js"), "utf8");
   assert.match(viewer, /VW\.eol === "\\r\\n"/);
   assert.match(viewer, /allow-forms allow-popups/);
-  assert.match(viewer, /文件太大（\{size\}），只能下载查看。[^]*?download/);
+  assert.match(viewer, /文件太大（\{size\}），应用内打不开，也改不了。[^]*?download[^]*?用其他应用打开/);
 });

@@ -17,8 +17,8 @@ const OLD = "dk-inv05-old", NEW = "dk-inv05-new";
 const IDS = ["inst05", "user05", "dep05", "dep06", "user06", "stat05", "cur05", "old05", "stale06"];
 const IDX = JSON.stringify({ components: {
   inst05: { name: { zh: "测", en: "t" }, builds: [
-    { base: NEW, sha256: "sha-inst", version: "1.0.0", bytes: 10, installed: 10,
-      url: "http://127.0.0.1:1/never.tar.gz", asset: "never.tar.gz" }] },
+    { base: NEW, sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", version: "1.0.0", bytes: 10, installed: 10,
+      url: "https://127.0.0.1:1/never.tar.gz", asset: "never.tar.gz" }] },
 } });
 const server = http.createServer((req, res) => {
   if (req.url === "/i.json") { res.writeHead(200, { "content-type": "application/json" }); return res.end(IDX); }

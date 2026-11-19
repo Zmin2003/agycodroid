@@ -11,8 +11,8 @@ import { isObj, loadState, writeAtomic } from "./statefile.mjs";
 export const SETTINGS = {
   // 不预填：留空 = 用接口自己的默认模型
   model: null,
-  // agy 的 toolPermission：默认 request-review（逐项确认——headless 下做不到逐条审批，
-  // 没预先放行的工具会被软拒绝，见 README；界面给一条可关的提示）
+  // agy 的 toolPermission：默认 request-review。headless 下没有逐条审批：没预先放行的工具会被软拒绝
+  // （不是“逐项确认”），见 README；界面给一条可关的提示（H3）
   permissionMode: "request-review",
   // agy 的 agentMode：""（默认）/ accept-edits / auto / plan
   agentMode: "",

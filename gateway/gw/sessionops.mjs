@@ -145,7 +145,9 @@ export function forkSession(id, userText, after, { before = false, uuid = "", la
 
 // ── 删一条消息：用户的一条提问，或 Antigravity 的一整条回复（含它的工具调用和结果） ──
 // 原地改 transcript：删掉的行从文件里拿走，后面挂在它们身上的行（parentUuid）顺着链接到最近一个没删的祖先，
-// claude 下一轮 --resume 沿 parentUuid 回溯时就看不到它们了。改前整份抄进回收站的 .edits/（留 30 天），撤销就是抄回来。
+// 只是让网关自己这份记录前后一致（只对带 parentUuid 的导入记录有意义；网关自己写的 agy 记录没有 parentUuid）。
+// 别指望它同步到 agy 上下文：agy 续会话靠 --conversation 找它自己存的上下文，不读这份文件，删了这里它恢复时
+// 可能还记得那几轮（CH-12：以前注释写“claude 下一轮 --resume 就看不到了”是假承诺）。改前整份抄进回收站的 .edits/（留 30 天），撤销就是抄回来。
 // 文件检查点（file-history-snapshot）、摘要这些不在对话链上的行不动。
 const EDITS_DIR = path.join(TRASH_DIR, ".edits");
 const UNDO = new Map();
@@ -340,6 +342,9 @@ export function rewindTargetOk(want, roots = []) {
   if (inside(r, priv)) return false;   // .claude、shared_prefs 等私有数据，即使会话 cwd=home 也不许
   return roots.some((root) => { if (typeof root !== "string" || !root) return false; const rr = realOf(root); return rr !== ws && inside(r, rr); });
 }
+// 倒带文件修复：仅供导入的 Claude 记录使用。网关自己写的 agy 记录没有 file-history-snapshot /
+// file-history-delta 行，调进来返回 0/0（L6：别删——sessions.mjs:634 在调用，测试也在测；
+// agy 下 sessions.mjs:634 实际上走不到，rewindFiles 恒回 ok:false/canRewind:false）。
 export function rewindFixup(sessionFile, sid, uuid, files) {
   const snaps = [];   // [{ id, backups }]，同一条消息的快照更新合并进去
   try {

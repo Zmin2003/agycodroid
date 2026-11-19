@@ -215,7 +215,11 @@ export function upsertProvider(id, b, prepare) {
   if (id === PROVIDER.id) applyProvider();
   dropModelCache();   // 会话可能钉在不是全局的这家上：哪家改了都清，免得清单/窗口还是旧的
   log(`[provider] 已保存 ${id}${"apiKey" in b && str(b.apiKey) ? "（含密钥）" : ""}`);
-  return { ok: true, id, provider: providerView(id, PROVIDERS_CFG.providers[id]), ...(keyCleared ? { keyCleared: true } : {}) };
+  // Gemini Key 一般以 AIza 开头：样子不对只提醒、不拦（L2）——输错一位保存时一路绿灯，
+  // 第一次发消息才报 authentication required；拦了又怕将来有别的形状的 Key
+  const keyWarning = id === "gemini" && "apiKey" in b && str(b.apiKey) && !str(b.apiKey).startsWith("AIza")
+    ? tz("Key 的样子不太像 Gemini API Key（一般以 AIza 开头），请检查是不是粘错了") : "";
+  return { ok: true, id, provider: providerView(id, PROVIDERS_CFG.providers[id]), ...(keyCleared ? { keyCleared: true } : {}), ...(keyWarning ? { warning: keyWarning } : {}) };
 }
 
 // ── 用量与消费（设置页的厂商卡片）────────────────────────────────────
@@ -331,7 +335,7 @@ export let PROVIDER = BUILTIN_PROVIDER;
  *  google（OAuth）→ null：不注入任何密钥，让 agy 用它缓存的登录态。
  *  gemini → 存着的 GEMINI_API_KEY。
  *  不再回落到环境变量 / 历史配置文件：以前那套回落会把别家的钥匙注进不该去的地方
- *  （官方账户切过去时被注成 ANTHROPIC_API_KEY，拿 DeepSeek 钥匙打 api.anthropic.com，全网 401）。
+ *  （切到官方账户时被注成另一家的钥匙，拿这家的钥匙打那家的接口，全网 401）。
  *  另外注意：网关自己环境里的 GEMINI_API_KEY 也不会被读——agyEnv 只认存着的 key（见 agy.mjs）。 */
 function loadApiKey(p) {
   if (!p) return null;
@@ -397,9 +401,10 @@ async function testProvider(id) {
   const p = providerById(id);
   if (!p) return { ok: false, message: tz("没有这家接口") };
   if (p.login) {
-    // OAuth 模式没有 key 可测：直接探登录态（login.mjs 的 authStatus 同款探针）
+    // OAuth 模式没有 key 可测：直接探登录态（login.mjs 的 authStatus 同款探针），指名探
+    // google——不指名时全局切到 gemini 会靠 key 探成功，测的就不是 Google 登录（登录 M1）
     const { authStatus } = await import("./login.mjs");
-    const st = await authStatus(true);
+    const st = await authStatus(true, "google");
     if (st.loggedIn) return { ok: true, message: tz("已登录（Google 账户）。") };
     if (st.unknown) return { ok: false, message: tz("测不出来：{err}", { err: st.error || "" }) };
     return { ok: false, message: tz("还没登录。先在终端里跑一次 agy 完成登录，或在设置里点「登录」。") };

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CFG, PATHS, log, tz } from "./config.mjs";
+import { CFG, PATHS, PERM_MODES, log, tz } from "./config.mjs";
 import { API_KEY, BUILTIN_PROVIDER, PROVIDER, PROVIDERS_CFG, applyProvider } from "./providers.mjs";
 import { MAX_PARALLEL_CAP, RUNS, maxParallel } from "./runs.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
@@ -16,7 +16,20 @@ import { SETTINGS, saveSettings, outputStyles } from "./settings-store.mjs";
 const VIEW_KEYS = ["model", "permissionMode", "agentMode", "addDirs", "outputStyle", "effort", "allowedTools", "disallowedTools",
   "provider", "memGuard", "autoClean", "maxParallel", "workIsland",
   "titleModel", "hiddenProviders", "permNotice", "permMigrated"];
-const settingsView = () => Object.fromEntries(VIEW_KEYS.filter((k) => k in SETTINGS).map((k) => [k, SETTINGS[k]]));
+// toolPermission 是 permissionMode 对外的名字（agy 的 settings.json 里就叫这个，前端也只认这个）：
+// 存盘仍用 SETTINGS.permissionMode，回执里两个名字都给，旧客户端读 permissionMode 不受影响。
+const settingsView = () => ({ ...Object.fromEntries(VIEW_KEYS.filter((k) => k in SETTINGS).map((k) => [k, SETTINGS[k]])), toolPermission: SETTINGS.permissionMode });
+
+/** ld.so 比对（供 /api/exec-mode 与启动日志共用）：只比 glibc 版本号（release version X.Y），不比整文件字节。
+ *  1.0.1 起工具包里的 ld.so 按 cc.agyroid 改过前缀，字节必然不同；且 agy 是 bionic 构建，根本不用这份 ld.so，
+ *  字节不同不代表版本不同。返回 "same" | "differ" | "missing"（文件读不到）| "unknown"（版本号读不到）。 */
+export function ldsoStatus(a, b) {
+  const ver = (f) => { const m = /release version (\d+\.\d+)/.exec(fs.readFileSync(f).toString("latin1")); return m ? m[1] : ""; };
+  let va, vb;
+  try { va = ver(a); vb = ver(b); } catch { return "missing"; }
+  if (!va || !vb) return "unknown";
+  return va === vb ? "same" : "differ";
+}
 
 // ── 路由：/api/settings ──
 export async function routeSettings(req, res, u, p) {
@@ -34,8 +47,7 @@ export async function routeSettings(req, res, u, p) {
       // 选了经加载器却没切过去，多半是 APK 里的 ld.so 和工具包里现装的不是同一份（Env.ldsoMatches）：把原因交给界面
       let ldso = "";
       if (process.env.AGAPP_NATIVE_LIB) {
-        const a = path.join(process.env.AGAPP_NATIVE_LIB, "libldlinux.so"), b = path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1");
-        try { ldso = fs.readFileSync(a).equals(fs.readFileSync(b)) ? "same" : "differ"; } catch { ldso = "missing"; }
+        ldso = ldsoStatus(path.join(process.env.AGAPP_NATIVE_LIB, "libldlinux.so"), path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1"));
       }
       return sendJson(res, 200, { pref: pref(), active: process.env.AGAPP_EXEC || "direct", must, targetSdk: sdk, ldso, pid: process.pid });   // pid：界面靠它认出重启后的新网关
     }
@@ -74,6 +86,12 @@ export async function routeSettings(req, res, u, p) {
           });
         }
       }
+      // 权限模式只收 agy 认的值：前端发 toolPermission（agy 的 settings.json 里就叫这个），
+      // 旧名 permissionMode 也认；两边都给了以前端为准。先校验、再动内存：非法值直接 400，
+      // 别让前面的 model 等字段先改了、最后回 400 却留半套设置（FIND-051 / Q-06）。
+      const tpRaw = "toolPermission" in b ? b.toolPermission : ("permissionMode" in b ? b.permissionMode : undefined);
+      const tp = tpRaw == null || tpRaw === "" ? "request-review" : String(tpRaw);
+      if (tpRaw !== undefined && !PERM_MODES.includes(tp)) return sendJson(res, 400, { error: "bad permissionMode" });
       for (const k of ["model", "outputStyle", "effort", "titleModel"]) {
         // 只收字符串：塞个对象进来会落盘，之后每一轮都在 .trim() / spawn 那里抛错，重启也好不了（审查 10-29 低7）
         // 长度也限：model 原样进 agy 的命令行，单个参数过 128 KB 就 E2BIG，每一轮都起不来（v0514 审查低-3）
@@ -82,9 +100,10 @@ export async function routeSettings(req, res, u, p) {
       // 输出风格只收列出来的那些（内置两种）
       if (b.outputStyle && !outputStyles().some((o) => o.id === b.outputStyle)) return sendJson(res, 400, { error: "unknown outputStyle" });
       for (const k of ["model", "outputStyle", "effort", "titleModel"]) if (k in b) SETTINGS[k] = b[k] || null;
-      // 权限模式只收 agy 认的值（toolPermission）；正在跑的那一轮也当场切过去
+      // 权限模式：下一轮生效。正在跑的 agy 进程不重读 settings.json（agy 没有 set_permission_mode 控制请求），
+      // setPermMode 只改内存里记的模式与重放给界面的 init 事件；真正生效是下一轮起进程时重写 settings.json。
       // 落盘统一放到本路由末尾的一次 saveSettings()：以前 setPermMode 在这里就先写一次盘，后面任何校验失败都会留下半套设置（FIND-051）
-      if ("permissionMode" in b && b.permissionMode !== SETTINGS.permissionMode) setPermMode(String(b.permissionMode || "request-review"), { persist: false });
+      if (tpRaw !== undefined && tp !== SETTINGS.permissionMode) setPermMode(tp, { persist: false });
       // agentMode 只收 agy 认的值："" / accept-edits / auto / plan
       if ("agentMode" in b) {
         const a = String(b.agentMode || "");

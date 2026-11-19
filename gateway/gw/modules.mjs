@@ -18,7 +18,6 @@ import { archiveProblem, parseTarListing } from "./archive-check.mjs";
 const DK = PREFIX ? path.join(PREFIX, "libexec/devkit") : "";
 const STAGE = PREFIX ? path.join(path.dirname(PREFIX), "devkit-stage") : "";
 const MOD_JOBS = new Map();          // id → { phase, done, total, via, error, child, cancelled, finished, queue }
-const DEVKIT_MIRROR = "https://dl.cccodroid.net/devkit/";
 
 /** modules.json 同 uid 可改：dir 只认 $PREFIX 内的普通相对路径 —— 卸载时会对 dirOf(m) 整个 rmSync（196-供应链.3） */
 const modDirOk = (d) => typeof d === "string" && d.length > 0 && !d.includes("\0") && !d.includes("\\") &&
@@ -220,7 +219,6 @@ export function modManifest(tree, dir) {
   });
 }
 
-let modMirrorFirst = false;
 async function modRunInstall(mj, m, base, job) {
   fs.mkdirSync(STAGE, { recursive: true });
   const gz = path.join(STAGE, `${m.id}-${m.gz.sha256.slice(0, 12)}.tar.gz`), tree = path.join(STAGE, m.id);
@@ -234,16 +232,14 @@ async function modRunInstall(mj, m, base, job) {
     job.phase = "downloading"; job.done = 0; job.total = m.gz.bytes;
     const tick = setInterval(() => { try { job.done = fs.statSync(part).size; } catch {} }, 500);
     try {
-      // GitHub Release 与 dl.cccodroid.net 镜像逐字节同一份，内容按 modules.json 里的 sha256 把关
-      const gh = base + m.gz.file, mirror = DEVKIT_MIRROR + base.replace(/\/$/, "").split("/").pop() + "/" + m.gz.file;
-      const srcs = modMirrorFirst ? [mirror, gh] : [gh, mirror];
+      // 只走 GitHub Release：没有自己的镜像站，内容按 modules.json 里的 sha256 把关
+      const gh = base + m.gz.file;
       let lastErr;
-      for (let i = 0; i < 4 && !job.cancelled; i++) {
-        const url = srcs[i % 2];
-        job.via = url === gh ? "GitHub" : "dl.cccodroid.net";
+      for (let i = 0; i < 2 && !job.cancelled; i++) {
+        job.via = "GitHub";
         try {
-          await compRun(job, path.join(PREFIX, "bin", "curl"), ["-fL", "-sS", "-C", "-", "--retry", "2", "--connect-timeout", "15", "--speed-limit", "10000", "--speed-time", "45", "-o", part, url]);
-          lastErr = null; modMirrorFirst = url !== gh; break;
+          await compRun(job, path.join(PREFIX, "bin", "curl"), ["-fL", "-sS", "-C", "-", "--retry", "2", "--connect-timeout", "15", "--speed-limit", "10000", "--speed-time", "45", "-o", part, gh]);
+          lastErr = null; break;
         } catch (e) { lastErr = e; if (job.cancelled) break; log(`[mod] ${m.id} 从 ${job.via} 下载中断：${e.message}`); }
       }
       if (job.cancelled) throw new Error("cancelled");
@@ -285,6 +281,9 @@ async function modRunInstall(mj, m, base, job) {
   if (skipped.length) log(`[mod] ${m.id}：${skipped.length} 个路径和已有目录冲突，没放：${skipped.slice(0, 5).join(", ")}`);
   const fr = path.join(dirOf(m), "first-run.sh");
   if (fs.existsSync(fr)) {
+    // first-run 前快照（mtime + 大小）：pruneManifest 靠它认出 first-run 动过的文件（devkit M2；对齐 Java 的 snapshotManifest）
+    const snap = new Map();
+    for (const e of man) { try { const st = fs.statSync(path.join(PREFIX, e.rel)); snap.set(e.rel, [st.mtimeMs, st.size]); } catch {} }
     try { await compRun(job, path.join(PREFIX, "bin", "sh"), [fr]); }
     catch (e) {
       if (job.cancelled) throw new Error("cancelled");
@@ -292,10 +291,41 @@ async function modRunInstall(mj, m, base, job) {
       // 不写 .ok 就是「没装」，重装会再跑一遍
       throw new Error(tz("模块「{name}」的首次配置没跑完（{err}），再装一次会重试", { name: (m.name && m.name.zh) || m.id, err: String(e.message).slice(0, 200) }));
     }
+    // first-run 可能删了、改了包里的文件：MANIFEST 还是装包时的旧基线，verifyDevkit 会把 first-run 的改动当成“被改过”。
+    // 按 Java 的 pruneManifest 等价重记一份 MANIFEST.local（devkit M2）；没跑 first-run 的模块不用写，MANIFEST 本身就是基线
+    await modPruneManifest(m, man, snap);
   }
   fs.writeFileSync(path.join(dirOf(m), ".ok"), JSON.stringify({ sha256: m.gz.sha256, at: Date.now() }) + "\n");
   fs.rmSync(tree, { recursive: true, force: true });
   fs.rmSync(gz, { force: true });
+}
+
+/** first-run 后按 Java 的 pruneManifest（Installer.java）等价重记校验基线，写 MANIFEST.local（devkit M2）。
+ *  按 first-run 前的快照（mtime + 大小）认 first-run 动过的文件：文件没了就从清单里去掉，动过的重算哈希、
+ *  变了就改行，没动过的原样留着。verifyDevkit 优先读 MANIFEST.local。写不成就记一条日志，不让安装失败
+ *  （Java 那边也一样：写不成只说一声） */
+async function modPruneManifest(m, man, snap) {
+  const dir = dirOf(m);
+  const out = [];
+  let dropped = 0, rebased = 0;
+  for (const e of man) {
+    const f = path.join(PREFIX, e.rel);
+    let st;
+    try { st = fs.statSync(f); } catch { dropped++; continue; }   // first-run 删了：从基线里去掉
+    if (!st.isFile()) { dropped++; continue; }
+    const s = snap.get(e.rel);
+    const touched = !s || st.mtimeMs !== s[0] || st.size !== s[1];
+    let h = e.h, n = e.n;
+    if (touched) {
+      const got = await sha256File(f, null, st.size);
+      if (got !== e.h) { h = got; n = st.size; rebased++; }
+    }
+    out.push(`${h} ${n} ${e.rel}`);
+  }
+  try {
+    fs.writeFileSync(path.join(dir, "MANIFEST.local"), out.join("\n") + (out.length ? "\n" : ""));
+    if (dropped + rebased > 0) log(`[mod] ${m.id}：首次配置删掉 ${dropped} 个、改写 ${rebased} 个文件，校验基线已按实际情况记下（MANIFEST.local）`);
+  } catch (e) { log(`[mod] ${m.id}：校验基线 MANIFEST.local 没写成：${e.message}`); }
 }
 
 /** 暂存区的 usr/ 逐个搬进 $PREFIX。已有同名文件直接换掉：同一快照里共用的小包内容一样；pkg 先装过的以模块为准 */

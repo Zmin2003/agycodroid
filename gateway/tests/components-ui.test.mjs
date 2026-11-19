@@ -255,6 +255,25 @@ test("component UI: late removal poll cannot overwrite a newer completed-state r
   assert.equal(u.timers.size, 0);
 });
 
+test("component UI: devkit 升级后横幅提供一键重装全部过期组件，依赖先装、只确认一次", async () => {
+  const a = item("outdated", { id: "aaa", name: { en: "A" }, requires: [] });
+  const b = item("outdated", { id: "bbb", name: { en: "B" }, requires: [{ id: "aaa", ok: false, name: { en: "A" } }] });
+  const u = ui();
+  u.list({ supported: true, items: [b, a] });
+  await u.load();
+  assert.match(u.html, /data-c="reinstall-all"/, "升级后有全部重装入口");
+  assert.ok(u.html.includes(u.t("工具包已更新，{n} 个组件需要重新安装", { n: 2 })));
+  const click = u.click("reinstall-all");
+  await click.done;
+  assert.deepEqual(u.calls, [
+    { url: "/api/components/install", id: "aaa" },
+    { url: "/api/components/install", id: "bbb" },
+  ], "依赖先装：aaa 在 bbb 之前");
+  assert.deepEqual(u.toasts, [{ message: u.t("已开始重装 {n} 个组件，装完自动刷新", { n: 2 }), error: false }]);
+  assert.equal(u.confirms.length, 1, "批量只确认一次");
+  assert.equal(u.calls.length, 2, "每个组件只调一次单个重装接口，不另起安装流程");
+});
+
 // 注意：本测试在 ar 词典上失败是已知生产问题，不是测试 bug——
 // 移植时 8 个非英文 i18n 文件（lang-ar/es/fr/id/ja/ko/ru/zh-Hant.js）从约第 3005 条起
 // 每个值都错位成下一条的翻译（见 tamper.test.mjs 里的说明），ar 的这条因此多了 {n} 占位符。

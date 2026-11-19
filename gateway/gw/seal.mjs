@@ -96,7 +96,7 @@ function projectChain(cwd) {
   return i >= 0 ? all.slice(i) : all.slice(-1);
 }
 /** 登记过的项目目录。直接读 agyapp-projects.json，不 import projects.mjs：
- *  终端里的 claude 经 guard/cc-seal.mjs 也走这里，那边不该拉起会话、终端那一整套模块 */
+ *  终端里的 agy 经 guard/cc-seal.mjs 也走这里，那边不该拉起会话、终端那一整套模块 */
 function registeredRoots() {
   try {
     const j = JSON.parse(readSmallFile(path.join(home(), "agyapp-projects.json"), 4 << 20) || "[]");

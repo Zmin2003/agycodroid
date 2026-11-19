@@ -92,13 +92,31 @@ int main(int argc, char **argv) {
       ssize_t r = read(0, buf, sizeof buf);
       if (r > 0) wr(m, buf, r);
       else if (r == 0 || (r < 0 && errno != EINTR)) {
-        /* 网关关掉了终端：先 SIGHUP；交互式 mksh 会忽略它，1 秒后整组 SIGKILL */
+        /* 网关关掉了终端：先 SIGHUP，再等子进程退出、把 master 里剩下的输出排干，最后才关 master——
+         * 以前先 close(m)，子进程退出前还没读出来的尾部输出直接丢了（QA terminal L3） */
         in_open = 0;
         kill(-pid, SIGHUP); kill(pid, SIGHUP);
+        /* 等子进程退出（最多 1 秒），期间继续把 master 的输出转出来 */
+        for (int i = 0; i < 10; i++) {
+          if (waitpid(pid, NULL, WNOHANG) != 0) break;
+          struct pollfd q; q.fd = m; q.events = POLLIN;
+          if (poll(&q, 1, 100) > 0 && (q.revents & (POLLIN | POLLHUP | POLLERR))) {
+            ssize_t rr = read(m, buf, sizeof buf);
+            if (rr > 0) { if (wr(1, buf, rr) < 0) break; }
+            else break;   /* EIO：从端全关了，没更多输出 */
+          }
+        }
+        /* 子进程已退出（或等满 1 秒还不退）：先 SIGKILL，再把 master 里还剩的读完，最后才关 master */
+        if (waitpid(pid, NULL, WNOHANG) == 0) { kill(-pid, SIGKILL); kill(pid, SIGKILL); waitpid(pid, NULL, 0); }
+        for (;;) {
+          struct pollfd q; q.fd = m; q.events = POLLIN;
+          if (poll(&q, 1, 0) <= 0) break;
+          if (!(q.revents & (POLLIN | POLLHUP | POLLERR))) break;
+          ssize_t rr = read(m, buf, sizeof buf);
+          if (rr > 0) { if (wr(1, buf, rr) < 0) break; continue; }
+          break;   /* 0 / EIO：没更多输出 */
+        }
         close(m);
-        for (int i = 0; i < 10 && waitpid(pid, NULL, WNOHANG) == 0; i++) usleep(100000);
-        kill(-pid, SIGKILL); kill(pid, SIGKILL);
-        waitpid(pid, NULL, WNOHANG);
         return 129;
       }
     }

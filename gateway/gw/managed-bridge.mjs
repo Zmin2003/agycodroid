@@ -26,7 +26,11 @@ function fail(stage = "binding") {
 }
 
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-const stamp = (st) => [st.dev, st.ino, st.mode, st.size, st.mtimeNs, st.ctimeNs].join(":");
+// 注意：不要把 ctimeNs 放进身份里。本机 overlayfs 上文件的 ctime 会在内容、权限、大小、
+// mtime 全都不变、且没有任何进程改过它的情况下自己往前跳（strace 证实两次绑定之间零元数据
+// 系统调用；TMPDIR=/tmp 的 tmpfs 上 42/42 全过），ctime 只会让 ready 缓存误判“被换过”。
+// 真正能改变执行结果的都在这里了：原子替换改 ino，改内容改 size/mtimeNs/内容哈希，改权限改 mode。
+const stamp = (st) => [st.dev, st.ino, st.mode, st.size, st.mtimeNs].join(":");
 const hash = (data) => crypto.createHash("sha256").update(data).digest("hex");
 
 function snapshot(file, max) {

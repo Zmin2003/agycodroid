@@ -33,3 +33,13 @@ test("0 字节文件照收、不留临时文件；声明超过上限直接 413",
   const big = await call([Buffer.from("x")], "x.bin", { "content-length": String(5 * 1024 ** 3) });
   assert.equal(big.code, 413);
 });
+
+test("文件名白名单：emoji 与 CJK 扩展 B 区、假名、韩文不被换成下划线（files M1）", async () => {
+  // 码点用 fromCodePoint 写死：编辑器里直接敲增补平面字符容易走样成别的码点
+  const extB = String.fromCodePoint(0x20000) + String.fromCodePoint(0x2a6df);
+  const name = `🎉测试_${extB}_한글_テスト.txt`;
+  const r = await call([Buffer.from("x")], name);
+  assert.equal(r.code, 200);
+  assert.ok(r.body.name.endsWith(name), `文件名被改了：${r.body.name}`);
+  fs.rmSync(r.body.path);
+});

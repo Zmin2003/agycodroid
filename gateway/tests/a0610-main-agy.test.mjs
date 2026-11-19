@@ -45,11 +45,12 @@ test("agy stream-json 样例：init → delta → tool_use/tool_result → resul
   assert.deepEqual(inits[0].tools.map((t) => t.name), ["Read", "Bash"]);
   assert.equal(out.filter((e) => e.type === "delta").map((e) => e.text).join(""), "先看一下这个文件。文件里写着 hello agy。");
   const use = out.find((e) => e.type === "tool_use");
-  assert.deepEqual([use.id, use.name, use.input], ["agy-tool-1", "Read", { file_path: "/tmp/agy-sample-ws/a.txt" }]);
+  // 工具 id 是 G1 本轮定的 "agy-tool-<轮次>-<step_index>"：样例里工具步骤 step_index=1、第 0 轮。
+  assert.deepEqual([use.id, use.name, use.input], ["agy-tool-0-1", "Read", { file_path: "/tmp/agy-sample-ws/a.txt" }]);
   const res = out.find((e) => e.type === "tool_result");
-  assert.deepEqual([res.id, res.ok, res.text], ["agy-tool-1", true, "hello agy\n"]);
+  assert.deepEqual([res.id, res.ok, res.text], ["agy-tool-0-1", true, "hello agy\n"]);
   assert.equal(results.length, 1);
-  assert.equal(results[0].uuid, "agy-agy-sample-0001-1");
+  assert.equal(results[0].uuid, "agy-agy-sample-0001-1-3.5", "G1 M6：去重 uuid 带上 duration_seconds（样例 result 里是 3.5）");
   assert.equal(results[0].subtype, "SUCCESS");
   assert.equal(results[0].result, "文件里写着 hello agy。");
   assert.equal(results[0].total_cost_usd, 0, "agy 不报花费");

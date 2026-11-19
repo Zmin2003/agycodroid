@@ -7,6 +7,7 @@ import { verifiedInfo } from "./agyverified.mjs";
 import { ledger } from "./agy.mjs";
 import { onSealUnknown } from "./agyseal.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
+import { cmpVer } from "./notices.mjs"; // 与 notices.mjs 共用同一 cmpVer（NT-14，semver §11），不要各写一份
 import { termEnv } from "./terminal.mjs";
 import { ccMem, privCall } from "./usage.mjs";
 
@@ -39,12 +40,6 @@ const devUpd = {
 };
 try { Object.assign(devUpd, JSON.parse(fs.readFileSync(DEV_UPD_FILE, "utf8")), { checking: false, error: "" }); devUpd.agy.state = devUpd.agy.state === "installing" ? "unknown" : devUpd.agy.state; } catch {}
 const devUpdSave = () => { try { fs.writeFileSync(DEV_UPD_FILE, JSON.stringify(devUpd)); } catch {} };
-const cmpVer = (a, b) => {
-  const x = String(a).split(/[^0-9]+/).map(Number), y = String(b).split(/[^0-9]+/).map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; }
-  return 0;
-};
-
 /** 跑某个 agy 二进制的 --version（新下载的那个在换上去之前先这样试跑一次）。
  *  agy 是原生 bionic / 系统二进制，直接跑，不用经过 glibc 加载器。 */
 function agyVersionOf(bin) {

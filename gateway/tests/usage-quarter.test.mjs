@@ -62,3 +62,43 @@ test("旧整点与新刻钟共存，重复补算和清除跨月边界不重复�
     if (backup) fs.writeFileSync(file, backup); else fs.rmSync(file, { force: true });
   }
 });
+
+test("补算：agy 原生 cache_read_tokens 要先归一化再计（Q-03）", async () => {
+  // 依赖上一个用例留下的内存状态：USAGE.since 是 2001-05-31T18:40Z，记录用 18:05Z（在 since 之前才进补算）
+  const slot = (iso) => Math.floor(Date.parse(iso) / 900e3);
+  const file = path.join(CFG.home, "agyapp-usage.json");
+  const backup = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  fs.mkdirSync(PATHS.projects, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(PATHS.projects, "quarter-q03-"));
+  try {
+    const { routeUsage } = await import("../gw/usage.mjs");
+    const api = async (suffix, body) => {
+      const url = new URL("/api/usage" + suffix, "http://localhost");
+      const req = Object.assign(Readable.from(body ? [Buffer.from(JSON.stringify(body))] : []), { method: body ? "POST" : "GET" });
+      let data;
+      await routeUsage(req, {
+        writeHead(code) { assert.equal(code, 200); },
+        end(json) { data = JSON.parse(json); },
+      }, url, url.pathname);
+      return data;
+    };
+    // 原始 agy 形状：缓存字段叫 cache_read_tokens，不是 Claude 的 cache_read_input_tokens
+    fs.writeFileSync(path.join(dir, "q03.jsonl"), JSON.stringify({
+      timestamp: "2001-05-31T18:05:00Z", sessionId: "q03", type: "assistant",
+      message: {
+        role: "assistant", model: "antigravity", id: "msg-q03",
+        content: [{ type: "text", text: "hi" }],
+        usage: { input_tokens: 100, cache_read_tokens: 900, cache_creation_input_tokens: 50, output_tokens: 30 },
+      },
+    }) + "\n");
+    await api("/import", {});
+    const { quarters } = await api("?detail=quarter");
+    const b = quarters[slot("2001-05-31T18:05Z")];
+    assert.equal(b.i, 1050);   // 100 + 900 + 50：不归一化就只剩 150
+    assert.equal(b.c, 900);
+    assert.equal(b.o, 30);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (backup) fs.writeFileSync(file, backup); else fs.rmSync(file, { force: true });
+  }
+});

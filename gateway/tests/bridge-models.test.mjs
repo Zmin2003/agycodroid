@@ -134,7 +134,10 @@ function snapshot() {
   return { files: protectedFiles.map((file) => {
     if (!fs.existsSync(file)) return [file, null];
     const stat = fs.statSync(file, { bigint: true });
-    return [file, { bytes: fs.readFileSync(file).toString("base64"), mode: String(stat.mode), ino: String(stat.ino), mtimeNs: String(stat.mtimeNs), ctimeNs: String(stat.ctimeNs) }];
+    // 只比内容/权限/ino/mtime：不比 ctimeNs。本机 overlayfs 上文件的 ctime 会在内容、权限、
+    // 大小、mtime 全都不变的情况下自己往前跳（managed-bridge 的 ensure-changed 同根问题；
+    // TMPDIR=/tmp 的 tmpfs 上 67/67 全过），ctime 单独变不等于文件被改过。
+    return [file, { bytes: fs.readFileSync(file).toString("base64"), mode: String(stat.mode), ino: String(stat.ino), mtimeNs: String(stat.mtimeNs) }];
   }),
     provider: structuredClone(providers.PROVIDER), providers: structuredClone(providers.PROVIDERS_CFG), settings: structuredClone(SETTINGS), apiKey: providers.API_KEY,
     upstream: CFG.upstream, model: CFG.model };

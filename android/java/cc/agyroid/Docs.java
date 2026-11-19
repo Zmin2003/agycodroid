@@ -82,12 +82,13 @@ public final class Docs extends DocumentsProvider {
         catch (Exception e) { return false; }
     }
 
-    /** 不通过文件访问框架交出去的文件：workspace 下的 .claude/settings(.local).json 里常放 ANTHROPIC_AUTH_TOKEN，
-     *  settings 还能挂 hooks —— 目录授权给文件管理器一次，就等于把令牌和「下次运行什么命令」一起交了出去。
-     *  只挡这两个名字，别的工作区文件照常（0.6.10 审计 199-1-01）。 */
+    /** 不通过文件访问框架交出去的文件：直接复用 Share.secret() 的文件名规则（与分享出口同一套，别两处各写一份），
+     *  至少覆盖 .claude.json（含 OAuth 刷新令牌）、私钥类（*.pem/key/p12…）、.npmrc 等（0.6.10 审计 199-1-01）。
+     *  旧规则（父目录 .claude 下的 settings(.local).json）已被 Share.secret() 的路径规则覆盖。
+     *  .env 有意不挡：工作区里的 .env 是用户自己的项目配置，文件管理器里要能正常编辑；分享出口 Share.secret() 同样不挡 .env，两边保持一致。
+     *  若以后 Share.secret() 改为挡 .env，这里跟着挡，不用再改 Docs。 */
     private static boolean sensitive(File f) {
-        File p = f.getParentFile();
-        return p != null && ".claude".equals(p.getName()) && f.getName().matches("settings(\\.local)?\\.json");
+        return Share.secret(f);
     }
 
     /** 软链接按真实路径再认一遍：工作区里自己建的别名可以指向 .claude/settings.json，只看名字会漏。 */
@@ -214,7 +215,7 @@ public final class Docs extends DocumentsProvider {
             if (list == null) continue;
             visited++;
             for (File k : list) {
-                if (k.getName().startsWith(".git")) continue;
+                if (".git".equals(k.getName())) continue;   // 只跳过恰好叫 .git 的目录，别连带跳过 .github、.gitignore
                 if (k.isDirectory() && !isSymlink(k)) { if (depthOf(k) < 4) queue.add(k); }   // 不顺着链接翻到作用域外
                 if (k.getName().toLowerCase(Locale.ROOT).contains(q)) {
                     try { row(c, k); found++; } catch (FileNotFoundException ignored) {}

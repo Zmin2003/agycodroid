@@ -76,7 +76,7 @@ const PROMPT = [
   [/\/api\/(?:perm\/mode|providers\/save|ext\/hooks\/(?:save|test)|term\/new)\b/, "gateway control endpoint (changes global state)"],
   // 旗标前允许引号（claude "--bare"），--allowedTools 能不问就放行工具（DeepSeek 复核必修 4）
   [/\bclaude\b[^\n;&|]*?[\s"'](?:--settings|--setting-sources|--safe-mode|--bare|--dangerously-skip-permissions|--allow-dangerously-skip-permissions|--allowed-?[Tt]ools|--permission-mode["']?[\s=]+["']?(?:bypassPermissions|auto|dontAsk|acceptEdits))(?=$|[\s=;|&)'"])/, "Antigravity CLI started without this check"],
-  // Antigravity CLI 程序、它的签名清单、current 软链：删了清单再换程序，起 claude 前的核验就无从比对（见 gw/claudeseal.mjs）
+  // Antigravity CLI 程序、它的签名清单、current 软链：删了清单再换程序，起 agy 前的核验就无从比对（见 gw/agyseal.mjs）
   [/\.local\/share\/agycodroid\/claude(?=$|[\/\s"';|&)])/, "the Antigravity CLI program and its signed manifest"],  // 下次开终端 / 起命令就会自动跑的：shell 启动文件，和排在 PATH 里的自定义命令包装（0.6.9 审计 199-4-01）
   [/(?:^|[\/\s"'=~@<>:])\.(?:bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv|inputrc)(?=$|[\s"';|&)])/, "shell startup files (run in every new terminal)"],
   [/\.agycodroid\/bin(?=$|[\/\s"';|&)])/, "command wrappers on PATH"],

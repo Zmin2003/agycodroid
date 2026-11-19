@@ -231,7 +231,7 @@ function newJob(kind, extra) {
 const jobView = ({ ac, child, ...j }) => j;
 function finish(j, err) {
   j.ended = Date.now();
-  if (j.ac.signal.aborted) j.state = "cancelled";
+  if (j.ac.signal.aborted && !j.overCap) j.state = "cancelled";   // overCap：超封顶主动杀掉 7z，要记成 error 而不是用户取消（files M4）
   else if (err) { j.state = "error"; j.error = err.message; if (err.wrongPassword) j.wrongPassword = true; if (err.code === "ENOSPC") j.code = "ENOSPC"; }
   else { j.state = "done"; j.pct = 100; }
 }
@@ -279,6 +279,25 @@ async function extractZipNative(file, items, stage, j) {
   }
 }
 
+/** 临时目录已解出的字节数（同步走一遍；7z 路径才用，files M4） */
+function stageBytes(root) {
+  let total = 0, count = 0;
+  const walk = (d) => {
+    let names;
+    try { names = fs.readdirSync(d); } catch { return; }
+    for (const n of names) {
+      if (++count > 200000) return;   // 条目太多就停：真到这数也早超封顶了
+      const f = path.join(d, n);
+      let st;
+      try { st = fs.lstatSync(f); } catch { continue; }
+      if (st.isDirectory()) walk(f);
+      else if (st.isFile()) total += st.size;
+    }
+  };
+  walk(root);
+  return total;
+}
+
 async function extract7z(file, list, items, sel, stage, password, j) {
   const args = ["x", "-y", "-aou", "-bsp1", "-bso0", "-spd", "-scsUTF-8", "-o" + stage];
   let lst = null;
@@ -288,6 +307,16 @@ async function extract7z(file, list, items, sel, stage, password, j) {
     args.push("-i@" + lst);
   }
   const onStdout = (d) => { const m = /(\d+)%[^%]*$/.exec(d.toString()); if (m) j.pct = Math.min(99, +m[1]); };
+  // files M4：7z 路径只在解完后才知道实际大小，清单说谎（压缩比/条目数造假）时会把磁盘撑爆。
+  // 解的过程中每 500ms 量一次临时目录：超过“声明总量 + 余量（64MB 与 10% 取大）”就杀掉 7z 报错。
+  // zip 原生路径不用这招：zipExtract 每条目有预算。余量是给 7z 解压时多写的文件头/稀疏块留的
+  const declared = items.reduce((a, e) => a + (e.dir ? 0 : e.size || 0), 0);
+  const cap = declared + Math.max(64 * 1024 * 1024, Math.floor(declared * 0.1));
+  let over = false;
+  const watch = setInterval(() => {
+    if (stageBytes(stage) > cap) { over = true; j.overCap = true; j.ac.abort(); }
+  }, 500);
+  watch.unref?.();
   try {
     let r;
     if (list.kind === "tar2") {
@@ -295,9 +324,10 @@ async function extract7z(file, list, items, sel, stage, password, j) {
       r = await run7z([...args, "-si", "-ttar"], { stdin: outer.stdout, onStdout, signal: j.ac.signal });
       outer.kill();
     } else r = await run7z([...args, file], { password: password ?? (list.encrypted ? "" : null), onStdout, signal: j.ac.signal });
+    if (over) throw new Error("解出来的比清单说的多得多（超过声明大小），已停止解压");
     if (wrongPw(r)) throw Object.assign(new Error("wrong password"), { wrongPassword: true });
     if (r.code !== 0) throw new Error((r.err.trim().split("\n").filter(Boolean).pop() || `7-Zip exit ${r.code}`).slice(0, 300));
-  } finally { if (lst) fs.rmSync(lst, { force: true }); }
+  } finally { clearInterval(watch); if (lst) fs.rmSync(lst, { force: true }); }
 }
 
 /** 解出来的东西里：指向临时目录外面的软链删掉，特殊文件（FIFO、设备）删掉 */
@@ -326,7 +356,9 @@ export function uniquePath(p) {
   if (!fs.existsSync(p)) return p;
   const dir = path.dirname(p), base = path.basename(p);
   const m = /^(.*?)((?:\.tar)?\.[^.]{1,8})?$/.exec(base), stem = m[1] || base, ext = m[2] || "";
-  for (let i = 2; ; i++) { const q = path.join(dir, `${stem} (${i})${ext}`); if (!fs.existsSync(q)) return q; }
+  // files L4：(2)、(3)… 循环加个上限，别让同名文件堆到一万个时转起来没头
+  for (let i = 2; i <= 10000; i++) { const q = path.join(dir, `${stem} (${i})${ext}`); if (!fs.existsSync(q)) return q; }
+  throw new Error("同名文件太多了，没法再改名");
 }
 
 // ── 压缩 ────────────────────────────────────────────────────────────────

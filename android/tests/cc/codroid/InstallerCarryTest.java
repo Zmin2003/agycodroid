@@ -43,6 +43,21 @@ public class InstallerCarryTest {
         put(old, "bin/base-tool", "base");
     }
 
+    static void putBytes(File root, String rel, byte[] b) throws Exception {
+        File f = new File(root, rel);
+        f.getParentFile().mkdirs();
+        Files.write(f.toPath(), b);
+    }
+
+    /** TM-05：carryOver 搬自装文件时，文本文件里嵌的旧包名前缀要改写成新包名（J1 的 rewritePrefixes），二进制文件不动 */
+    static void prefixOld(File old) throws Exception {
+        put(old, "share/mine/tool.sh",
+            "#!/bin/sh\nexec /data/data/cc.codroid/files/usr/bin/python3 \"$@\"\n# cfg /data/user/0/cc.codroid/files/home/agyapp-settings.json\n");
+        byte[] blob = new byte[]{'B', 'I', 'N', 0, '/', 'd', 'a', 't', 'a', '/', 'd', 'a', 't', 'a', '/', 'c', 'c', '.', 'c', 'o', 'd', 'r', 'o', 'i', 'd', '/', 'x'};
+        putBytes(old, "share/mine/blob.bin", blob);
+        put(old, "share/mine/plain.txt", "no prefix here\n");
+    }
+
     public static void main(String[] args) throws Exception {
         Path tmp = Files.createTempDirectory("agycodroid-carry-test-");
         try {
@@ -64,6 +79,21 @@ public class InstallerCarryTest {
             Installer.carryOver(old2, neu2, files, false, "", QUIET);
             check("换版本：组件文件不搬（旧工具包上的）", !new File(neu2, "bin/comp-tool").exists());
             check("换版本：底座文件也不搬", !new File(neu2, "bin/base-tool").exists());
+
+            File old3 = new File(files, "usr3.old"), neu3 = new File(files, "usr3");
+            old3.mkdirs(); neu3.mkdirs();
+            prefixOld(old3);
+            Installer.carryOver(old3, neu3, files, false, "", QUIET, "cc.codroid", "cc.agyroid");
+            String moved = new String(Files.readAllBytes(new File(neu3, "share/mine/tool.sh").toPath()), StandardCharsets.UTF_8);
+            check("TM-05：自装文本文件跟着搬", new File(neu3, "share/mine/tool.sh").isFile());
+            check("TM-05：文本文件里 /data/data/cc.codroid 改成新包名", moved.contains("/data/data/cc.agyroid/"));
+            check("TM-05：文本文件里 /data/user/0/cc.codroid 改成新包名", moved.contains("/data/user/0/cc.agyroid/"));
+            check("TM-05：文本文件里无旧包名残留", !moved.contains("cc.codroid"));
+            byte[] blobAfter = Files.readAllBytes(new File(neu3, "share/mine/blob.bin").toPath());
+            check("TM-05：二进制文件跟着搬但内容不动（含 NUL + 旧前缀）",
+                blobAfter.length == 27 && blobAfter[3] == 0 && new String(blobAfter, StandardCharsets.UTF_8).contains("cc.codroid"));
+            check("TM-05：无前缀的文本文件原样搬", new File(neu3, "share/mine/plain.txt").isFile()
+                && new String(Files.readAllBytes(new File(neu3, "share/mine/plain.txt").toPath()), StandardCharsets.UTF_8).equals("no prefix here\n"));
         } finally {
             try (java.util.stream.Stream<Path> s = Files.walk(tmp)) {
                 s.sorted(Comparator.reverseOrder()).forEach((p) -> { try { Files.delete(p); } catch (Exception ignored) {} });

@@ -174,8 +174,10 @@ public final class Share extends ContentProvider {
 
     // ── 日志包 ──────────────────────────────────────────────────────────
     // 密钥、令牌、邮箱抹掉再打包。JSON 里键名像密钥的（apiKey、"token": …）整对抹掉，带数字、短值也算（审查 10-29 L17、v0.5.3 L23）。提问开头那几十个字网关日志里有，界面上发之前会提醒
+    // ST-07：三种原生 Google token 形态也抹（裸 token 不带键名时 JSON 规则够不着）：AIza…（39 位 API Key）、
+    // ya29.…（OAuth 访问令牌）、1//…（OAuth 刷新令牌，斜杠是 token 的一部分，别拆开写）
     private static final Pattern SECRET = Pattern.compile(
-        "(sk-[A-Za-z0-9_\\-]{4,}|sk-ant-[A-Za-z0-9_\\-]+|gh[pousr]_[A-Za-z0-9]{8,}|Bearer\\s+[A-Za-z0-9._\\-]{8,}|\"[A-Za-z0-9_\\-]*(?i:key|token|secret|passw(?:or)?d|pin|auth(?:orization)?)[A-Za-z0-9_\\-]*\"\\s*:\\s*\"[^\"]+\"|agy_t_\\d+=[^;\\s]+|X-CC-Token:?\\s*\\S+)");
+        "(sk-[A-Za-z0-9_\\-]{4,}|sk-ant-[A-Za-z0-9_\\-]+|gh[pousr]_[A-Za-z0-9]{8,}|Bearer\\s+[A-Za-z0-9._\\-]{8,}|\"[A-Za-z0-9_\\-]*(?i:key|token|secret|passw(?:or)?d|pin|auth(?:orization)?)[A-Za-z0-9_\\-]*\"\\s*:\\s*\"[^\"]+\"|agy_t_\\d+=[^;\\s]+|X-CC-Token:?\\s*\\S+|AIza[0-9A-Za-z_\\-]{35}|ya29\\.[A-Za-z0-9_\\-.]{10,}|1//[A-Za-z0-9_\\-]{10,})");
     // 网址里带的口令参数（预览凭证 ?t=、外壳口令 ?k=、OAuth 回调 code= 之类）：日志里常有完整网址（审查 #49 待确认-7）
     private static final Pattern QSECRET = Pattern.compile("(?i)([?&#;](?:t|k|token|key|api_?key|code|state|access_token|refresh_token|id_token|auth|sig|signature|secret|password|pass|pwd)=)[^&#\\s'\"<>]+");
     // 网址里的账号口令：http://user:pass@host（自定义接口地址可能这么写）
@@ -282,7 +284,7 @@ public final class Share extends ContentProvider {
     }
 
     // 下载 Antigravity CLI / 组件 / 更新要连的几个地方
-    private static final String[] PROBE_HOSTS = { "downloads.claude.ai", "cccodroid.net", "dl.cccodroid.net", "registry.npmmirror.com", "registry.npmjs.org", "github.com" };
+    private static final String[] PROBE_HOSTS = { "antigravity-cli-auto-updater-974169037036.us-central1.run.app", "registry.npmmirror.com", "registry.npmjs.org", "github.com" };
 
     /** 网络：系统看到的网络状态 + Java 解析 + 应用自己的 curl 连一下（并行，总共最多十来秒）。
      *  安装失败常见的是「Java 能下、原生程序出不去」（VPN / 联网控制），两边都测才分得清。只记结果，不发任何内容 */

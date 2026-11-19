@@ -117,6 +117,12 @@ public class GatewayService extends Service {
         Priv.start(this);
         Battery.watch(this);   // 耗电统计：数亮屏时长
         self = this;
+        // B10：devkit 探活失败（bash 起不来）时记一笔修复账本，并让 Updater 把 devkit 标 damaged、发一条修复通知
+        // （devkit 字段是 Updater 私有的，只能调它自己的 notifyDevkitDamaged；探活只在 ok→失败翻转时回调一次，不会刷屏）
+        Env.onDevkitDamaged = msg -> {
+            Ledger.add(env, "repair", false, Tr.t("开发工具包探活失败：") + msg, null);
+            Updater.get(this).notifyDevkitDamaged(msg);
+        };
         Updater.get(this).loop();
         // Shizuku 掉了（重启、被杀）而用户开着自动激活：自己重新拉起来
         ShizukuSetup.get(this).reactivateAsync(false);
@@ -238,7 +244,7 @@ public class GatewayService extends Service {
     }
 
     @Override public void onDestroy() {
-        if (self == this) self = null;
+        if (self == this) { self = null; Env.onDevkitDamaged = null; }
         synchronized (life) { lifeGen++; stopping = true; }
         Updater.get(this).stopLoop();
         Notify.get(this).stop();
@@ -255,7 +261,23 @@ public class GatewayService extends Service {
     /** 网关运行库凑不齐（GwRuntime.ensure 失败）：发行版不起网关 */
     static final class GwUnavailable extends Exception { GwUnavailable(String m) { super(m); } }
     private String gwLastErr;        // 同一个原因只记一次账本
-    private long gwFetchAt;          // 上次联网取运行库的时间：取回来还对不上时别每分钟下一遍 128 MB
+    /** 网络类取回失败的连续次数：退避 1 / 2 / 5 分钟指数爬升（B7），成功清零 */
+    private int gwFetchFails;
+    /** 下一次允许联网取回网关运行库的时间（毫秒）：网络类失败短退避重试，空间不足不节流 */
+    private long gwFetchNotBefore;
+    /** 最近一次取回失败的原因（"nospace" / "network"，没试过为 null）：说明页按它写文案 */
+    private String gwFetchFailKind;
+    /** 立即重试入口（等待页 / 说明页的「立即重试」用）：清掉取回节流，下一轮 supervise 立即再试一次带 fetch 的 ensure()。
+     *  还把退避里睡着的守护线程叫醒：GwUnavailable 分支按 15 秒→5 分钟退避睡着时，只清节流要等睡完才再试；
+     *  sleep() 吞掉 InterruptedException 后循环继续，正好立即重进 spawnGateway。正在等网关退出（waitFor）
+     *  时中断位只会让下一轮 sleep 提前醒，不影响下载与取回 */
+    static void retryGwFetch() {
+        GatewayService s = self;
+        if (s == null) return;
+        s.gwFetchFails = 0; s.gwFetchNotBefore = 0;
+        Thread t = s.supervisor;
+        if (t != null) t.interrupt();
+    }
     /** 起网关前正在联网取回网关运行库（GwRuntime.fetchBase）：当前这一步和下载字节数。启动页据此显示进度、不按 60 秒超时切走。
      *  11-09 群友：移动数据下 122 MB 的基础模块包下了好几分钟，启动页只写「等待网关…」、进度只在通知栏里，以为卡死，划掉重开了六次 */
     static volatile String gwFetchStep;
@@ -267,7 +289,7 @@ public class GatewayService extends Service {
         String why = null;
         while (!stopping) {
             if (paused) { String w = pauseWhy; update(w != null ? w : Tr.t("正在更新开发工具包…")); sleep(1000); continue; }
-            if (!env.devkitReady()) { update(Tr.t("工具链未安装")); sleep(3000); continue; }
+            if (!env.devkitReady()) { update(env.devkitProblem()); sleep(3000); continue; }
             // 走到这里的是接手的网关（不是本服务拉起的，拉起的在下面 waitFor 里，一退出就作废核身份缓存）：
             // 2 秒看一次，缩短它挂掉到发现端口换了人之间的空档（审查 10-30 第九份 中5）
             if (alive()) { update(Tr.t("运行中 · 127.0.0.1:") + Env.PORT); sleep(2000); continue; }
@@ -296,7 +318,9 @@ public class GatewayService extends Service {
                 continue;
             } catch (GwUnavailable e) {
                 Log.e(TAG, "网关运行库对不上，不起网关：" + e.getMessage());
-                gwBlocked = Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n联网后会自动再试；一直不行请重装 agycodroid", e.getMessage());
+                gwBlocked = "nospace".equals(gwFetchFailKind)
+                    ? Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n清理出空间后会自动再试（已下载的部分会保留）；一直不行请重装 agycodroid", e.getMessage())
+                    : Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n联网后会自动再试；一直不行请重装 agycodroid", e.getMessage());
                 Runnable cb = onSquat;
                 if (cb != null) cb.run();
                 if (stopping) break;
@@ -306,6 +330,9 @@ public class GatewayService extends Service {
                 continue;
             } catch (Exception e) {
                 Log.e(TAG, "网关启动失败", e);
+            } catch (Throwable e) {
+                // L1：Error 也兜住记日志、退避后继续循环，别让守护线程静默死掉
+                Log.e(TAG, "网关守护循环遇到严重错误，退避后继续", e);
             }
             if (stopping) break;
             backoff = System.currentTimeMillis() - t0 > 60000 ? 1000 : Math.min(backoff * 2, 60000);
@@ -320,7 +347,7 @@ public class GatewayService extends Service {
         final long myGen;
         synchronized (life) { myGen = lifeGen; }     // 这次启动属于哪一代服务（BUG-A03）
         env = new Env(this);                 // 每次重读：执行方式（files/.exec-mode）改了，重启网关就生效
-        Log.i(TAG, "执行方式 pref=" + Env.execPref(this) + " targetSdk=" + env.targetSdk + " loader=" + env.loader + " ldso=" + env.ldsoMatches());
+        Log.i(TAG, "执行方式 pref=" + Env.execPref(this) + " targetSdk=" + env.targetSdk + " loader=" + env.loader + " ldso=" + env.ldsoMatches() + " " + env.execModeNote());
         // 起之前核一遍 files/app（见 AppFiles）：两次起网关之间被改过的，按安装包还原了再起
         java.util.List<String> bad = AppFiles.tampered(this, env.app);
         if (!bad.isEmpty()) {
@@ -345,7 +372,10 @@ public class GatewayService extends Service {
         // 凑不齐：发行版不起网关（$PREFIX 里的 node 和库同 uid 的进程都能换）；开发版退回 $PREFIX 的，记账本
         checkSpawn(myGen);                   // 这段可能要联网下 128 MB：停掉 / 停住之后别再白干（BUG-A03）
         GwRuntime gw = new GwRuntime(this, env);
-        boolean fetch = System.currentTimeMillis() - gwFetchAt > 30 * 60000L;
+        gw.cancelCheck = () -> stopping || paused;   // L3：下载中途点了停止 / 停住就中断下载
+        // B7：按失败原因分级节流——网络类失败 1 / 2 / 5 分钟指数退避重试，空间不足不节流（用户清出空间就该立即再试）
+        long nowMs = System.currentTimeMillis();
+        boolean fetch = nowMs >= gwFetchNotBefore;
         String gwErr;
         try {
             gwErr = gw.ensure(fetch, new GwRuntime.Say() {
@@ -357,9 +387,20 @@ public class GatewayService extends Service {
                     if (t > 0 && mb != lastMb) { lastMb = mb; update(Tr.f("取回网关运行库：{0} / {1} MB", mb, t >> 20)); }
                 }
             });
+        } catch (Installer.Cancelled e) {
+            throw new Cancelled();   // 下载中途点了停止 / 停住：这次不启动，回循环顶部按最新状态再判断
         } finally { gwFetchStep = null; gwFetchDone = gwFetchTotal = 0; }
         checkSpawn(myGen);                   // 取运行库期间可能已经被停掉（BUG-A03）
-        if (gwErr != null && fetch) gwFetchAt = System.currentTimeMillis();
+        gwFetchFailKind = gw.fetchFailKind;   // 供下面的 GwUnavailable 分支写说明页文案
+        if (gwErr != null && gw.fetchAttempted && gw.fetchFailKind != null) {
+            if ("nospace".equals(gw.fetchFailKind)) { gwFetchFails = 0; gwFetchNotBefore = 0; }
+            else {
+                gwFetchFails++;
+                long fb = gwFetchFails <= 1 ? 60_000L : gwFetchFails == 2 ? 120_000L : 300_000L;
+                gwFetchNotBefore = nowMs + fb;
+                Log.w(TAG, "网关运行库取回失败（" + gw.fetchFailKind + "），" + (fb / 60000) + " 分钟内不再联网取");
+            }
+        } else if (gwErr == null) { gwFetchFails = 0; gwFetchNotBefore = 0; }
         if (gwErr != null && !gwErr.equals(gwLastErr)) Ledger.add(env, "verify", false, Tr.t("网关运行库：") + gwErr, null);
         gwLastErr = gwErr;
         if (gwErr != null && GwRuntime.sealed(this)) throw new GwUnavailable(gwErr);
@@ -394,7 +435,13 @@ public class GatewayService extends Service {
             // 网关起 claude 用这份 glibc（gateway/gw/config.mjs PATHS.claudeLoader / claudeLib），起之前按钉子再核一遍（gw/gwpin.mjs）
             pb.environment().put("AGAPP_GW_GLIBC_LIB", gw.glibc.getPath());
             pb.environment().put("AGAPP_GW_LOADER", env.loader ? env.nlib("libldlinux.so") : gw.loader().getPath());
-            pb.environment().put("AGAPP_GW_GLIBC_PIN", gw.glibcPin());
+            // L2：glibcPin() 拿不到有效钉子时返回 null（不是 ""）：别把空串交过去，网关 JS 侧按 null 做 fail-closed
+            String glibcPin = gw.glibcPin();
+            if (glibcPin != null) pb.environment().put("AGAPP_GW_GLIBC_PIN", glibcPin);
+            // M7：gw 组钉子与 glibc 组同一约定：gwPin() 拿不到有效钉子返回 null，干脆不传 AGAPP_GW_PIN，永远不传 ""；
+            // 网关 JS 侧（gwpin.mjs）钉子在时按它复核 files/gw，缺失时只警告、先放行（有意的过渡，gw 组暂不 fail-closed）
+            String gwPin = gw.gwPin();
+            if (gwPin != null) pb.environment().put("AGAPP_GW_PIN", gwPin);
         }
         // 篡改留痕：这次（或界面那边部署时）还原过的文件交给网关，它记日志、界面提示一次、下一轮告诉模型（gateway/gw/tamper.mjs）
         String restored = AppFiles.takeRestored();
@@ -765,7 +812,9 @@ public class GatewayService extends Service {
                 String[] lines = new String(b, java.nio.charset.StandardCharsets.UTF_8).split("\n");
                 for (int i = lines.length - 1; i >= 0 && last == null; i--) {
                     String l = lines[i].replaceFirst("^\\[[^\\]]*\\]\\s*", "").trim();
-                    if (l.startsWith("⚠️") || l.matches("^\\w*Error\\b.*") || l.contains("Error:")) last = l;
+                    if (l.startsWith("⚠️") || l.matches("^\\w*Error\\b.*") || l.contains("Error:")
+                        || l.contains("FATAL") || l.contains("OutOfMemoryError") || l.contains("heap out of memory")
+                        || l.contains("Aborted") || l.contains("SIGSEGV") || l.contains("Segmentation fault")) last = l;
                 }
             }
         } catch (Exception ignored) {}

@@ -37,8 +37,8 @@ test("A5 195-G.2：登录状态 unknown / stale 当「还不知道」，首屏�
   assert.ok(src04.includes("if (st && (st.unknown || st.stale)) return null;"), "问不出结果时返回 null，不当作未登录");
 });
 
-test("A8 195-R.8：安全通知取不到时都有提示", () => {
-  assert.ok(src04.includes("r.error") && src04.includes("toast(t(\"暂时取不到安全通知\"), true)"), "error 非空要提示");
+test("A8 195-R.8：维护者通知取不到时都有提示", () => {
+  assert.ok(src04.includes("r.error") && src04.includes("toast(t(\"暂时取不到维护者通知\"), true)"), "error 非空要提示");
 });
 
 test("A3 P1-2：接口卡换了主机会提示旧 Key 被清掉", () => {
@@ -60,7 +60,7 @@ test("A4 195-N.1：改 / 删项目失败显示网关回的 message，不当成�
 
 test("A6 195-G.3：顶栏登录态用 /api/status 的 auth，退出后立即刷新", () => {
   assert.ok(src19.includes("const auth = s.keyMode === \"login\" ? s.auth : null"), "取 /api/status 的 auth");
-  assert.ok(src13.includes("if (r.ok) { acctLogged = false; acctEmail = \"\"; acctWeek = null; }"), "退出成功立即换回「登录账户」");
+  assert.ok(src13.includes("if (r.ok) { localStorage.removeItem(\"agy-ever-google-login\"); acctLogged = false; acctEmail = \"\"; }"), "退出成功立即换回「登录账户」（LG-21：同时清掉曾登录旗标）");
 });
 
 test("A7 195-G.4：登录 pending 继续轮询，晚到的授权地址补开，失败也给终端登录入口", () => {
