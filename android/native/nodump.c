@@ -6,7 +6,7 @@
  * prctl(PR_SET_DUMPABLE, 0) 之后，内核把这个进程的 /proc 条目归给 root：同 uid 的进程 ptrace、读写 mem、读 environ 都被拒，
  * 安卓的 /proc 挂了 hidepid=2，连这个进程本身都看不见了（要 CAP_SYS_PTRACE 才行）。exec 之后标志复位，子进程照旧可转储。
  *
- * 只对带 CCAPP_NODUMP=1 的进程生效（应用起网关、网关起 claude 时给），用户自己跑的程序不受影响；
+ * 只对带 AGAPP_NODUMP=1 的进程生效（应用起网关、网关起 claude 时给），用户自己跑的程序不受影响；
  * 生效后把这个变量原地改成 0，子进程不跟着变。
  * 同时设 PR_SET_PDEATHSIG=SIGKILL：拉起它的那个线程没了它跟着走 —— 不可转储的孤儿（网关没了还在跑的 claude、
  * 应用没了还在跑的网关）谁也看不见、杀不掉，不能留。
@@ -30,7 +30,7 @@ static long raw2(long n, long a, long b) {
 __attribute__((constructor)) static void nodump(int argc, char **argv, char **envp) {
     (void)argc; (void)argv;
     if (!envp) return;
-    static const char key[] = "CCAPP_NODUMP=";
+    static const char key[] = "AGAPP_NODUMP=";
     for (char **e = envp; *e; e++) {
         const char *s = *e;
         int i = 0;

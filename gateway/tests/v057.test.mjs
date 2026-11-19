@@ -1,5 +1,6 @@
 // #52 复测残留的网关一侧：认消息不猜、定时任务次数、读错不当空
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
+import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -7,8 +8,8 @@ import path from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
 
-const home = process.env.CCAPP_HOME;
-const proj = path.join(home, ".claude", "projects", "-v057");
+const home = process.env.AGAPP_HOME;
+const proj = path.join(PATHS.projects, "-v057");
 fs.mkdirSync(proj, { recursive: true });
 
 // 会话里 texts 依次是用户说的话，每句后面跟一条回答
@@ -71,7 +72,7 @@ test("定时任务：直接调接口也不收 0 次、没日期的有效期（E1
 test("项目指令：读不了（不是「没有」）报 500，不当成空的（E06）", async () => {
   const { routeProjects } = await import("../gw/projects.mjs");
   const go = await serve(routeProjects);
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "instr-"));
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "instr-"));
   const r = await go("/api/projects", { method: "POST", body: JSON.stringify({ name: "指令测", mode: "dir", path: dir }) });
   assert.equal(r.status, 200, await r.clone().text());
   const id = (await r.json()).project.id;
@@ -82,7 +83,7 @@ test("项目指令：读不了（不是「没有」）报 500，不当成空的�
   assert.ok(bad.status >= 400 && bad.status !== 404, String(bad.status));
   fs.rmdirSync(path.join(dir, "CLAUDE.md"));
   // 软链：读不出它指向的文件，保存也不会写穿过去（审查 v0513b 低-13）
-  const target = path.join(process.env.CCAPP_HOME, "secret-target.json");
+  const target = path.join(process.env.AGAPP_HOME, "secret-target.json");
   fs.writeFileSync(target, "{\"k\":\"v\"}");
   fs.symlinkSync(target, path.join(dir, "CLAUDE.md"));
   const viaLink = await go(`/api/projects/${id}/instr`);
@@ -111,15 +112,15 @@ test("新建项目预览：已有同名目录时给出 -2（E13）", async () =>
 });
 
 test("记账：账本读不了报错，不装成「没有记录」（D-07）", async () => {
-  const { readLedger } = await import("../gw/claude.mjs");
-  const old = process.env.CCAPP_LEDGER;
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP || home, "ledger-"));
+  const { readLedger } = await import("../gw/agy.mjs");
+  const old = process.env.AGAPP_LEDGER;
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP || home, "ledger-"));
   try {
-    process.env.CCAPP_LEDGER = path.join(dir, "nope.jsonl");
+    process.env.AGAPP_LEDGER = path.join(dir, "nope.jsonl");
     assert.deepEqual(readLedger(), []);
-    process.env.CCAPP_LEDGER = dir;               // 是个目录：EISDIR
+    process.env.AGAPP_LEDGER = dir;               // 是个目录：EISDIR
     assert.throws(() => readLedger());
-  } finally { if (old == null) delete process.env.CCAPP_LEDGER; else process.env.CCAPP_LEDGER = old; }
+  } finally { if (old == null) delete process.env.AGAPP_LEDGER; else process.env.AGAPP_LEDGER = old; }
 });
 
 test("点停止：车道记成挂起（run.mjs 收尾退回队首的插话据此也挂起），排着的也挂起（P2-3）", async () => {

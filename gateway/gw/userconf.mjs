@@ -26,8 +26,8 @@ const TREES = [".claude/rules", ".claude/output-styles", ".claude/skills", ".cla
 const MAX_FILES = 3000, MAX_DEPTH = 8;
 const BIG = 4 << 20;            // 超过的不读内容，指纹按大小 + 修改时间 + ctime
 const COPY_MAX = 256 << 10, COPY_TOTAL = 16 << 20;
-const STORE = () => path.join(CFG.home, ".ccapp-userconf");
-const RECORD = () => path.join(CFG.home, "ccapp-userconf.json");
+const STORE = () => path.join(CFG.home, ".agyapp-userconf");
+const RECORD = () => path.join(CFG.home, "agyapp-userconf.json");
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const keyName = (rel) => sha(rel).slice(0, 24);
 
@@ -55,7 +55,7 @@ function riskyPart(rel, j) {
 }
 const isJsonPart = (rel) => rel === ".claude.json" || /\/settings(\.local)?\.json$/.test(rel);
 
-// Claude Code 自己在插件版本目录根上记的运行状态：每个进程一份 .in_use/<pid>（开一轮就多一个、退出删掉），清理时的 .orphaned_at。
+// Antigravity CLI 自己在插件版本目录根上记的运行状态：每个进程一份 .in_use/<pid>（开一轮就多一个、退出删掉），清理时的 .orphaned_at。
 // 不是配置，官方给插件算摘要时也把它们排除在外（2.1.311 实测）；算进来的话开着一轮时再开一轮，必定弹「用户级配置改了」，
 // 卡片没点就一直显示排队（11-05 群友日志）。只放过这个确切的位置、小的普通文件，别处同名的照样盯。
 const MARKER = /^\.claude\/plugins\/cache\/[^/]+\/[^/]+\/[^/]+\/(?:\.in_use\/[0-9]{1,10}|\.orphaned_at)$/;
@@ -388,7 +388,7 @@ export function ucKeep(rels, ticket) {
 
 function writeAtomic(abs, data, mode = 0o600) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  const tmp = abs + ".ccapp-" + crypto.randomBytes(4).toString("hex");
+  const tmp = abs + ".agyapp-" + crypto.randomBytes(4).toString("hex");
   fs.writeFileSync(tmp, data, { mode });
   if (mode !== 0o600) fs.chmodSync(tmp, mode);     // umask 会吃掉建文件时给的位，可执行脚本还原后得能照样执行（#151-1）
   fs.renameSync(tmp, abs);
@@ -479,7 +479,7 @@ let REVERT_NOTE = "";
 export function ucSetRevertNote(rels, procs) {
   const files = (rels || []).filter((r) => !r.startsWith("…")).slice(0, 12).map((r) => "~/" + r.replace(/[^\w.\/ -]/g, "_")).join(", ");
   const parts = [];
-  if (files) parts.push(`reverted changes to Claude Code configuration that is loaded into every conversation (${files})`);
+  if (files) parts.push(`reverted changes to Antigravity CLI configuration that is loaded into every conversation (${files})`);
   if (procs) parts.push(`stopped ${procs} background process(es) left running by an earlier turn`);
   REVERT_NOTE = parts.length ? "App note: before this turn the user " + parts.join(" and ") + ". Don't recreate them or work around this check; if you made them, tell the user plainly." : "";
 }

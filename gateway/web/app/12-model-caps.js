@@ -5,8 +5,8 @@
   // 存坏了（手改、截断）别让整个型号弹层画不出来（审查 v0.5.5 W-L5）
   const recentIds = () => { try { const a = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => typeof x === "string") : []; } catch { return []; } };
   function prettyModel(name) {
-    const m = /^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)/i.exec(name || "");
-    return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() + " " + m[2] + "." + m[3] : name || "";
+    // agy 的模型就是自由填写的 slug，没有 Opus / Sonnet / Haiku 这样的固定系列可映射：原样显示
+    return name || "";
   }
   // 0.3.16 起模型 / 思考强度 / 接口按会话记（网关 gw/sessmodel.mjs）。设置页里的是全局默认；
   // 会话在输入栏面板里单独选过才有自己的值（state.sessModel，网关原样的记录，null 的字段 = 跟随默认），没选过就跟着全局默认走。
@@ -87,7 +87,7 @@
   function paintModel(name) {
     state.chipModel = name;
     const eff = curEffort();
-    // 照设计稿拆成两片：型号（claude-opus-5-5 显示成 Opus 5.5）、思考强度；会话用的不是全局那家时前面再加一片接口名
+    // 照设计稿拆成两片：型号、思考强度；会话用的不是全局那家时前面再加一片接口名
     const pretty = prettyModel(name), pv = curProv(), other = pv && globalProv() && pv !== globalProv();
     modelEl.innerHTML = (other ? `<span class="chip chip-prov">${esc(provLabel(pv))}</span>` : "") +
       `<span class="chip">${esc(pretty)}</span>${eff ? `<span class="chip">${esc(eff)}</span>` : ""}`;
@@ -229,7 +229,7 @@
       const all = ML.filter((md) => !kw || md.id.toLowerCase().includes(kw) || String(md.name || "").toLowerCase().includes(kw));
       let html = "";
       if (!kw) {
-        if (info.nativeModels) html += row("", info.defaultModel ? t("（默认：{model}）", { model: info.defaultModel }) : t("（默认，由 claude 决定）"));
+        if (info.nativeModels) html += row("", info.defaultModel ? t("（默认：{model}）", { model: info.defaultModel }) : t("（默认，由 agy 决定）"));
         // 当前在用的那个总排在「最近用过」头一个：不然清单一长，打开弹层根本看不到现在用的是哪个
         const rec = [...new Set([cur(), ...recentIds()])].filter((id) => id && ML.some((md) => md.id === id));
         if (rec.length) html += `<div class="mp-sec">${t("最近用过")}</div>` + rec.map((id) => row(id, meta(ML.find((md) => md.id === id)))).join("") + `<div class="mp-sec">${t("全部 {n} 个", { n: ML.length })}</div>`;
@@ -286,43 +286,10 @@
       dropProvModels();
       if (r.providers) state.provList = r.providers;
       const sel = $("set-model");
-      // 原生厂商（官方账户）：不挑 = 用它自己的默认模型。
-      // 这时候列表框里得有个诚实的"默认"项 —— 否则列表第一条（比如 haiku）会顶在上面，
-      // 让人以为正在用的就是它，其实 claude 用的是自己挑的那个。
-      const dfltOpt = r.nativeModels
-        ? (r.defaultModel ? `<option value="">${t("（默认：{model}）", { model: esc(r.defaultModel) })}</option>`
-                           : `<option value="">${t("（默认，由 claude 决定）")}</option>`)
-        : "";
-      sel.innerHTML = (dfltOpt + (MODELS.length
-        ? MODELS.map((m) => {
-            const img = (m.input_modalities || []).includes("image") ? ' data-img="1"' : "";
-            // 官方 /v1/models 只报能力，不报窗口 —— 报不出来就别写 "0k"
-            const ctx = m.context_window ? Math.round(m.context_window / 1024) + "k" : "—";
-            // 厂商常把 name 填成 id，那样就成了「id · id · 窗口」
-            const nm = m.name && m.name !== m.id ? " · " + esc(m.name) : "";
-            return `<option value="${esc(m.id)}"${img}>${esc(m.id)}${nm} · ${ctx}</option>`;
-          }).join("")
-        : (dfltOpt ? "" : '<option value="">' + t("（该厂商不提供模型清单）") + '</option>')));
-      // 没单独指定（current=null）的非原生厂商：实际跑的是它的默认型号，没有默认就是清单第一个（和网关同一套），
-      // 下拉框和下面的说明都按它画，别停在随便哪一项上（审查 #52 D-03）
-      // 默认型号不在清单里也照它画（网关照样用它跑），不能退到第一项、拿别的型号的窗口冒充（#102 04-003）
+      // 模型是自由填写的 slug 文本框：只回填当前生效的 slug，空 = 默认（由 agy 决定）。不写假的模型清单。
+      if (sel) sel.value = r.current || "";
+      // 没单独指定（current=null）的非原生厂商：实际跑的是它的默认型号，没有默认就是清单第一个（和网关同一套）
       const curId = r.current || (!r.nativeModels && (r.defaultModel || MODELS[0]?.id)) || null;
-      if (r.current) {
-        sel.value = r.current;
-        // 当前模型不在厂商 /models 的清单里（比如 DeepSeek 的 deepseek-flash 是兼容端点认的别名）：
-        // 不补一项的话下拉框会显示空白，像是没选模型
-        if (sel.value !== r.current) {
-          sel.insertAdjacentHTML("afterbegin", `<option value="${esc(r.current)}">${esc(r.current)} · ${t("（当前，不在厂商清单里）")}</option>`);
-          sel.value = r.current;
-        }
-      } else if (r.nativeModels) sel.value = "";
-      else if (curId) {
-        sel.value = curId;
-        if (sel.value !== curId) {
-          sel.insertAdjacentHTML("afterbegin", `<option value="${esc(curId)}">${esc(curId)} · ${t("（当前，不在厂商清单里）")}</option>`);
-          sel.value = curId;
-        }
-      }
       $("model-count").textContent = t("{n} 个", { n: MODELS.length });
       // 自动起名的型号：跟对话 / 关 / 全局这家清单里的某个（存的不在清单里也补一项，别显示成空白）
       const tsel = $("set-titlemodel"), tv = state.settings.titleModel || "";
@@ -335,11 +302,6 @@
       // 用量条：总刻度用厂商给的真实窗口，但设了压缩窗口就改以它为满刻度。
       // 网关回 0 就是不知道：别拿下拉框落在的那一项兜底，那可能是别的型号（#82）
       loadCtxModel(r);
-      // 压缩线输入框是全局设置，和当前型号在不在清单里无关：型号清单为空、或当前型号是
-      // 别名不在清单里（第三方接口常见）时也要回填，否则「Claude 行为」页一直显示旧值，
-      // 用户再存一次旧值就把刚改的新值盖掉
-      const ac = $("set-autocompact");
-      if (ac && (acForce || document.activeElement !== ac)) ac.value = r.autoCompactWindow || "";
       const cur = MODELS.find((m) => m.id === curId);
       if (cur) {
         const k = (v) => (v ? Math.round(v / 1024) + "k" : "—");
@@ -349,14 +311,12 @@
           t("｜这是默认值；单个会话在输入栏下面的模型标签里另选");
       } else if (r.nativeModels) {
         $("model-info").innerHTML =
-                    t("没指定模型 → <b>由 claude 自己决定</b>（官方账户当前默认 <code>{model}</code>）。", { model: esc(r.defaultModel || t("claude 内置默认")) }) +
-          t("<br>上面的清单就是账户里能用的全部型号，挑一个即锁定。");
+                    t("没指定模型 → <b>由 agy 自己决定</b>（当前默认 <code>{model}</code>）。", { model: esc(r.defaultModel || t("agy 内置默认")) }) +
+          t("<br>在上面填模型 slug 即锁定。");
       } else if (!MODELS.length) {
         $("model-info").innerHTML =
-                    t("该厂商由 claude 自己决定模型，没有可切换的清单。要指定就改 <code>ccapp-providers.json</code> 的 <code>defaultModel</code>。");
+                    t("该厂商没有可切换的清单。要指定模型，在上面填模型 slug，或改 <code>agyapp-providers.json</code> 的 <code>defaultModel</code>。");
       } else $("model-info").textContent = "";    // 上一家的能力说明别留着（审查 #52 D-03）
-      // 设置页是全局默认：只按全局型号的窗口画，不借顶栏当前会话的 state.ctxTotal（#76）
-      acPaint(Number(r.contextWindow) || 0, r.autoCompactWindow, r.compactDefault);
       return true;
     } catch (e) {
       if (my !== modelsSeq) return null;
@@ -389,8 +349,6 @@
     paint();
   }
   segMirror($("set-effort"), (o) => o.value || t("默认"));
-  const PERM_SHORT = { default: "问我", acceptEdits: "接受编辑", plan: "计划", auto: "自动", dontAsk: "不问就拒", bypassPermissions: "全部放行" };
-  // 权限模式用原生下拉：六项带说明，分段控件在手机上塞不下
   segMirror($("set-parallel"), (o) => o.value, ["1", "2", "3", "4"]);
   // 设置里的「打开用量页」
   $("set-ov").addEventListener("click", (e) => { const b = e.target.closest("[data-gopage]"); if (b) { closeSettings(); openPage(b.dataset.gopage); } });
@@ -398,17 +356,20 @@
     const q = usDash.quota, e = $("set-us-quota");
     $("set-us-quota-row").classList.toggle("hidden", !q);
     if (!q) return;
-    e.textContent = Math.round(q.used) + "%";
-    const at = q.resetsAt ? new Date(q.resetsAt * 1000) : null;
-    $("set-us-quota-sub").textContent = at ? t("{time} 重置", { time: at.toLocaleDateString([], { weekday: "short" }) + " " + at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : "";
+    const num = (v) => Number.isFinite(+v) ? compact(+v) : "—";
+    e.textContent = t("合计 {t} tokens", { t: num(q.total) });
+    $("set-us-quota-sub").textContent = t("输入 {i} · 输出 {o} · 思考 {th} · 缓存读取 {c}",
+      { i: num(q.input), o: num(q.output), th: num(q.thinking), c: num(q.cache_read) });
   }
 
   function renderEffort(levels, current, dflt) {
+    // agy 的 effort 只有 low / medium / high / xhigh / max 五档：网关没报就按这五档画
+    if (!levels || !levels.length) levels = ["low", "medium", "high", "xhigh", "max"];
     const sel = $("set-effort");
-    // 留一个"不指定"：没设过档位时 claude 按模型自己的默认走。
+    // 留一个"不指定"：没设过档位时 agy 按模型自己的默认走。
     // 以前没这一项，下拉框会显示第一档 low，让人以为正在用 low，而且一旦选过就再也撤不回默认
     sel.innerHTML = (dflt ? `<option value="">${t("（默认：{model}）", { model: esc(dflt) })}</option>`
-                            : `<option value="">${t("（默认，由 claude 按模型决定）")}</option>`) +
+                            : `<option value="">${t("（默认，由 agy 按模型决定）")}</option>`) +
       levels.map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
     sel.value = current && levels.includes(current) ? current : "";
     $("effort-info").innerHTML =
@@ -423,7 +384,8 @@
       const s = await api("/api/settings");
       if (busy || gen !== saveGen) return saveQ.then(() => loadSettings());
       state.settings = s;
-      $("set-perm").value = state.settings.permissionMode || "default";
+      $("set-toolperm").value = state.settings.toolPermission || "request-review";
+      $("set-agentmode").value = state.settings.agentMode || "";
       // 输出风格清单由网关列（内置 + 自定义 .md），不再写死 —— 以前写死的 concise 根本不存在
       $("set-style").innerHTML = '<option value="">' + t("（默认）") + '</option>' +
         (state.settings.outputStyles || []).map((o) =>
@@ -431,7 +393,7 @@
       $("set-style").value = state.settings.outputStyle || "";
       // 没指定模型时别把顶栏写成 "—"：init 报过的真实模型更有用
       paintModel(curModel() || state.model || t("默认"));
-      setPermChip(state.settings.permissionMode || "default");
+      setPermChip(state.settings.toolPermission, state.settings.agentMode);
       renderPermBar();
       renderDirs();
       fillMem();
@@ -445,7 +407,6 @@
       const pe = $("set-parallel");
       if (pe && document.activeElement !== pe) { pe.max = state.settings.maxParallelCap || 16; pe.value = state.settings.maxParallel || 3; }
       $("set-static").checked = state.settings.staticCompat !== false;
-      $("set-idlecompact").checked = state.settings.idleCompaction !== false;
       $("set-workisland").checked = state.settings.workIsland === true;
       loadWorkIsland();
       loadExecMode();
@@ -501,7 +462,7 @@
       state.settings = { ...state.settings, ...(r.settings || {}) };
       paintModel(curModel() || state.model || t("默认"));
       if ("model" in patch || "effort" in patch) refreshSessModel();   // 跟随默认的会话，标签跟着变
-      setPermChip(state.settings.permissionMode || "default");
+      setPermChip(state.settings.toolPermission, state.settings.agentMode);
       renderDirs();
             toast(t("已保存"));
       return r;
@@ -512,17 +473,11 @@
     const S = state.settings || {};
     const v = { model: ["set-model", S.model || ""], titleModel: ["set-titlemodel", S.titleModel || ""], effort: ["set-effort", S.effort || ""], outputStyle: ["set-style", S.outputStyle || ""],
       maxParallel: ["set-parallel", S.maxParallel || 3] };
-    const c = { staticCompat: ["set-static", S.staticCompat !== false], idleCompaction: ["set-idlecompact", S.idleCompaction !== false],
+    const c = { staticCompat: ["set-static", S.staticCompat !== false],
       workIsland: ["set-workisland", S.workIsland === true] };
     for (const k of Object.keys(patch || {})) {
       if (v[k] && $(v[k][0])) $(v[k][0]).value = v[k][1];
       if (c[k] && $(c[k][0])) $(c[k][0]).checked = c[k][1];
-    }
-    // 压缩线两个入口（设置页输入框 / 窗口未知时的数字框）都回到真正存着的值，滑块跟着重画
-    if (patch && "autoCompactWindow" in patch) {
-      const n = S.autoCompactWindow ? String(S.autoCompactWindow) : "";
-      for (const id of ["set-autocompact", "ac-num"]) { const el = $(id); if (el) el.value = n; }
-      acPaint(acWin, S.autoCompactWindow || 0, acDef);
     }
     if ("model" in patch || "effort" in patch) loadModels();
   }
@@ -537,7 +492,8 @@
     if (!(await saveSettings({ model: e.target.value }))) return;
     await loadModels();                                  // 换模型后 effort 档位可能不同
   });
-  $("set-perm").addEventListener("change", (e) => changePermMode(e.target.value));
+  $("set-toolperm").addEventListener("change", (e) => changePermMode({ toolPermission: e.target.value }));
+  $("set-agentmode").addEventListener("change", (e) => changePermMode({ agentMode: e.target.value }));
   $("set-style").addEventListener("change", (e) => saveSettings({ outputStyle: e.target.value }));
   $("set-effort").addEventListener("change", (e) => saveSettings({ effort: e.target.value }));
   $("set-titlemodel").addEventListener("change", (e) => saveSettings({ titleModel: e.target.value }));
@@ -572,7 +528,6 @@
     } catch (err) { toast(err.message || String(err)); }
     loadExecMode();
   });
-  $("set-idlecompact").addEventListener("change", (e) => saveSettings({ idleCompaction: e.target.checked }));
   // 敏感操作再确认没有开关：一直开着，只在设置里说明它管什么（反破甲 11-03）
   const extSync = () => { $("set-extimg").checked = uiGet("extImg") !== "auto"; };
   extSync(); document.addEventListener("cc:ui", (e) => { if (e.detail.key === "extImg" || e.detail.key == null) extSync(); });
@@ -599,77 +554,6 @@
     if (!(v >= 1)) { e.target.value = state.settings.maxParallel || 3; return; }
     saveSettings({ maxParallel: v }).then(() => { e.target.value = state.settings.maxParallel || v; });
   });
-  // ── 压缩线滑块（接口与型号页）：0–100 映射到 [100k, 模型窗口]；没设 = 交给 claude，滑块停在最右、虚线轨道 ──
-  // 100k 是 claude 认的下限（gw/models.mjs 的 defaultCompactLine 注释：只认 100k–1M），
-  // 以前允许 20k，上下文条按 20k 显示满格、claude 实际按 100k 压（0.6.10 审计 195-O.2）
-  const AC_MIN = 100000;
-  const AC_MAX = 1000000;
-  let acWin = 0, acSet = 0, acDef = 0, acForce = false;   // acDef：没设时网关给第三方型号的默认线（0 = 交给 claude）   // acForce：刚存过，焦点还在控件上也按存下的值回填（没存上就弹回去）
-  function acStep() { return Math.max(1000, Math.ceil((acWin - AC_MIN) / 100 / 1000) * 1000); }
-  function acTok(p) { return Math.min(acWin, Math.round((AC_MIN + (acWin - AC_MIN) * p / 100) / acStep()) * acStep()); }
-  function acPos(v) { return Math.max(0, Math.min(100, (v - AC_MIN) / (acWin - AC_MIN) * 100)); }
-  function acShow(v) {
-    const rg = $("ac-range"), pct = v ? acPos(v) : acDef ? acPos(acDef) : 100;
-    rg.style.setProperty("--p", pct + "%");
-    $("ac-range").parentNode.classList.toggle("auto", !v);
-    $("ac-val").textContent = v ? t("{line} · 窗口的 {pct}%", { line: fmtTok(v), pct: Math.round(v / acWin * 100) })
-      : acDef ? t("没设：默认 {line} · 窗口的 {pct}%", { line: fmtTok(acDef), pct: Math.round(acDef / acWin * 100) })
-      : t("没设，交给 claude 按窗口决定");
-    $("ac-auto").classList.toggle("hidden", !v);
-  }
-  function acPaint(win, set, def) {
-    const box = $("ac-slide");
-    acWin = Number(win) || 0; acSet = Number(set) || 0; acDef = Number(def) || 0;
-    const unknown = acWin <= AC_MIN;
-    // 窗口未知（厂商清单没报）：滑块没法按窗口换算，但用户仍得能改压缩线（195-E.10）。
-    // 换成数字框，设过的值照原样显示、可改；claude 对未知窗口按 200k 上限压（gw/models.mjs 的 compactLineOf）。
-    box.classList.remove("hidden");
-    if (unknown) {
-      $("ac-range").parentNode.classList.add("hidden");
-      box.querySelector(".ac-scale").classList.add("hidden");
-      $("ac-manual").classList.remove("hidden");
-      const num = $("ac-num");
-      if (acForce || document.activeElement !== num) num.value = acSet ? String(acSet) : "";
-      acForce = false;
-      $("ac-val").textContent = acSet
-        ? t("已设 {line}（模型窗口未知，按你设的生效）", { line: fmtTok(acSet) })
-        : t("未填（按 200k 算）");
-      $("ac-auto").classList.toggle("hidden", !acSet);
-      return;
-    }
-    $("ac-range").parentNode.classList.remove("hidden");
-    box.querySelector(".ac-scale").classList.remove("hidden");
-    $("ac-manual").classList.add("hidden");
-    const rg = $("ac-range");
-    if (acForce || document.activeElement !== rg) rg.value = acSet ? acPos(acSet) : acDef ? acPos(acDef) : 100;
-    acForce = false;
-    $("ac-min").textContent = fmtTok(AC_MIN); $("ac-max").textContent = fmtTok(acWin);
-    acShow(acSet);
-  }
-  /** 滑块和两个数字框共用同一套保存规则：空 / 0 / 乱填 = 交给 claude；claude 只认 100k–1M */
-  function acSaveFrom(el) {
-    const raw = el.value.trim();
-    let n = raw ? Math.round(Number(raw)) : null;
-    if (n == null || !Number.isFinite(n) || n <= 0) n = null;   // 空 / 0 / 乱填 = 交给 claude
-    else if (n < AC_MIN) {
-      // 更小的它按 100k 处理：界面别让人设成 20k，免得上下文条按 20k 显示满格（195-O.2）
-      n = AC_MIN;
-      toast(t("压缩线最小 100k，已按 100k 存"));
-    } else if (n > AC_MAX) {
-      n = AC_MAX;
-      toast(t("压缩线最大 1M，已按 1M 存"));
-    }
-    el.value = n == null ? "" : String(n);
-    saveSettings({ autoCompactWindow: n }).then(() => { acForce = true; return loadModels(); });
-  }
-  $("ac-range").addEventListener("input", (e) => acShow(acTok(+e.target.value)));
-  $("ac-range").addEventListener("change", (e) => {
-    const v = acTok(+e.target.value);
-    saveSettings({ autoCompactWindow: v }).then(() => { acForce = true; return loadModels(); });
-  });
-  $("ac-auto").addEventListener("click", () => saveSettings({ autoCompactWindow: null }).then(() => { acForce = true; return loadModels(); }));
-  $("set-autocompact").addEventListener("change", (e) => acSaveFrom(e.target));
-  $("ac-num").addEventListener("change", (e) => acSaveFrom(e.target));
   $("btn-add-dir").addEventListener("click", async () => {
     const v = $("inp-dir").value.trim();
     if (!v) return;
@@ -679,7 +563,7 @@
   $("btn-cli-doctor").addEventListener("click", async () => {
     const box = $("cli-out");
     box.classList.remove("hidden");
-    box.textContent = t("正在运行 claude doctor…");
+    box.textContent = t("正在运行 doctor…");
     try {
       const r = await api("/api/cli?cmd=" + encodeURIComponent("doctor"));
       box.textContent = (r.out || "") + (r.err ? "\n" + r.err : "") || t("(无输出)");
@@ -717,32 +601,30 @@
       : '<span class="tiny">' + t("（暂无数据，先发一条消息即可从 CLI 获取）") + '</span>';
   }
 
-  // 工具的权限：规则优先（deny > ask > allow，Bash(git:*) 这种带括号的算「按规则」），否则看权限模式；只读的工具默认允许
-  const READ_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "TodoWrite", "TodoRead", "Task", "Agent", "NotebookRead", "ExitPlanMode", "BashOutput", "KillShell", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"]);
-  const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-  function toolPerm(name, mode, rules) {
+  // 工具的权限：规则优先（deny > ask > allow，action(target) 这种带括号的算「按规则」），否则看两组 agy 设置。
+  // agy 的工具名以 stream-json 的 tool_info.name 为准，这里不写一份假的工具清单。
+  function toolPerm(name, tp, am, rules) {
     // mcp__服务名 这样的规则管这个服务下的全部工具
     const hit = (list) => (list || []).some((r) => r === name || (r.endsWith("*") && name.startsWith(r.slice(0, -1))) || (r.startsWith("mcp__") && !r.slice(5).includes("__") && name.startsWith(r + "__")));
     const part = (list) => (list || []).some((r) => r.startsWith(name + "("));
     if (hit(rules.deny)) return "deny";
     if (hit(rules.ask)) return "ask";
     if (hit(rules.allow)) return "allow";
-    // 带括号的拒绝 / 询问规则在任何模式下都照样生效：不能因为是免确认模式或只读工具就标「允许」
+    // 带括号的拒绝 / 询问规则在任何模式下都照样生效：不能因为是免确认模式就标「允许」
     if (part(rules.deny) || part(rules.ask)) return "rule";
-    if (mode === "bypassPermissions") return "allow";
-    if (mode === "plan" && (EDIT_TOOLS.has(name) || name === "Bash")) return "deny";
-    if (mode === "acceptEdits" && EDIT_TOOLS.has(name)) return "allow";
-    if (READ_TOOLS.has(name)) return "allow";
+    if (tp === "always-proceed") return "allow";
+    if (tp === "strict") return "ask";
+    if (am === "plan") return "deny";
     if (part(rules.allow) || part(rules.deny)) return "rule";
     return "ask";
   }
   const permPill = (p) => ({ allow: `<span class="pill ok"><svg class="ei" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg> ${t("允许")}</span>`, ask: `<span class="pill">${t("询问")}</span>`,
     deny: `<span class="pill err"><svg class="ei" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg> ${t("拒绝")}</span>`, rule: `<span class="pill acc">${t("按规则")}</span>` }[p]);
-  const capRows = (arr, fn) => arr?.length ? arr.map(fn).join("") : '<div class="row"><span class="tiny">' + t("（暂无数据，先发一条消息即可从 CLI 获取）") + "</span></div>";
+  const capRows = (arr, fn, empty) => arr?.length ? arr.map(fn).join("") : '<div class="row"><span class="tiny">' + (empty || t("（暂无数据，先发一条消息即可从 CLI 获取）")) + "</span></div>";
 
   function renderCaps() {
     const c = state.caps || {};
-    setPageSub("caps", c.version ? t("Claude Code {ver} · 这一轮能用的", { ver: c.version }) : t("这一轮 Claude 能用的"));
+    setPageSub("caps", c.version ? t("Antigravity CLI {ver} · 这一轮能用的", { ver: c.version }) : t("这一轮 Antigravity 能用的"));
     const cmds = c.slashCommands || [];
     const mcp = (c.mcpServers || []).map((m) => typeof m === "string" ? { name: m } : m);
     const mcpOk = mcp.filter((m) => /^connected$/i.test(m.status || "")).length;
@@ -756,15 +638,17 @@
     $("caps-cmds").innerHTML = cmds.length
       ? cmds.map((x) => { const n = "/" + (x.name || x); return `<button class="cmd-card" data-cmd="${esc(n)}"><span class="mono">${esc(n)}</span><span>${esc(x.desc ? t(x.desc) : "")}</span></button>`; }).join("")
       : '<span class="tiny">' + t("（暂无数据，先发一条消息即可从 CLI 获取）") + '</span>';
-    const mode = state.permissionMode || c.permissionMode || "default", rules = c.rules || { allow: [], ask: [], deny: [] };
+    const tp = state.toolPermission || state.settings.toolPermission || c.toolPermission || "request-review";
+    const am = state.agentMode ?? state.settings.agentMode ?? c.agentMode ?? "";
+    const rules = c.rules || { allow: [], ask: [], deny: [] };
     const nRules = rules.allow.length + rules.ask.length + rules.deny.length;
-    $("caps-permline").textContent = t("权限模式：{m} · 规则 {n} 条", { m: modeLabel(mode), n: nRules });
-    $("caps-tools").innerHTML = capRows(c.tools, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span>${permPill(toolPerm(x, mode, rules))}</div>`);
-    $("caps-skills").innerHTML = capRows(c.skills, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`);
-    $("caps-agents").innerHTML = capRows(c.agents, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`);
+    $("caps-permline").textContent = t("工具审批：{tp} · 代理模式：{am} · 规则 {n} 条", { tp: tpLabel(tp), am: amLabel(am), n: nRules });
+    $("caps-tools").innerHTML = capRows(c.tools, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span>${permPill(toolPerm(x, tp, am, rules))}</div>`);
+    $("caps-skills").innerHTML = capRows(c.skills, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`, t("（Antigravity CLI 没有技能机制，agycodroid 不支持）"));
+    $("caps-agents").innerHTML = capRows(c.agents, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`, t("（Antigravity CLI 没有子代理机制，agycodroid 不支持）"));
     $("caps-mcp").innerHTML = capRows(mcp, (m) => { const ok = /^connected$/i.test(m.status || ""), bad = /fail|error|disconn/i.test(m.status || "");
       return `<div class="row"><span class="mono grow">${esc(m.name)}</span>${sdot(ok ? "ok" : bad ? "err" : "", ok ? t("已连接") : bad ? t("没连上") : m.status || "—")}</div>`; });
-    $("caps-plugins").innerHTML = capRows(c.plugins, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`);
+    $("caps-plugins").innerHTML = capRows(c.plugins, (x) => `<div class="row"><span class="mono grow">${esc(x)}</span></div>`, t("（Antigravity CLI 没有插件机制，agycodroid 不支持）"));
     filterCaps();
   }
   // 搜索：同时筛命令卡片和各节的标签；一节里一个都不剩就整节先藏起来
@@ -780,7 +664,7 @@
     }
   }
   $("caps-q").addEventListener("input", filterCaps);
-  $("caps-rules").addEventListener("click", () => openSettings("claude"));
+  $("caps-rules").addEventListener("click", () => openSettings("agy"));
   $("cap-tiles").addEventListener("click", (e) => {
     const rt = e.target.closest("#caps-retry"); if (rt) { rt.disabled = true; return loadCaps(); }
     const b = e.target.closest("[data-sec]"), x = b && document.querySelector(`#tab-caps > [data-sec="${b.dataset.sec}"]`); if (!x) return;
@@ -798,7 +682,7 @@
     try {
       const r = await api("/api/cli?cmd=" + encodeURIComponent("mcp list"));
       const lines = (r.out || "").split("\n").map((s) => s.trim()).filter(Boolean);
-      // claude mcp list 一行一个：「名字: 命令 - ✓ Connected」/「✗ Failed to connect」
+      // agy mcp list 一行一个：「名字: 命令 - ✓ Connected」/「✗ Failed to connect」（待实测）
       $("caps-mcp").innerHTML = capRows(lines.filter((l) => /:\s/.test(l) && /connect|fail|need/i.test(l)).slice(0, 40), (l) => {
         const name = l.split(":")[0], ok = /✓|connected/i.test(l) && !/fail|✗/i.test(l);
         return `<div class="row"><span class="mono grow">${esc(name)}</span>${sdot(ok ? "ok" : "err", ok ? t("已连接") : t("没连上"))}</div>`;

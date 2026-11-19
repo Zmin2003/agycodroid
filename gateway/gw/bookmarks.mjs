@@ -3,7 +3,7 @@
 // 一个书签 = 会话 + 消息 uuid + 那一行的字节偏移 + 消息里第几段 + 摘录。
 // 偏移是给大会话省事的：跳转时网关先核对偏移处那一行确实是这条消息，对不上才整文件找 uuid。
 // 刚答完的回复界面上还没有 uuid（是事件总线推来的）：按角色 + 正文开头去文件尾部认领。
-// 清单存在 home/ccapp-bookmarks.json；会话进回收站时书签留着（恢复就回来），彻底删了才清掉。
+// 清单存在 home/agyapp-bookmarks.json；会话进回收站时书签留着（恢复就回来），彻底删了才清掉。
 import fs from "node:fs";
 import path from "node:path";
 import { CFG, PATHS, log, tz } from "./config.mjs";
@@ -14,7 +14,7 @@ import { archivedTitle } from "./archive-store.mjs";
 import { SID_RE, listTrash } from "./sessionops.mjs";
 import { findLineOffset, transcriptItems } from "./transcript.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-bookmarks.json");
+const FILE = path.join(CFG.home, "agyapp-bookmarks.json");
 const PER_SESSION = 50, TOTAL = 2000;
 const UUID_RE = /^[0-9a-f-]{8,64}$/i;
 

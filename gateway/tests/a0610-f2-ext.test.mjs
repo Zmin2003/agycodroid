@@ -1,4 +1,7 @@
 // 0.6.10 审计 f2 车道：扩展域后端修复（J.1 / J.3 / J.4 / J.6 / J.10）
+// 移植：插件 / 市场 / 技能 / 钩子是 Claude Code 专属，agy 没有——
+// J.1、J.10、197-2.9 与前端源码断言里涉及它们的断言改成断言 400 / 不支持提示；
+// J.3、J.4、J.6、J.7、197-1.4 不变（自定义组件、命令仍在）。
 import "../gw/config.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -32,34 +35,34 @@ async function serve(...routes) {
 const go = await serve(routeExtensions, routeCustom, commandRoutes(() => []));
 const APP = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "web", "app");
 
-test("J.1 用户级 hooks 配置文件可以只读查看，项目范围不接受任意目录", async () => {
+test("J.1（agy）：钩子是 Claude Code 专属，/api/ext/hooks/file 直接 400，不再只读打开", async () => {
   const file = path.join(CFG.home, ".claude", "settings.json");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '{\n  "hooks": { "Stop": [] }\n}\n');
   const r = await go.get("/api/ext/hooks/file?scope=user");
-  assert.equal(r.status, 200);
-  assert.equal(r.body.ok, true);
-  assert.equal(r.body.file, file);
-  assert.match(r.body.text, /"Stop"/);
+  assert.equal(r.status, 400);
+  assert.equal(r.body.ok, false);
+  assert.match(r.body.error, /钩子是 Claude Code 专属，Antigravity CLI 没有/);
   const bad = await go.get("/api/ext/hooks/file?scope=project&dir=" + encodeURIComponent("/tmp/not-the-workspace"));
-  assert.equal(bad.body.ok, false);
-  // 前端不再用 /api/file 打开，改成读这个只读接口
+  assert.equal(bad.status, 400, "项目范围也不再接受——钩子整个不支持");
+  // 前端那套钩子界面留着没删（只是不再调用），引用还在
   const src = fs.readFileSync(path.join(APP, "08-extensions.js"), "utf8");
   assert.match(src, /\/api\/ext\/hooks\/file\?scope=/);
-  assert.doesNotMatch(src, /a === "open-file"\) \{ const sc = hkScopeData\(\); return openViewer/);
 });
 
-test("J.10 没有 SKILL.md 的同名目录会列出来，能删掉", async () => {
+test("J.10（agy）：技能不支持——列表与删除都 400，孤儿目录留在盘上", async () => {
   const d = path.join(SKILLS_DIR, "zz-orphan-skill");
   fs.mkdirSync(d, { recursive: true });
   const r = await go.get("/api/ext/skills");
-  assert.equal(r.status, 200);
-  const it = (r.body.items || []).find((x) => x.dir === "zz-orphan-skill");
-  assert.ok(it, "孤儿目录没列出来");
-  assert.equal(it.orphan, true);
+  assert.equal(r.status, 400);
+  assert.equal(r.body.ok, false);
+  assert.match(r.body.error, /技能是 Claude Code 专属，Antigravity CLI 没有/);
   const del = await go.post("/api/ext/skills/delete", { dir: "zz-orphan-skill" });
-  assert.equal(del.body.ok, true);
-  assert.equal(fs.existsSync(d), false);
+  assert.equal(del.status, 400);
+  assert.equal(del.body.ok, false);
+  assert.match(del.body.error, /技能是 Claude Code 专属/);
+  assert.equal(fs.existsSync(d), true, "删技能的接口已不支持，目录不动");
+  fs.rmSync(d, { recursive: true, force: true });
 });
 
 test("J.6 /api/commands 告诉界面是否发行版（插入时加 /user: 前缀）", async () => {
@@ -84,7 +87,7 @@ test("J.3 上传的文件按用户原名显示，不带随机十六进制前缀�
   _customForTest.CUSTOM_STAGES.delete(stage);
   const ins = await go.post("/api/custom/install", { stage, id: "f2-test", name: "F2", entries: [{ rel: prog.rel, cmd: "f2-hello" }] });
   assert.equal(ins.body.ok, true, JSON.stringify(ins.body));
-  assert.equal(fs.existsSync(path.join(CFG.home, ".cccodroid", "bin", "f2-hello")), true);
+  assert.equal(fs.existsSync(path.join(CFG.home, ".agycodroid", "bin", "f2-hello")), true);
   const rm = await go.post("/api/custom/remove", { id: "f2-test" });
   assert.equal(rm.body.ok, true);
 });
@@ -115,28 +118,28 @@ test("197-1.4 用户 commands 目录里的 .md 软链不会被当成指令读出
   assert.doesNotMatch(JSON.stringify(r.body), /SECRET-BODY/);
 });
 
-test("197-2.9 内置 hook 脚本装不上时接口回 ok:false，前端不再当已保存", async () => {
-  const p = path.join(CFG.home, ".claude", "hooks");
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  try { fs.rmSync(p, { recursive: true, force: true }); } catch {}
-  fs.writeFileSync(p, "占住路径");   // 让 mkdirSync 失败
+test("197-2.9（agy）：内置 hook 脚本装不上——钩子路由整个 400，不再谈保存", async () => {
   const r = await go.post("/api/ext/hooks/scripts", {});
+  assert.equal(r.status, 400);
   assert.equal(r.body.ok, false);
-  assert.ok(r.body.message);
+  assert.match(r.body.error, /钩子是 Claude Code 专属，Antigravity CLI 没有/);
+  // 前端钩子界面的旧提示串还在（界面留着没删，只是不再调用）
   const src = fs.readFileSync(path.join(APP, "08-extensions.js"), "utf8");
   assert.match(src, /内置脚本没装上：\{msg\}，规则没有保存/);
 });
 
-test("前端扩展域源码断言（J.2/J.9/J.11/J.12/M.6/N.4/X.2）", () => {
+test("前端扩展域源码断言（J.9/J.11/M.6/N.4-custom/X.2；J.2/J.12/N.4-market/N.4-skills 已随插件市场与技能界面撤掉，改断言 agy 的新形态）", () => {
   const s = fs.readFileSync(path.join(APP, "08-extensions.js"), "utf8");
-  assert.match(s, /if \(!more\) \{ latest\("plugcat"\);[^]*?extPick\.plugin = "";/, "J.2 新搜索没清旧筛选");
+  // J.2 旧断言（插件市场新搜索清旧筛选）已删：市场入口藏起来了，loadExtMarkets 是空操作
+  assert.match(s, /async function loadExtMarkets\(\) \{[\s\S]*?插件市场随插件一起不支持，入口已藏起来，这里什么也不做/, "J.2 市场入口已藏");
   assert.match(s, /loadExtSkills\(\);[^\n]*自定义组件会生成一个技能/, "J.9 安装后没刷新技能");
   assert.match(s, /loadExtSkills\(\);[^\n]*它的技能也一起删了/, "J.9 卸载后没刷新技能");
   assert.match(s, /env: o\.kind === "npm" \? filled\.map/, "J.11 还在按整串切 env");
-  assert.match(s, /toast\(t\("已取消"\)\)/, "J.12 取消仍报失败");
+  // J.12 旧断言 toast(t("已取消")) 已删：取消现在走 /api/devkit/modules/cancel，失败照样报出来
+  assert.match(s, /if \(!r\.ok\) toast\(r\.message \|\| t\("失败"\), true\)/, "J.12 取消失败仍报出来");
   assert.match(s, /已有结果时点它也要重新核/, "M.6 第一次点击只收起");
   assert.match(s, /自定义组件列表读取失败：\{msg\}/, "N.4 自定义读失败仍隐藏");
-  assert.match(s, /插件市场读取失败：\{msg\}/, "N.4 市场读失败仍画成只有官方目录");
-  assert.match(s, /技能列表读取失败：\{msg\}/, "N.4/X.2 技能读失败仍画成空");
+  // N.4-market 旧断言已删：市场不读了；N.4-skills 旧断言已删：技能列表直接写不支持，不调接口
+  assert.match(s, /技能是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持/, "N.4-skills 技能列表直接写不支持");
   assert.ok((s.match(/r\.ok === false/g) || []).length >= 3, "X.2 200+{ok:false} 未按失败处理");
 });

@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 export const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const KEYFILE = process.env.INDEX_SIGNING_KEY_FILE || (fs.existsSync("/data/user/0/li.dsh.claudecli/files/bldtools") ? "/data/user/0/li.dsh.claudecli/files/bldtools" : (process.env.BLDTOOLS || process.env.HOME + "/.bldtools")) + "/index-signing-ed25519.pem";
 export const die = (s) => { console.error("✗ " + s); process.exit(1); };
-const git = (...a) => execFileSync("git", ["-c", "safe.directory=*", "-c", "user.name=greyoak111", "-c", "user.email=kbai2743@gmail.com", "-C", ROOT, ...a], { encoding: "utf8" }).trim();
+const git = (...a) => execFileSync("git", ["-c", "safe.directory=*", "-c", "user.name=Zmin2003", "-c", "user.email=zmin2003@users.noreply.github.com", "-C", ROOT, ...a], { encoding: "utf8" }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 读已发布的那份记录：文件不存在才算「从空开始」。读不全、解析不了、结构不对一律中止——
@@ -51,7 +51,7 @@ export async function signAndPublish({ file, data, msg, site }) {
   console.log(`✓ 已签名 ${file}`);
 
   git("add", file, file + ".sig");
-  git("commit", "-q", "-m", `${msg}\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`);
+  git("commit", "-q", "-m", `${msg}`);
   // PUB_LOCAL=1：只提交不推送（要随下一次发版一起推，比如新版 App 才读的文件）
   if (process.env.PUB_LOCAL) { console.log(`✓ 已在本地提交 ${git("rev-parse", "--short", "HEAD")}（PUB_LOCAL：没推送，随下次推送 main 一起上）`); return; }
   git("push", "-q", "origin", "HEAD:main");
@@ -67,5 +67,5 @@ export async function signAndPublish({ file, data, msg, site }) {
     } catch {}
     await sleep(30000);
   }
-  die(`20 分钟官网还没同步到这一版（看 cccodroid-site.service 的日志）`);
+  die(`20 分钟官网还没同步到这一版（看 agycodroid-site.service 的日志）`);
 }

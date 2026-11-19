@@ -1,5 +1,5 @@
 // ── 常用指令（自定义斜杠命令，0.4.20）──────────────────────────────────
-// 就是 Claude Code 官方的自定义命令：一条指令 = commands 目录里一个 <名字>.md，正文是发给 Claude 的提示，
+// 就是 Antigravity CLI 官方的自定义命令：一条指令 = commands 目录里一个 <名字>.md，正文是发给 Antigravity 的提示，
 // 可以用 $ARGUMENTS（/名字 后面跟的话）、$1 $2…。头部 frontmatter 只管两项：description（列表里的说明）、argument-hint（参数提示）。
 // 两个范围：所有项目 ~/.claude/commands；本项目 <工作目录>/.claude/commands（进 git 就跟着仓库走）。
 // 文件是 claude 自己读的：终端里敲 claude 也能用，换设备拷文件就带走。-p 下 $ARGUMENTS 展开已实测（10-28）。
@@ -173,7 +173,7 @@ export function commandRoutes(builtinNames) {
     if (!p.startsWith("/api/commands")) return NEXT;
     if (req.method === "GET" && p === "/api/commands") {
       const dir = u.searchParams.get("dir") || CFG.workspace;
-      // sealed：发行版把这些指令经合成插件交给 Claude，实际名字是 /user:<名字>（见 seal.mjs）；
+      // sealed：发行版把这些指令经合成插件交给 Antigravity，实际名字是 /user:<名字>（见 seal.mjs）；
       // 界面插入输入框时要用带前缀的名字（195-J.6）
       return sendJson(res, 200, { scopes: [listCmds("user"), listCmds("project", dir)], workspace: path.resolve(dir), sealed: sealed() });
     }

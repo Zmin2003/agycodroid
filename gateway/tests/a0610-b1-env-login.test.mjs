@@ -43,7 +43,7 @@ test("envFactsKey：组件版本变了 key 就变，自检会重跑（195-M.1）
   assert.notEqual(envFactsKey(), k1);
 });
 
-test("对账：主动卸载 Claude 的标记在，就不报红（195-M.7）", async () => {
+test("对账：主动卸载 Antigravity 的标记在，就不报红（195-M.7）", async () => {
   fs.writeFileSync(path.join(FILES, ".claude-uninstalled"), "");
   const r = await reconcileNow();
   assert.ok(!r.findings.some((f) => f.key === "claude" && f.level === "error"), JSON.stringify(r.findings));
@@ -70,7 +70,7 @@ test("对账：悬空软链不再算「文件在」（真机 86 个）", async (
 });
 
 test("反馈：自检 JSON 缺 fail/info 不再 500（195-M.9）", async () => {
-  process.env.CCAPP_PRIV_SOCK = path.join(CFG.home, "no-such-priv.sock");   // 别碰真 App 的 socket
+  process.env.AGAPP_PRIV_SOCK = path.join(CFG.home, "no-such-priv.sock");   // 别碰真 App 的 socket
   fs.writeFileSync(ENV_FACTS, JSON.stringify({ key: "k", pass: 3 }));
   const res = fakeRes();
   await routeFeedback({ method: "GET", headers: {} }, res, new URL("http://x/api/issue-draft"), "/api/issue-draft");
@@ -85,8 +85,9 @@ test("status 暴露真实登录态字段（195-G.3）", async () => {
   assert.ok("auth" in res.body);
 });
 
-test("claude --version 不走封口（195-M.4）", () => {
+test("agy --version 不走封口（195-M.4）", () => {
+  // 移植：sealArgv 现在是透传（agy 的封口是 agySeal 的 manifest 校验，不是往 argv 里加旗标），
+  // --version 和开会话的 -p 都原样通过，不加 --setting-sources 之类的东西
   assert.deepEqual(sealArgv(["--version"]), ["--version"]);
-  // 开会话的照旧封口
-  assert.ok(sealArgv(["-p", "hi"]).includes("--setting-sources"));
+  assert.deepEqual(sealArgv(["-p", "hi"]), ["-p", "hi"]);
 });

@@ -1,4 +1,4 @@
-package cc.codroid;
+package cc.agyroid;
 
 /** PrivRules 回归：哪些特权命令要用户点头。sh scripts/java-tests.sh 跑 */
 public final class PrivRulesTest {
@@ -10,28 +10,28 @@ public final class PrivRulesTest {
     static void sh(boolean expect, String cmd) { want(expect, "/system/bin/sh", "-c", cmd); }
 
     static void self(boolean expect, String cmd) {
-        if (PrivRules.touchesSelf(cmd, "cc.codroid") != expect) { fail++; System.out.println("FAIL " + (expect ? "应当算动到自己" : "不该算动到自己") + "：" + cmd); }
+        if (PrivRules.touchesSelf(cmd, "cc.agyroid") != expect) { fail++; System.out.println("FAIL " + (expect ? "应当算动到自己" : "不该算动到自己") + "：" + cmd); }
     }
 
     static void names(boolean expect, String cmd) {
-        if (PrivRules.namesSelf(cmd, "cc.codroid") != expect) { fail++; System.out.println("FAIL namesSelf " + expect + "：" + cmd); }
+        if (PrivRules.namesSelf(cmd, "cc.agyroid") != expect) { fail++; System.out.println("FAIL namesSelf " + expect + "：" + cmd); }
     }
 
     public static void main(String[] a) {
         // 11-04 报告 A3：am start 成功也有输出
-        if (!PrivRules.amStarted(0, "Starting: Intent { cmp=cc.codroid/.MainActivity }")) { fail++; System.out.println("FAIL amStarted 成功输出"); }
+        if (!PrivRules.amStarted(0, "Starting: Intent { cmp=cc.agyroid/.MainActivity }")) { fail++; System.out.println("FAIL amStarted 成功输出"); }
         if (!PrivRules.amStarted(0, "Warning: Activity not started, its current task has been brought to the front")) { fail++; System.out.println("FAIL amStarted 已在前台"); }
-        if (PrivRules.amStarted(0, "Error: Activity class {cc.codroid/x} does not exist.")) { fail++; System.out.println("FAIL amStarted 报错退 0"); }
+        if (PrivRules.amStarted(0, "Error: Activity class {cc.agyroid/x} does not exist.")) { fail++; System.out.println("FAIL amStarted 报错退 0"); }
         if (PrivRules.amStarted(1, "Starting: Intent")) { fail++; System.out.println("FAIL amStarted 退出码非 0"); }
         if (PrivRules.amStarted(-1, "java.lang.SecurityException")) { fail++; System.out.println("FAIL amStarted 起不来"); }
         // 0601c：免问命令点了本应用 / Shizuku 的名也要问
-        names(true, "am force-stop cc.codroid");
+        names(true, "am force-stop cc.agyroid");
         names(true, "am stop-app 'cc.codro''id'");
         names(true, "am force-stop moe.shizuku.privileged.api");
         names(false, "am force-stop com.foo");
         names(false, "dumpsys meminfo | grep -E '^ +[0-9]'");
         // 免确认下也要问的：动到本应用、Shizuku / Sui，或写法看不清（审查 0601 中-3、0601b 引号拆词）
-        self(true, "pm uninstall cc.codroid");
+        self(true, "pm uninstall cc.agyroid");
         self(true, "pm uninstall cc.codro\"i\"d");
         self(true, "am force-stop moe.shizuku.privileged.api");
         self(true, "rm -rf /data/adb/modules");
@@ -77,7 +77,7 @@ public final class PrivRulesTest {
         sh(true, "screencap -p /sdcard/x.png");
         sh(true, "input tap 100 200");
         sh(true, "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Movies/a.mp4");
-        want(true, "/data/user/0/cc.codroid/files/home/x.sh");
+        want(true, "/data/user/0/cc.agyroid/files/home/x.sh");
         want(true, "x.sh");
         want(true, "/sdcard/dumpsys");
         want(true, "sh", "-c", "$0 install x", "pm", "/sdcard/evil.apk");
@@ -93,7 +93,7 @@ public final class PrivRulesTest {
         sh(true, "am start -a android.intent.action.VIEW -d https://example.com");
         sh(true, "am start-activity -n com.x/.A");
         sh(true, "echo hi > /sdcard/a.txt");
-        sh(true, "dumpsys battery >> /sdcard/cccodroid/b.txt");
+        sh(true, "dumpsys battery >> /sdcard/agycodroid/b.txt");
         sh(true, "dumpsys wifi");
         sh(true, "dumpsys -t 5 usagestats");
         sh(true, "dumpsys bluetooth_manager");
@@ -117,7 +117,7 @@ public final class PrivRulesTest {
         // 11-01 独立审查：裸 dumpsys、全机日志、读共享存储
         sh(true, "dumpsys");
         sh(true, "dumpsys 2>/dev/null");
-        sh(true, "logcat -d -t 200 | grep cccodroid");
+        sh(true, "logcat -d -t 200 | grep agycodroid");
         want(true, "/system/bin/logcat", "-d");
         sh(true, "cat /sdcard/DCIM/a.jpg");
         sh(true, "head -c 100 /storage/emulated/0/Download/x");
@@ -211,7 +211,7 @@ public final class PrivRulesTest {
         sh(true, "service call phone 1");
         sh(true, "content insert --uri content://settings/secure --bind name:s:x --bind value:s:y");
         sh(true, "am instrument -w com.evil/.Runner");
-        sh(true, "am broadcast -a android.intent.action.BOOT_COMPLETED -n cc.codroid/.SysEvents");
+        sh(true, "am broadcast -a android.intent.action.BOOT_COMPLETED -n cc.agyroid/.SysEvents");
         sh(true, "echo hi; pm install x.apk");
         sh(true, "true && pm grant a b");
         sh(true, "(pm uninstall x)");
@@ -245,7 +245,7 @@ public final class PrivRulesTest {
         want(true, "/system/bin/pm", "install", "x");
         want(true, "/system/bin/sh", "/sdcard/x.sh");
         // 引号里的通配、普通的花括号命令组不算
-        sh(true, "logcat -d | grep 'cc.codroid*'");
+        sh(true, "logcat -d | grep 'cc.agyroid*'");
         sh(false, "{ echo a; echo b; }");
         sh(false, "pm list packages | grep install");
         sh(true, "printf '\\160\\155' > /x");

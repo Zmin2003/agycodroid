@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { CFG, PREFIX, log, tz } from "./config.mjs";
-import { claudeBlocked, claudeCmd, claudeEnv, ensureShell, killTree } from "./claude.mjs";
+import { agyBlocked, agyCmd, agyEnv, ensureShell, killTree } from "./agy.mjs";
 import { SID_RE, skillDirOk, zipReadAsync } from "./sessionops.mjs";
 import { NEXT, readBody, readBodyBuf, sendJson } from "./http.mjs";
 import { termEnv } from "./terminal.mjs";
@@ -17,17 +17,19 @@ import { modulesInfo } from "./modules.mjs";
 import { RETENTION_DAYS } from "./retention.mjs";
 
 // ── 扩展：插件 / 技能 / MCP ───────────────────────────────────────────
-// 全部转给 claude 自己的命令行（claude plugin … / claude mcp …），网关不自己改它的配置文件 ——
-// 格式随 claude 版本变，自己写迟早写坏。技能目录（~/.claude/skills）例外：它就是一堆文件夹，没有命令。
+// MCP 命令转给 agy 自己的命令行（agy mcp …），网关不自己改它的配置文件 ——
+// 改了配置 agy 下次启动才生效，界面上「已改」会骗人。
+// 插件 / 市场 / 技能 / 钩子是 Claude Code 专属，Antigravity CLI 没有：路由直接 400（见 routeExtensions）。
+// 格式随 agy 版本变，自己写迟早写坏。技能目录（~/.claude/skills）例外：它就是一堆文件夹，没有命令。
 // 同一时刻只跑一个改配置的命令，免得两个安装同时写 settings.json。
 let EXT_LOCK = Promise.resolve();
 function extRun(args, timeoutMs = 180000) {
-  const job = EXT_LOCK.then(() => claudeBlocked()).then((blocked) => blocked ? { code: -1, out: "", err: blocked } : new Promise((resolve) => {
-    const [cmd0, args0] = claudeCmd(args);
+  const job = EXT_LOCK.then(() => agyBlocked()).then((blocked) => blocked ? { code: -1, out: "", err: blocked } : new Promise((resolve) => {
+    const [cmd0, args0] = agyCmd(args);
     const ucb = writes ? ucAppBegin() : null;
     const child = spawn(cmd0, args0, {
       cwd: fs.existsSync(CFG.workspace) ? CFG.workspace : CFG.home,
-      env: claudeEnv(), stdio: ["ignore", "pipe", "pipe"], detached: true,
+      env: agyEnv(), stdio: ["ignore", "pipe", "pipe"], detached: true,
     });
     let out = "", err = "";
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
@@ -61,7 +63,7 @@ async function pluginState(withAvailable) {
   const fresh = PLUGIN_CATALOG && Date.now() - PLUGIN_CATALOG.at < 600000;
   const r = await extRun(["plugin", "list", "--json", ...(withAvailable && !fresh ? ["--available"] : [])], 120000);
   const j = lastJson(r.out);
-  if (!j) throw new Error(cliMsg(r) || "claude plugin list 没有输出");
+  if (!j) throw new Error(cliMsg(r) || "agy plugin list 没有输出");
   const installed = Array.isArray(j) ? j : j.installed || [];
   if (!Array.isArray(j) && j.available) PLUGIN_CATALOG = { at: Date.now(), list: j.available };
   return installed;
@@ -128,7 +130,7 @@ async function marketplaceOp(op, arg) {
   return r.code === 0 ? { ok: true } : { ok: false, message: cliMsg(r) };
 }
 
-/** claude mcp list 只有给人看的文本：「名字: 目标 - ✔ Connected」。顺带做了连通检查，所以慢几秒 */
+/** agy mcp list 只有给人看的文本（格式按 Claude 的「名字: 目标 - ✔ Connected」猜的，agy 的实际输出还没在真机上看过，解析对不上就返回空列表，别报错）。顺带做了连通检查，所以慢几秒 */
 async function listMcp() {
   const r = await extRun(["mcp", "list"], 90000);
   const out = [];
@@ -260,15 +262,15 @@ async function execEdit(name, newName, nd, oldDef) {
 // 技能：~/.claude/skills/<名字>/SKILL.md（开头 YAML 里有 name / description）
 // ── Hooks：到某个时刻自动跑的命令（claude 的 settings.json 里 "hooks" 一个键） ──
 // claude 没有管 hooks 的命令行，只能直接改 settings.json：只动 hooks 一个键，其余原样保留；
-// 「暂停全部」不写 disableAllHooks —— 它会连网关挂的敏感操作再确认一起关掉，网关因此每轮显式压成 false（见 claude.mjs settingsArgs），
-// 改成把规则挪到旁边的 <settings>.ccapp-paused 里，恢复时挪回去；以前存的 disableAllHooks:true 头一次读写时照这个办法转过来。
+// 「暂停全部」不写 disableAllHooks —— agy 没有 PreToolUse 钩子这套东西，这行只是留着的旧注释（见 extensions.mjs 里的钩子路由，已返回 400）。
+// 改成把规则挪到旁边的 <settings>.agyapp-paused 里，恢复时挪回去；以前存的 disableAllHooks:true 头一次读写时照这个办法转过来。
 // 写前留一份 .bak，和插件安装共用 EXT_LOCK，免得两边同时写。三处配置：用户级（所有项目）、项目级、项目本机级。
 const HOOK_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "UserPromptSubmit", "Stop",
   "SubagentStart", "SubagentStop", "SessionStart", "SessionEnd", "Notification", "PreCompact", "PostCompact",
   "InstructionsLoaded", "ConfigChange", "TaskCompleted", "TeammateIdle", "WorktreeCreate", "Setup"];
 const HOOK_SCRIPTS_DIR = path.join(CFG.home, ".claude", "hooks");
 // 常用规则用到的小脚本（源码在 claude-apk/hooks/，用 hooks/embed.mjs 生成这一行）；添加规则时写进 ~/.claude/hooks/
-const HOOK_SCRIPTS = {"cc-autosave.mjs":"// cccodroid 内置 hook（Claude 答完一轮时）：项目是 git 仓库、且有改动，就自动提交一次存档。只提交，不推送。\n// 用法：node cc-autosave.mjs '自动存档'   （参数是提交说明的前缀，后面自动加时间）\nimport fs from \"node:fs\";\nimport { execFileSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cwd = j.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();\nconst git = (...a) => execFileSync(\"git\", a, { cwd, encoding: \"utf8\", stdio: [\"ignore\", \"pipe\", \"pipe\"] });\ntry { if (git(\"rev-parse\", \"--is-inside-work-tree\").trim() !== \"true\") process.exit(0); } catch { process.exit(0); }\ntry {\n  if (!git(\"status\", \"--porcelain\").trim()) process.exit(0);\n  git(\"add\", \"-A\");\n  const id = [];\n  try { git(\"config\", \"user.name\"); } catch { id.push(\"-c\", \"user.name=cccodroid\"); }\n  try { git(\"config\", \"user.email\"); } catch { id.push(\"-c\", \"user.email=autosave@cccodroid.local\"); }\n  const d = new Date(), p = (n) => String(n).padStart(2, \"0\");\n  const when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;\n  git(...id, \"commit\", \"-q\", \"-m\", `${process.argv[2] || \"自动存档\"} ${when}`);\n} catch (e) {\n  process.stderr.write(\"自动存档失败：\" + String(e.stderr || e.message).slice(0, 300) + \"\\n\");\n}\n","cc-bash-log.mjs":"// cccodroid 内置 hook（用完工具之后，只管 Bash）：把 Claude 跑过的命令记进日志，方便事后翻看。\n// 用法：node cc-bash-log.mjs [日志文件]   默认 ~/.claude/bash-history.log\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst file = process.argv[2] || path.join(process.env.HOME || \".\", \".claude\", \"bash-history.log\");\nconst d = new Date(), p = (n) => String(n).padStart(2, \"0\");\nconst when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;\ntry {\n  fs.mkdirSync(path.dirname(file), { recursive: true });\n  fs.appendFileSync(file, `${when}\\t${j.cwd || \"\"}\\n  ${cmd.replace(/\\n/g, \"\\n  \")}\\n`);\n} catch {}\n","cc-format.mjs":"// cccodroid 内置 hook（用完工具之后，管改文件的工具）：Claude 改完代码文件，用本机已装的格式化工具整理一遍。\n// 按扩展名找：ruff / black、prettier、gofmt、rustfmt、clang-format、shfmt，没装就什么也不做。\n// Markdown 和纯文本不碰（写作的稿子不该被工具改排版）。\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport { spawnSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst f = String((j.tool_input || {}).file_path || \"\");\nif (!f || !fs.existsSync(f)) process.exit(0);\nconst ext = path.extname(f).toLowerCase();\nconst T = {\n  \".py\": [[\"ruff\", \"format\", \"-q\"], [\"black\", \"-q\"]],\n  \".js\": [[\"prettier\", \"--write\", \"--log-level\", \"warn\"]], \".mjs\": 0, \".cjs\": 0, \".jsx\": 0, \".ts\": 0, \".tsx\": 0,\n  \".json\": 0, \".css\": 0, \".scss\": 0, \".html\": 0, \".vue\": 0, \".yaml\": 0, \".yml\": 0,\n  \".go\": [[\"gofmt\", \"-w\"]], \".rs\": [[\"rustfmt\", \"-q\"]],\n  \".c\": [[\"clang-format\", \"-i\"]], \".h\": 0, \".cc\": 0, \".cpp\": 0, \".hpp\": 0,\n  \".sh\": [[\"shfmt\", \"-w\"]],\n};\nlet list = T[ext];\nif (list === 0) list = [\".c\", \".h\", \".cc\", \".cpp\", \".hpp\"].includes(ext) ? T[\".c\"] : T[\".js\"];\nif (!list) process.exit(0);\nconst has = (b) => (process.env.PATH || \"\").split(\":\").some((d) => { try { fs.accessSync(path.join(d, b), fs.constants.X_OK); return true; } catch { return false; } });\nconst tool = list.find(([b]) => has(b));\nif (tool) spawnSync(tool[0], [...tool.slice(1), f], { stdio: \"ignore\", timeout: 20000 });\n","cc-guard-bash.mjs":"// cccodroid 内置 hook（用工具之前，只管 Bash）：命令里出现这些内容就拦下。\n// 用法：node cc-guard-bash.mjs 'git push --force' '/git\\s+reset\\s+--hard/'\n// 普通写法按字面查找（空白宽松匹配）；写成 /…/ 就当正则。命中退出码 2，并告诉 Claude 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst flat = cmd.replace(/\\s+/g, \" \");\nconst hit = pats.find((p) => {\n  const m = /^\\/(.+)\\/([a-z]*)$/.exec(p);\n  if (m) { try { return new RegExp(m[1], m[2]).test(cmd); } catch { return false; } }\n  return flat.includes(p.replace(/\\s+/g, \" \"));\n});\nif (hit) {\n  process.stderr.write(`这条命令触发了禁止规则「${hit}」，已拦下：\\n${cmd.slice(0, 300)}\\n换一种更安全的做法；如果确实需要，请让用户自己执行。\\n`);\n  process.exit(2);\n}\n","cc-guard-files.mjs":"// cccodroid 内置 hook（用工具之前）：不许 Claude 改动匹配这些模式的文件。\n// 用法：node cc-guard-files.mjs '.env' '*.pem' 'secrets/**'\n// 模式不带 / 时比对文件名，带 / 时比对完整路径；* 不跨目录，** 跨目录。命中就退出码 2 拦下，并告诉 Claude 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst i = j.tool_input || {};\nconst f = String(i.file_path || i.notebook_path || \"\");\nif (!f) process.exit(0);\nconst rx = (p) => new RegExp(\"^\" + p.replace(/[.+^${}()|[\\]\\\\]/g, \"\\\\$&\").replace(/\\*\\*/g, \"\\0\").replace(/\\*/g, \"[^/]*\")\n  .replace(/\\?/g, \"[^/]\").replace(/\\0/g, \".*\") + \"$\");\nconst base = f.split(\"/\").pop();\nconst hit = pats.find((p) => rx(p).test(p.includes(\"/\") ? f : base) || (p.includes(\"/\") && rx(\"**/\" + p).test(f)));\nif (hit) {\n  process.stderr.write(`这个文件受保护（规则「${hit}」），不要修改：${f}\\n如果确实需要改，请告诉用户，让用户自己处理。\\n`);\n  process.exit(2);\n}\n"};
+const HOOK_SCRIPTS = {"cc-autosave.mjs":"// agycodroid 内置 hook（Antigravity 答完一轮时）：项目是 git 仓库、且有改动，就自动提交一次存档。只提交，不推送。\n// 用法：node cc-autosave.mjs '自动存档'   （参数是提交说明的前缀，后面自动加时间）\nimport fs from \"node:fs\";\nimport { execFileSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cwd = j.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();\nconst git = (...a) => execFileSync(\"git\", a, { cwd, encoding: \"utf8\", stdio: [\"ignore\", \"pipe\", \"pipe\"] });\ntry { if (git(\"rev-parse\", \"--is-inside-work-tree\").trim() !== \"true\") process.exit(0); } catch { process.exit(0); }\ntry {\n  if (!git(\"status\", \"--porcelain\").trim()) process.exit(0);\n  git(\"add\", \"-A\");\n  const id = [];\n  try { git(\"config\", \"user.name\"); } catch { id.push(\"-c\", \"user.name=agycodroid\"); }\n  try { git(\"config\", \"user.email\"); } catch { id.push(\"-c\", \"user.email=autosave@agycodroid.local\"); }\n  const d = new Date(), p = (n) => String(n).padStart(2, \"0\");\n  const when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;\n  git(...id, \"commit\", \"-q\", \"-m\", `${process.argv[2] || \"自动存档\"} ${when}`);\n} catch (e) {\n  process.stderr.write(\"自动存档失败：\" + String(e.stderr || e.message).slice(0, 300) + \"\\n\");\n}\n","cc-bash-log.mjs":"// agycodroid 内置 hook（用完工具之后，只管 Bash）：把 Antigravity 跑过的命令记进日志，方便事后翻看。\n// 用法：node cc-bash-log.mjs [日志文件]   默认 ~/.claude/bash-history.log\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst file = process.argv[2] || path.join(process.env.HOME || \".\", \".claude\", \"bash-history.log\");\nconst d = new Date(), p = (n) => String(n).padStart(2, \"0\");\nconst when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;\ntry {\n  fs.mkdirSync(path.dirname(file), { recursive: true });\n  fs.appendFileSync(file, `${when}\\t${j.cwd || \"\"}\\n  ${cmd.replace(/\\n/g, \"\\n  \")}\\n`);\n} catch {}\n","cc-format.mjs":"// agycodroid 内置 hook（用完工具之后，管改文件的工具）：Antigravity 改完代码文件，用本机已装的格式化工具整理一遍。\n// 按扩展名找：ruff / black、prettier、gofmt、rustfmt、clang-format、shfmt，没装就什么也不做。\n// Markdown 和纯文本不碰（写作的稿子不该被工具改排版）。\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport { spawnSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst f = String((j.tool_input || {}).file_path || \"\");\nif (!f || !fs.existsSync(f)) process.exit(0);\nconst ext = path.extname(f).toLowerCase();\nconst T = {\n  \".py\": [[\"ruff\", \"format\", \"-q\"], [\"black\", \"-q\"]],\n  \".js\": [[\"prettier\", \"--write\", \"--log-level\", \"warn\"]], \".mjs\": 0, \".cjs\": 0, \".jsx\": 0, \".ts\": 0, \".tsx\": 0,\n  \".json\": 0, \".css\": 0, \".scss\": 0, \".html\": 0, \".vue\": 0, \".yaml\": 0, \".yml\": 0,\n  \".go\": [[\"gofmt\", \"-w\"]], \".rs\": [[\"rustfmt\", \"-q\"]],\n  \".c\": [[\"clang-format\", \"-i\"]], \".h\": 0, \".cc\": 0, \".cpp\": 0, \".hpp\": 0,\n  \".sh\": [[\"shfmt\", \"-w\"]],\n};\nlet list = T[ext];\nif (list === 0) list = [\".c\", \".h\", \".cc\", \".cpp\", \".hpp\"].includes(ext) ? T[\".c\"] : T[\".js\"];\nif (!list) process.exit(0);\nconst has = (b) => (process.env.PATH || \"\").split(\":\").some((d) => { try { fs.accessSync(path.join(d, b), fs.constants.X_OK); return true; } catch { return false; } });\nconst tool = list.find(([b]) => has(b));\nif (tool) spawnSync(tool[0], [...tool.slice(1), f], { stdio: \"ignore\", timeout: 20000 });\n","cc-guard-bash.mjs":"// agycodroid 内置 hook（用工具之前，只管 Bash）：命令里出现这些内容就拦下。\n// 用法：node cc-guard-bash.mjs 'git push --force' '/git\\s+reset\\s+--hard/'\n// 普通写法按字面查找（空白宽松匹配）；写成 /…/ 就当正则。命中退出码 2，并告诉 Antigravity 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst flat = cmd.replace(/\\s+/g, \" \");\nconst hit = pats.find((p) => {\n  const m = /^\\/(.+)\\/([a-z]*)$/.exec(p);\n  if (m) { try { return new RegExp(m[1], m[2]).test(cmd); } catch { return false; } }\n  return flat.includes(p.replace(/\\s+/g, \" \"));\n});\nif (hit) {\n  process.stderr.write(`这条命令触发了禁止规则「${hit}」，已拦下：\\n${cmd.slice(0, 300)}\\n换一种更安全的做法；如果确实需要，请让用户自己执行。\\n`);\n  process.exit(2);\n}\n","cc-guard-files.mjs":"// agycodroid 内置 hook（用工具之前）：不许 Antigravity 改动匹配这些模式的文件。\n// 用法：node cc-guard-files.mjs '.env' '*.pem' 'secrets/**'\n// 模式不带 / 时比对文件名，带 / 时比对完整路径；* 不跨目录，** 跨目录。命中就退出码 2 拦下，并告诉 Antigravity 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst i = j.tool_input || {};\nconst f = String(i.file_path || i.notebook_path || \"\");\nif (!f) process.exit(0);\nconst rx = (p) => new RegExp(\"^\" + p.replace(/[.+^${}()|[\\]\\\\]/g, \"\\\\$&\").replace(/\\*\\*/g, \"\\0\").replace(/\\*/g, \"[^/]*\")\n  .replace(/\\?/g, \"[^/]\").replace(/\\0/g, \".*\") + \"$\");\nconst base = f.split(\"/\").pop();\nconst hit = pats.find((p) => rx(p).test(p.includes(\"/\") ? f : base) || (p.includes(\"/\") && rx(\"**/\" + p).test(f)));\nif (hit) {\n  process.stderr.write(`这个文件受保护（规则「${hit}」），不要修改：${f}\\n如果确实需要改，请告诉用户，让用户自己处理。\\n`);\n  process.exit(2);\n}\n"};
 
 function hookSettingsFile(scope, dir) {
   if (scope === "user") return path.join(CFG.home, ".claude", "settings.json");
@@ -291,7 +293,7 @@ function readSettingsFile(file) {
     return { j, exists: true };
   } catch (e) { return { error: e.message, badJson: true, exists: true }; }
 }
-const pausedFile = (file) => file + ".ccapp-paused";
+const pausedFile = (file) => file + ".agyapp-paused";
 function readPaused(file) {
   try { const raw = readSmallFile(pausedFile(file), 1 << 20); if (raw == null) return null; const h = JSON.parse(raw); return h && typeof h === "object" && !Array.isArray(h) ? h : null; } catch { return null; }
 }
@@ -394,7 +396,7 @@ function installHookScripts() {
 }
 /** 试运行用的 stdin：照 claude 真实传给 hook 的 JSON 造一份（工具类事件按匹配规则挑个像样的工具） */
 function hookSample(ev, matcher, cwd) {
-  const base = { session_id: "cccodroid-test", transcript_path: "", cwd, permission_mode: "default", hook_event_name: ev };
+  const base = { session_id: "agycodroid-test", transcript_path: "", cwd, permission_mode: "default", hook_event_name: ev };
   const m = String(matcher || "");
   const tool = !m || m === "*" || /Bash/.test(m) ? "Bash" : /Write/.test(m) ? "Write" : /Edit/.test(m) ? "Edit" : (m.match(/[A-Za-z_]+/) || ["Bash"])[0];
   const input = tool === "Bash" ? { command: "echo hello", description: "test" }
@@ -408,7 +410,7 @@ function hookSample(ev, matcher, cwd) {
     case "Stop": case "SubagentStop": return { ...base, stop_hook_active: false };
     case "SessionStart": return { ...base, source: m && !/[|*]/.test(m) ? m : "startup" };
     case "SessionEnd": return { ...base, reason: "other" };
-    case "Notification": return { ...base, message: "Claude needs your permission to use Bash", notification_type: "permission_prompt" };
+    case "Notification": return { ...base, message: "Antigravity needs your permission to use Bash", notification_type: "permission_prompt" };
     case "PreCompact": case "PostCompact": return { ...base, trigger: "manual", custom_instructions: "" };
     default: return base;
   }
@@ -471,7 +473,7 @@ function listSkills() {
   try { for (const f of fs.readdirSync(COMP_DIR)) if (f.endsWith(".json")) { const r = compRecord(f.slice(0, -5)); if (r && r.skill) fromComp.set(r.skill, f.slice(0, -5)); } } catch {}
   return ents.filter((d) => d.isDirectory() || d.isSymbolicLink()).map((d) => {
     const m = skillMeta(path.join(SKILLS_DIR, d.name));
-    // 组件技能的 SKILL.md 是中文写的（给 Claude 看的触发说明）：非中文界面显示组件索引里的英文简介
+    // 组件技能的 SKILL.md 是中文写的（给 Antigravity 看的触发说明）：非中文界面显示组件索引里的英文简介
     const cid = fromComp.get(d.name) || "", ce = cid && compIndexCache.data && compIndexCache.data.components[cid];
     // 没有 SKILL.md 的目录也列出来（orphan）：官方目录里同名安装会提示「已有同名技能」，这里不列就删不掉，
     // 用户在「显示未安装 / 安装说同名」之间打转（195-J.10）
@@ -555,7 +557,7 @@ const mcpTarget = (d) => {
   return (String(d.url || [d.command, ...(Array.isArray(d.args) ? d.args : [])].filter((x) => x != null).join(" ")).slice(0, 300)
     + (env ? ` [env: ${env}]` : "") + (hdr ? ` [headers: ${hdr}]` : "")).slice(0, 500);
 };
-/** 停用 = 先把定义存进停用名单，再用 claude mcp remove 拿掉；remove 失败就把名单退回去 */
+/** 停用 = 先把定义存进停用名单，再用 agy mcp remove 拿掉；remove 失败就把名单退回去 */
 async function disableMcp(name) {
   if (!extIdOk(name) || badArg(name)) return { ok: false, message: tz("名字格式不对") };
   const def = userMcpDef(name);
@@ -568,7 +570,7 @@ async function disableMcp(name) {
   log(`MCP ${name} 已停用`);
   return { ok: true };
 }
-/** 启用 = claude mcp add-json 把存着的定义加回去，成功了才从名单里删 */
+/** 启用 = agy mcp add-json 把存着的定义加回去，成功了才从名单里删 */
 async function enableMcp(name) {
   const off = extOff(), def = extIdOk(name) ? off.mcp[name] : null;
   if (!def) return { ok: false, message: tz("停用名单里没有它") };
@@ -621,11 +623,11 @@ function deleteSkill(dir) {
   return { ok: true };
 }
 // ── 官方目录：技能（anthropics/skills）与 MCP 注册表（registry.modelcontextprotocol.io）──
-// 只读公开目录；装卸都落在用户自己的 ~/.claude：技能拷进 skills/，MCP 走 claude mcp add（见 addMcp）。
+// 只读公开目录；装卸都落在用户自己的 ~/.claude：技能拷进 skills/，MCP 走 agy mcp add（见 addMcp）。
 const SKILL_REPO = "anthropics/skills";
 let skillCat = null;                 // { at, sha, items }：一小时内复用，GitHub 未登录的 API 一小时只给 60 次
 const ghGet = async (url, json) => {
-  const r = await fetch(url, { headers: { "User-Agent": "cccodroid", ...(json ? { Accept: "application/vnd.github+json" } : {}) }, signal: AbortSignal.timeout(20000) });
+  const r = await fetch(url, { headers: { "User-Agent": "agycodroid", ...(json ? { Accept: "application/vnd.github+json" } : {}) }, signal: AbortSignal.timeout(20000) });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return json ? r.json() : Buffer.from(await r.arrayBuffer());
 };
@@ -681,7 +683,7 @@ async function installCatalogSkill(dir) {
 
 // MCP 注册表：任何人都能发布，没人审 —— 界面写明，装 npm 包前把命令亮给人看。
 // 本机能直接用的两种：远程（streamable-http / sse）和 npm 包（npx 起 stdio）。pypi / docker 的标成装不了
-const onPath = (bin) => String(claudeEnv().PATH || "").split(":").some((d) => d && fs.existsSync(path.join(d, bin)));
+const onPath = (bin) => String(agyEnv().PATH || "").split(":").some((d) => d && fs.existsSync(path.join(d, bin)));
 async function listMcpCatalog(q, cursor) {
   const u = new URL("https://registry.modelcontextprotocol.io/v0/servers");
   u.searchParams.set("version", "latest"); u.searchParams.set("limit", "30");
@@ -763,12 +765,12 @@ async function importSkill(buf) {
     if (fs.existsSync(dst) || dirs.includes(dir)) { skipped.push({ name: dir, why: tz("已有同名技能") }); continue; }
     // 先写进临时目录，整个写完再改名过去：写到一半失败（满盘）不留下没有 SKILL.md 的半截目录占着名字（#151-2）。
     // 临时目录在 .claude 下、不在用户配置的监控范围里，和技能目录同一个文件系统，改名是原子的
-    const tmp = path.join(path.dirname(SKILLS_DIR), ".ccapp-skill-import-" + crypto.randomBytes(4).toString("hex"));
+    const tmp = path.join(path.dirname(SKILLS_DIR), ".agyapp-skill-import-" + crypto.randomBytes(4).toString("hex"));
     try {
       for (const f of files) {
         if (!f.name.startsWith(root)) continue;
         let rel = f.name.slice(root.length);
-        if (f === md) rel = "SKILL.md";       // 统一成 Claude 认的大写文件名
+        if (f === md) rel = "SKILL.md";       // 统一成 Antigravity 认的大写文件名
         if (!rel || rel.split("/").some((x) => !x || x === "." || x === "..")) continue;
         if (rel === ".cc-source.json") continue;   // 来源记录只由官方目录安装时写：导入的包自带一份就能冒充「官方」（11-03 审查 I-13）
         const out = path.join(tmp, rel);
@@ -791,26 +793,18 @@ export const _extForTest = { importSkill, zipEntryCount, setSkillMode, disableMc
 // ── 路由：/api/ext/ ──
 export async function routeExtensions(req, res, u, p) {
   // ── 扩展：插件 / 市场 / MCP / 技能 ──
+  // 插件、市场、技能、钩子是 Claude Code 专属，Antigravity CLI 没有：直接 400，界面不展示入口。
+  const unsupported = (what) => sendJson(res, 400, { ok: false, error: tz("{what}是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持", { what }) });
   if (p.startsWith("/api/ext/")) {
     const body = req.method === "POST" && p !== "/api/ext/skills/import" ? JSON.parse((await readBody(req)) || "{}") : {};
     try {
-      if (req.method === "GET" && p === "/api/ext/plugins") {
-        return sendJson(res, 200, await listPlugins(u.searchParams.get("q"), Number(u.searchParams.get("offset")) || 0, u.searchParams.get("available") === "1"));
-      }
-      if (req.method === "POST" && p === "/api/ext/plugins/install") {
-        const r = await installPlugin(String(body.id || ""), body.accept ? String(body.accept) : null);
-        if (r.ok) log(`装了插件 ${body.id}`);
-        return sendJson(res, 200, r);
-      }
+      if (req.method === "GET" && p === "/api/ext/plugins") return unsupported("插件");
+      if (req.method === "POST" && p === "/api/ext/plugins/install") return unsupported("插件");
       const op = p.match(/^\/api\/ext\/plugins\/(uninstall|enable|disable)$/);
-      if (req.method === "POST" && op) {
-        const r = await pluginOp(op[1], String(body.id || ""));
-        if (r.ok) log(`插件 ${op[1]} ${body.id}`);
-        return sendJson(res, 200, r);
-      }
-      if (req.method === "GET" && p === "/api/ext/marketplaces") return sendJson(res, 200, { items: await listMarketplaces() });
-      if (req.method === "POST" && p === "/api/ext/marketplaces/add") return sendJson(res, 200, await marketplaceOp("add", String(body.source || "").trim()));
-      if (req.method === "POST" && p === "/api/ext/marketplaces/remove") return sendJson(res, 200, await marketplaceOp("remove", String(body.name || "")));
+      if (req.method === "POST" && op) return unsupported("插件");
+      if (req.method === "GET" && p === "/api/ext/marketplaces") return unsupported("插件市场");
+      if (req.method === "POST" && p === "/api/ext/marketplaces/add") return unsupported("插件市场");
+      if (req.method === "POST" && p === "/api/ext/marketplaces/remove") return unsupported("插件市场");
       if (req.method === "GET" && p === "/api/ext/mcp") return sendJson(res, 200, { items: await listMcp() });
       if (req.method === "GET" && p === "/api/ext/mcp/get") return sendJson(res, 200, await getMcp({ name: u.searchParams.get("name") }));
       if (req.method === "POST" && p === "/api/ext/mcp/edit") return sendJson(res, 200, await editMcp(body));
@@ -819,29 +813,20 @@ export async function routeExtensions(req, res, u, p) {
       if (req.method === "POST" && p === "/api/ext/mcp/disable") return sendJson(res, 200, await disableMcp(String(body.name || "")));
       if (req.method === "POST" && p === "/api/ext/mcp/enable") return sendJson(res, 200, await enableMcp(String(body.name || "")));
       if (req.method === "POST" && p === "/api/ext/mcp/forget") return sendJson(res, 200, forgetMcp(String(body.name || "")));
-      if (req.method === "POST" && p === "/api/ext/skills/mode") return sendJson(res, 200, await setSkillMode(String(body.dir || ""), String(body.mode || "")));
+      if (req.method === "POST" && p === "/api/ext/skills/mode") return unsupported("技能");
       if (req.method === "GET" && p === "/api/ext/off") { const o = extOff(); return sendJson(res, 200, { comp: o.comp, mod: o.mod }); }
       if (req.method === "POST" && p === "/api/ext/off") return sendJson(res, 200, await setOff(String(body.kind || ""), String(body.id || ""), !!body.on));
-      if (req.method === "GET" && p === "/api/ext/skills") {
-        if (PREFIX) await compIndex(false).catch(() => {});   // 组件技能的英文简介来自索引（有缓存，一般不联网）
-        return sendJson(res, 200, { items: listSkills(), dir: SKILLS_DIR, sealed: sealed() });
-      }
-      if (req.method === "GET" && p === "/api/ext/catalog/skills") return sendJson(res, 200, await listSkillCatalog(u.searchParams.get("refresh") === "1"));
-      if (req.method === "POST" && p === "/api/ext/catalog/skills/install") return sendJson(res, 200, await installCatalogSkill(String(body.dir || "")));
+      if (req.method === "GET" && p === "/api/ext/skills") return unsupported("技能");
+      if (req.method === "GET" && p === "/api/ext/catalog/skills") return unsupported("技能");
+      if (req.method === "POST" && p === "/api/ext/catalog/skills/install") return unsupported("技能");
       if (req.method === "GET" && p === "/api/ext/catalog/mcp") return sendJson(res, 200, await listMcpCatalog(u.searchParams.get("q"), u.searchParams.get("cursor")));
-      if (req.method === "POST" && p === "/api/ext/skills/delete") return sendJson(res, 200, deleteSkill(String(body.dir || "")));
-      if (req.method === "GET" && p === "/api/ext/hooks") return sendJson(res, 200, { ...listHooks(u.searchParams.get("dir")), sealed: sealed() });
-      if (req.method === "GET" && p === "/api/ext/hooks/file") {
-        try { return sendJson(res, 200, hooksFileView(u.searchParams.get("scope") || "user", u.searchParams.get("dir"))); }
-        catch (e) { return sendJson(res, 200, { ok: false, message: e.message }); }
-      }
-      if (req.method === "POST" && p === "/api/ext/hooks/save") {
-        try { return sendJson(res, 200, await saveHooks(body)); }
-        catch (e) { return sendJson(res, 200, { ok: false, code: e.code, message: e.message }); }
-      }
-      if (req.method === "POST" && p === "/api/ext/hooks/scripts") return sendJson(res, 200, installHookScripts());
-      if (req.method === "POST" && p === "/api/ext/hooks/test") return sendJson(res, 200, await testHook(body));
-      if (req.method === "POST" && p === "/api/ext/skills/import") return sendJson(res, 200, await importSkill(await readBodyBuf(req, 64 * 1024 * 1024)));
+      if (req.method === "POST" && p === "/api/ext/skills/delete") return unsupported("技能");
+      if (req.method === "GET" && p === "/api/ext/hooks") return unsupported("钩子");
+      if (req.method === "GET" && p === "/api/ext/hooks/file") return unsupported("钩子");
+      if (req.method === "POST" && p === "/api/ext/hooks/save") return unsupported("钩子");
+      if (req.method === "POST" && p === "/api/ext/hooks/scripts") return unsupported("钩子");
+      if (req.method === "POST" && p === "/api/ext/hooks/test") return unsupported("钩子");
+      if (req.method === "POST" && p === "/api/ext/skills/import") return unsupported("技能");
     } catch (e) { return sendJson(res, 200, { ok: false, message: e.message }); }
     return sendJson(res, 404, { error: "not found" });
   }

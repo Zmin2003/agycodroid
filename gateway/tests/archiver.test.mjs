@@ -12,8 +12,8 @@ import { CFG } from "../gw/config.mjs";
 
 // 用仓库里随 APK 走的那份 7-Zip；本机跑不了（不是 arm64 安卓）就跳过要 7-Zip 的用例
 const SEVEN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "android", "prebuilt", "libcc7zz.so");
-if (!process.env.CCAPP_7ZZ) process.env.CCAPP_7ZZ = SEVEN;
-const have7z = spawnSync(process.env.CCAPP_7ZZ, ["i"], { stdio: "ignore" }).status === 0;
+if (!process.env.AGAPP_7ZZ) process.env.AGAPP_7ZZ = SEVEN;
+const have7z = spawnSync(process.env.AGAPP_7ZZ, ["i"], { stdio: "ignore" }).status === 0;
 const { routeArc, archiveList, childrenOf, cleanEntry, uniquePath } = await import("../gw/archiver.mjs");
 const { zipList } = await import("../gw/zipread.mjs");
 

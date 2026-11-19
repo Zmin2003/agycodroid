@@ -1,4 +1,5 @@
-// 用户级配置留痕（gw/userconf.mjs）、之前的对话留下的进程（gw/leftover.mjs）、钩子注入可见、设置文件被外部改写、输出风格只列用户目录
+// 用户级配置留痕（gw/userconf.mjs）、之前的对话留下的进程（gw/leftover.mjs）、设置文件被外部改写、输出风格只列用户目录
+// 旧版“钩子注入可见”（stream.mjs 的 hookContext）已不存在：agy 没有钩子往上下文里塞东西。
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +9,6 @@ import { spawn } from "node:child_process";
 import { CFG, PATHS } from "../gw/config.mjs";
 import { UC_SEALED, _ucFlush, _ucReset, ucAfterRun, ucAppBegin, ucAppWrote, ucBeforeRun, ucKeep, ucPending, ucRevert, ucSetRevertNote, ucTakeNote } from "../gw/userconf.mjs";
 import { _keptReset, keepProcs, killProcs, leftoverProcs, procStart } from "../gw/leftover.mjs";
-import { hookContext } from "../gw/stream.mjs";
 import { transcriptItems } from "../gw/transcript.mjs";
 
 // CI 的 Linux 没有 /system/bin/sh（#113 同款）
@@ -18,7 +18,7 @@ import { SETTINGS, outputStyles, saveSettings, settingsDiskCheck } from "../gw/s
 const H = (rel) => path.join(CFG.home, rel);
 const put = (rel, s) => { fs.mkdirSync(path.dirname(H(rel)), { recursive: true }); fs.writeFileSync(H(rel), s); };
 function fresh() {
-  for (const r of [".claude", ".claude.json", ".ccapp-userconf", "ccapp-userconf.json"]) fs.rmSync(H(r), { recursive: true, force: true });
+  for (const r of [".claude", ".claude.json", ".agyapp-userconf", "agyapp-userconf.json"]) fs.rmSync(H(r), { recursive: true, force: true });
   _ucReset();
 }
 
@@ -72,7 +72,7 @@ test("CLAUDE.md 被改：撤销按副本写回；新冒出来的 skill 挪进隔
   assert.equal(ucPending(), null);
 });
 
-test("插件目录里 Claude Code 自己记的 .in_use/<pid>、.orphaned_at 不算改动；同目录别的文件、链接、大文件照样问", () => {
+test("插件目录里 Antigravity CLI 自己记的 .in_use/<pid>、.orphaned_at 不算改动；同目录别的文件、链接、大文件照样问", () => {
   fresh();
   const V = ".claude/plugins/cache/mk/rev/1.5.0";
   put(V + "/hooks/hooks.json", "{}");
@@ -102,9 +102,9 @@ test("升级前认下过的运行标记：从确认记录里剔掉，删了也�
   const V = ".claude/plugins/cache/mk/rev/1.5.0";
   put(V + "/hooks/hooks.json", "{}");
   ucKeep(ucPending().rels);
-  const rec = JSON.parse(fs.readFileSync(H("ccapp-userconf.json"), "utf8"));
+  const rec = JSON.parse(fs.readFileSync(H("agyapp-userconf.json"), "utf8"));
   rec.files[V + "/.in_use/7412"] = "deadbeef";
-  fs.writeFileSync(H("ccapp-userconf.json"), JSON.stringify(rec));
+  fs.writeFileSync(H("agyapp-userconf.json"), JSON.stringify(rec));
   _ucReset();
   assert.equal(ucPending(), null);
 });
@@ -113,7 +113,7 @@ test("副本也被改了：还原后对不上，报没法还原", () => {
   fresh();
   put(".claude/CLAUDE.md", "原来的\n");
   ucKeep(ucPending().rels);
-  for (const f of fs.readdirSync(H(".ccapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".ccapp-userconf"), f), "被换掉的副本\n");
+  for (const f of fs.readdirSync(H(".agyapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".agyapp-userconf"), f), "被换掉的副本\n");
   put(".claude/CLAUDE.md", "改了\n");
   assert.deepEqual(ucRevert(ucPending().rels).failed, [".claude/CLAUDE.md"]);
 });
@@ -153,7 +153,7 @@ test("运行期间改的：卡片上标出来；撤销后给模型的提醒只�
 });
 
 test("留下的进程：带已结束轮次编号的列出来；还在跑的那轮不算；保留后不再列；结束会连子孙一起", async () => {
-  const c = spawn(SH, ["-c", "sleep 30 & wait"], { env: { ...process.env, CCAPP_RUN_ID: "gone-1", CCAPP_GW_PORT: String(CFG.port), CCAPP_GW_PID: String(process.pid), HOME: CFG.home }, detached: true, stdio: "ignore" });
+  const c = spawn(SH, ["-c", "sleep 30 & wait"], { env: { ...process.env, AGAPP_RUN_ID: "gone-1", AGAPP_GW_PORT: String(CFG.port), AGAPP_GW_PID: String(process.pid), HOME: CFG.home }, detached: true, stdio: "ignore" });
   await new Promise((r) => setTimeout(r, 300));
   try {
     assert.ok(!leftoverProcs(new Map([["gone-1", procStart(c.pid)]])).some((p) => p.pid === c.pid), "还在跑的轮次不算");
@@ -172,7 +172,7 @@ test("留下的进程：带已结束轮次编号的列出来；还在跑的那�
 });
 
 test("#167 保留的看护后来起的子进程不再问；网关重启后照认；命令行对不上不认；别的照问", async () => {
-  const env = { ...process.env, CCAPP_RUN_ID: "gone-2", CCAPP_GW_PORT: String(CFG.port), CCAPP_GW_PID: String(process.pid), HOME: CFG.home };
+  const env = { ...process.env, AGAPP_RUN_ID: "gone-2", AGAPP_GW_PORT: String(CFG.port), AGAPP_GW_PID: String(process.pid), HOME: CFG.home };
   const c = spawn(SH, ["-c", "while :; do sleep 0.1; done"], { env, detached: true, stdio: "ignore" });
   const other = spawn(SH, ["-c", "sleep 30 & wait"], { env, detached: true, stdio: "ignore" });
   await sleep(300);
@@ -188,7 +188,7 @@ test("#167 保留的看护后来起的子进程不再问；网关重启后照认
     _keptReset();
     l = leftoverProcs(new Map());
     assert.ok(!mineOrKids(l), "网关重启后照认");
-    const f = H("ccapp-leftover-kept.json"), j = JSON.parse(fs.readFileSync(f, "utf8"));
+    const f = H("agyapp-leftover-kept.json"), j = JSON.parse(fs.readFileSync(f, "utf8"));
     for (const k of Object.keys(j.kept)) j.kept[k] = "别的命令";
     fs.writeFileSync(f, JSON.stringify(j));
     _keptReset();
@@ -196,14 +196,10 @@ test("#167 保留的看护后来起的子进程不再问；网关重启后照认
     fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(JSON.stringify(j)), boot: "x" }));
     _keptReset();
     assert.ok(leftoverProcs(new Map()).some((p) => p.pid === c.pid), "换了开机不认");
-  } finally { for (const x of [c, other]) try { process.kill(-x.pid, "SIGKILL"); } catch {} fs.rmSync(H("ccapp-leftover-kept.json"), { force: true }); _keptReset(); }
+  } finally { for (const x of [c, other]) try { process.kill(-x.pid, "SIGKILL"); } catch {} fs.rmSync(H("agyapp-leftover-kept.json"), { force: true }); _keptReset(); }
 });
 
-test("钩子注入可见：stream 的 hook_response 和会话记录里的 hook_additional_context", () => {
-  assert.equal(hookContext({ hook_event: "UserPromptSubmit", stdout: JSON.stringify({ hookSpecificOutput: { additionalContext: "执行核" } }), exit_code: 0 }), "执行核");
-  assert.equal(hookContext({ hook_event: "SessionStart", stdout: "纯文本也会进上下文\n", exit_code: 0 }), "纯文本也会进上下文");
-  assert.equal(hookContext({ hook_event: "PreToolUse", stdout: JSON.stringify({ hookSpecificOutput: { permissionDecision: "ask" } }), exit_code: 0 }), "");
-  assert.equal(hookContext({ hook_event: "PostToolUse", stdout: "普通输出", exit_code: 0 }), "");
+test("会话记录里的 hook_additional_context 附件仍按 hookctx 显示（旧记录兼容）", () => {
   const it = transcriptItems({ type: "attachment", attachment: { type: "hook_additional_context", content: ["HOOKMARK"], hookEvent: "UserPromptSubmit" } });
   assert.deepEqual(it, [{ role: "hookctx", event: "UserPromptSubmit", text: "HOOKMARK" }]);
 });
@@ -217,13 +213,14 @@ test("设置文件网关跑着时被外部改写：按内存写回", () => {
   assert.equal(fs.readFileSync(PATHS.settings, "utf8"), before);
 });
 
-test("输出风格只列内置和用户目录里的，工作区里别人放的不列", () => {
+test("输出风格只列内置的两档：agy 不读 ~/.claude/output-styles，工作区里别人放的也不列", () => {
   put(".claude/output-styles/mine.md", "---\nname: Mine\n---\n");
   const ws = path.join(CFG.workspace, ".claude/output-styles");
   fs.mkdirSync(ws, { recursive: true });
   fs.writeFileSync(path.join(ws, "probe.md"), "---\nname: Probe\ndescription: 输出格式检查\n---\n每条回答第一行写 [T]\n");
   const ids = outputStyles().map((o) => o.id);
-  assert.ok(ids.includes("Mine"));
+  assert.deepEqual(ids, ["Explanatory", "Learning"]);
+  assert.ok(!ids.includes("Mine"));
   assert.ok(!ids.includes("Probe"));
   fs.rmSync(path.join(CFG.workspace, ".claude"), { recursive: true, force: true });
 });
@@ -313,7 +310,7 @@ test("副本被换了还原不成：现在的样子挪进隔离目录，不留�
   fresh();
   put(".claude/CLAUDE.md", "原来的\n");
   ucKeep(ucPending().rels);
-  for (const f of fs.readdirSync(H(".ccapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".ccapp-userconf"), f), "被换掉的副本\n");
+  for (const f of fs.readdirSync(H(".agyapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".agyapp-userconf"), f), "被换掉的副本\n");
   put(".claude/CLAUDE.md", "改了\n");
   const r = ucRevert(ucPending().rels);
   assert.deepEqual(r.failed, [".claude/CLAUDE.md"]);
@@ -330,8 +327,8 @@ test("设置文件现在不是合法 JSON：撤销前先拷进隔离目录", () 
   fs.writeFileSync(H(".claude/settings.json"), "{ 坏了");
   const r = ucRevert(p.rels);
   assert.ok(r.quarantine === null || fs.existsSync(r.quarantine));
-  const q = fs.readdirSync(H(".ccapp-userconf/quarantine"));
-  assert.ok(q.some((d) => fs.existsSync(path.join(H(".ccapp-userconf/quarantine"), d, ".claude/settings.json"))));
+  const q = fs.readdirSync(H(".agyapp-userconf/quarantine"));
+  assert.ok(q.some((d) => fs.existsSync(path.join(H(".agyapp-userconf/quarantine"), d, ".claude/settings.json"))));
 });
 
 test("超过 30 项：剩下的也列出名字", () => {
@@ -345,7 +342,7 @@ test("超过 30 项：剩下的也列出名字", () => {
 });
 
 test("留下的进程冒充正在跑的那一轮：起得比那一轮早，照样列", async () => {
-  const c = spawn(SH, ["-c", "sleep 30"], { env: { ...process.env, CCAPP_RUN_ID: "live-1", CCAPP_GW_PORT: String(CFG.port), CCAPP_GW_PID: String(process.pid), HOME: CFG.home }, detached: true, stdio: "ignore" });
+  const c = spawn(SH, ["-c", "sleep 30"], { env: { ...process.env, AGAPP_RUN_ID: "live-1", AGAPP_GW_PORT: String(CFG.port), AGAPP_GW_PID: String(process.pid), HOME: CFG.home }, detached: true, stdio: "ignore" });
   await sleep(300);
   try {
     const later = spawn(SH, ["-c", "sleep 5"], { detached: true, stdio: "ignore" });

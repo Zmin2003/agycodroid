@@ -2,7 +2,7 @@
 // 用来验证 server.mjs 登记了每天一次的回收站清理，并且 .unref() 过（不拦着退出）。
 import fs from "node:fs";
 
-const file = process.env.CCAPP_B3_PROBE;
+const file = process.env.AGAPP_B3_PROBE;
 const timers = [];
 const orig = globalThis.setInterval;
 globalThis.setInterval = function (fn, ms, ...rest) {

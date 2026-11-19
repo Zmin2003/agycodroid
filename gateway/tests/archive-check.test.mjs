@@ -81,7 +81,7 @@ function makeZip(entries) {
 }
 
 test("zip 中央目录：软链按 unix 模式认出来，经软链写的拒绝", () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "zip-"));
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "zip-"));
   const bad = path.join(dir, "bad.zip"), good = path.join(dir, "good.zip");
   fs.writeFileSync(bad, makeZip([{ name: "link", mode: 0o120777, data: "/outside/dir" }, { name: "link/evil.txt", data: "x" }]));
   fs.writeFileSync(good, makeZip([{ name: "pkg/", mode: 0o040755 }, { name: "pkg/bin/foo", mode: 0o100755, data: "#!/bin/sh\n" }]));
@@ -96,7 +96,7 @@ test("zip 中央目录：软链按 unix 模式认出来，经软链写的拒绝"
 // 有 GNU tar 时（CI、Linux 开发机）用真 tar 打一个穿链包，走真实的列目录命令
 const gnu = spawnSync("tar", ["--version"], { encoding: "utf8" });
 test("真 GNU tar：穿链包被认出来", { skip: !/GNU tar/.test(gnu.stdout || "") && "没有 GNU tar" }, () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "tar-"));
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "tar-"));
   const src = path.join(dir, "src"); fs.mkdirSync(src);
   fs.symlinkSync("/outside/dir", path.join(src, "link"));
   // 第二个条目名叫 link/evil.txt：用 --transform 把普通文件改名进去

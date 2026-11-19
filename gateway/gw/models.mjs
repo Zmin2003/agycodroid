@@ -1,38 +1,26 @@
-import fs from "node:fs";
-import path from "node:path";
-import { CFG, PATHS, log } from "./config.mjs";
-import { isObj, loadState, saveState } from "./statefile.mjs";
 import { SETTINGS } from "./settings-store.mjs";
-import { PROVIDER, fetchKeyed, keyOf, modelsUrlOk, providerBrief, providerById } from "./providers.mjs";
-import { NEXT, fetchJsonCapped, sendJson } from "./http.mjs";
-import { localModels } from "./local.mjs";
+import { PROVIDER, keyOf, providerBrief, providerById } from "./providers.mjs";
+import { NEXT, sendJson } from "./http.mjs";
 import { effectiveModel } from "./sessmodel.mjs";
 import { effectiveAutoCompact } from "./stream.mjs";
 
-// ── 模型清单（按厂商拉，10 分钟缓存，失败用该厂商的 fallback）─────────
-// MODELS 是全局生效那家的清单（老代码直接读它）；每家各自的缓存在 CACHE（0.3.16 起各会话可以用不同的家）
+// ── 模型清单：静态的，没有 /models 可拉 ─────────────────────────────
+// agy 没有公开的模型列表接口，官方文档只给过一个例子 slug（gemini-3.8-flash-medium）。
+// 所以清单 = 那个文档示例 + 用户在接口卡里自己加的 slug（extraModels）。
+// 不要在这里编一串模型名：用户想用什么 slug 直接填，agy 不认识的会在 headless 下直接报错退出，
+// 不会静默换一个（见 README）。
 export let MODELS = null, MODELS_AT = 0, MODELS_FOR = null;
-const CACHE = new Map();   // 厂商 id → { list, at, sig }
-// 清单按「这家此刻的配置」存取：保存前拿到的旧接口对象晚些才去拉，拉回来也只记在旧指纹名下，新配置读不到（#77 复核 M1）。
-// MODELS_FOR 存的也是指纹：切了全局接口，上一家的 MODELS 不会被当成新家的
-// 前提：接口对象的字段不原地改（改配置都走 upsertProvider / applyProvider 整体换新对象），否则 WeakMap 里的指纹会过时
-const SIGS = new WeakMap();
-function sigOf(p) {
-  let s = SIGS.get(p);
-  if (s === undefined) { s = JSON.stringify([p.id, p.baseUrl, p.modelsUrl, p.modelsAuth, p.defaultModel, p.fastModel, p.contextWindow, p.fallbackModels, p.extraModels]); SIGS.set(p, s); }
-  return s;
-}
+const CACHE = new Map();   // 接口 id → { list, at }
+const EXAMPLE_MODELS = [
+  { id: "gemini-3.8-flash-medium", name: "gemini-3.8-flash-medium", context_window: 0, max_output_tokens: 0, input_modalities: ["text"], effort: { supported_levels: ["low", "medium", "high", "xhigh", "max"], default_level: null } },
+];
 
-/** 把不同厂商的 /models 响应归一成同一种形状。
- *  两家形状不同：DeepSeek 用 context_window/max_output_tokens/effort.supported_levels，
- *  官方 /v1/models 用 max_input_tokens/max_tokens/capabilities.*（能力位里带 supported 标记）。 */
+/** 把不同厂商的 /models 响应归一成同一种形状（保留：测试和 extraModels 校验还在用它）。 */
 export function normalizeModels(j) {
   const raw = Array.isArray(j && j.data) ? j.data
             : Array.isArray(j && j.models) ? j.models : [];
   return raw.filter((m) => m && m.id).map((m) => {
     const caps = m.capabilities || {};
-    // 官方形状：effort 档位散在 capabilities.effort 底下，键名就是档位名
-    // 只收形状对的：档位进命令行，supported_levels 不是数组的话 includes 直接抛错（v0514 复核）
     const LV = ["low", "medium", "high", "xhigh", "max"];
     let effort = m.effort && typeof m.effort === "object" && Array.isArray(m.effort.supported_levels)
       ? { supported_levels: m.effort.supported_levels.filter((x) => LV.includes(x)), default_level: LV.includes(m.effort.default_level) ? m.effort.default_level : null }
@@ -42,13 +30,11 @@ export function normalizeModels(j) {
         .filter((k) => caps.effort[k] && caps.effort[k].supported);
       if (lv.length) effort = { supported_levels: lv, default_level: "high" };
     }
-    // 只认已知的输入类型：这串会显示在界面上，厂商 / 第三方接口返回什么都不能原样透传（审查 v0.5.5 Web-M1）
     let mods = Array.isArray(m.input_modalities) ? m.input_modalities.filter((x) => ["text", "image", "audio", "video", "pdf", "document", "file"].includes(x)) : null;
     if (!mods || !mods.length) {
       const img = caps.image_input && caps.image_input.supported;
       mods = img ? ["text", "image"] : ["text"];
     }
-    // id / 名字限长：清单可以是导入配置里的内嵌 data:，选中的 id 会进 claude 的命令行（v0514 复核）
     return {
       id: String(m.id).slice(0, 200),
       name: String(m.name || m.display_name || m.id).slice(0, 200),
@@ -60,202 +46,40 @@ export function normalizeModels(j) {
   });
 }
 
-/** 走官方账户登录（且没填密钥）时：凭据只归 claude 自己管。
- *  Anthropic 条款：第三方不得收集、保存或中转 claude.ai 凭据/会话令牌，登录须走官方流程。
- *  所以这种情况下网关既不读 .credentials.json，也不让请求经过本地桥 —— claude 直连官方。 */
 // ── 输入栏模型选单列哪几家 ──
 // 以前「走登录」「本机」一律算能用：没登录的官方账户、没下过模型的端侧也挂在选单里，点了用不了（群友 10-31）。
-// 官方账户：login.mjs 每次问过 claude auth status 都报到这里；网关刚起还没问过，就看凭据文件在不在。
-// 端侧：下过模型（或用自己配的 local-mode.json）才算。用户还能在设置里把某家从选单里藏起来（hidden），配置照留
+// Google 账户：login.mjs 每次探过登录态都报到这里；网关刚起还没问过，就当没登录（不再读 ~/.claude/.credentials.json——
+// agy 的凭据不在那里）。用户还能在设置里把某家从选单里藏起来（hidden），配置照留
 let LOGGED_IN = null;
 export function noteLoggedIn(v) { LOGGED_IN = v == null ? null : !!v; }   // null = 当没问过（测试复位用）
-const loginReady = () => (LOGGED_IN != null ? LOGGED_IN : fs.existsSync(path.join(CFG.home, ".claude", ".credentials.json")));
-// 每次开选单都扫模型目录不值当：结果记 5 秒
-let LOCAL_AT = 0, LOCAL_OK = false;
-const localReady = () => {
-  if (SETTINGS.localMode === "custom") return true;
-  if (Date.now() - LOCAL_AT > 5000) { LOCAL_OK = localModels().length > 0; LOCAL_AT = Date.now(); }
-  return LOCAL_OK;
-};
+const loginReady = () => LOGGED_IN === true;
 export function providerList() {
   const hide = new Set(Array.isArray(SETTINGS.hiddenProviders) ? SETTINGS.hiddenProviders : []);
   return providerBrief().map((p) => ({
     ...p,
-    usable: p.keyMode === "key" ? p.usable : p.login ? loginReady() : p.local ? localReady() : p.usable,
+    usable: p.keyMode === "key" ? p.usable : p.login ? loginReady() : p.usable,
     hidden: hide.has(p.id),
   }));
 }
 
 export function isLoginMode(p = PROVIDER) { return !!(p && p.login && !keyOf(p)); }
 
-// 登录态拉不了清单（那要用令牌，我们不碰），给一份静态的；厂商配置里写了 fallbackModels 就用那份。
-// 别名排前面：claude 自己把它解析成该系列的最新版，最不容易过时。
-// 窗口一开始不知道（官方清单要令牌才能拉），跑过一轮后从 result.modelUsage 学到，见 learnWindow。
-const LOGIN_MODELS = [
-  ["opus", "Opus（最新）"], ["sonnet", "Sonnet（最新）"], ["haiku", "Haiku（最新）"], ["fable", "Fable（最新）"],
-  // 当前主推
-  ["claude-fable-5-2", "Fable 5.2"], ["claude-opus-5-5", "Opus 5.5"],
-  ["claude-sonnet-5-5", "Sonnet 5.5"], ["claude-haiku-5-5", "Haiku 5.5"],
-  // 仍在架的上一代 / 旧代
-  ["claude-fable-5-1", "Fable 5.1"], ["claude-fable-5", "Fable 5"],
-  ["claude-opus-5", "Opus 5"], ["claude-opus-4-8", "Opus 4.8"], ["claude-opus-4-7", "Opus 4.7"],
-  ["claude-opus-4-6", "Opus 4.6"], ["claude-opus-4-5-20251101", "Opus 4.5"],
-  ["claude-sonnet-5", "Sonnet 5"], ["claude-sonnet-4-6", "Sonnet 4.6"],
-  ["claude-haiku-4-5-20251001", "Haiku 4.5"],
-  // limited availability：要有 Anthropic 验证项目，普通账户可能 403/404
-  ["claude-mythos-5-2", "Mythos 5.2（受限）"], ["claude-mythos-5-1", "Mythos 5.1（受限）"],
-  ["claude-mythos-5", "Mythos 5（受限）"],
-].map(([id, name]) => ({ id, name, context_window: 0, max_output_tokens: 0, input_modalities: ["text", "image"] }));
-
-// claude --effort 认的全部档位（claude --help 原文：low, medium, high, xhigh, max）。
-// 原生厂商的模型不带档位信息时就用这一套 —— 以前回落成 DeepSeek 的三档，medium/xhigh 凭空消失。
-const CLAUDE_EFFORT = ["low", "medium", "high", "xhigh", "max"];
+// agy 的 --effort 认的全部档位（官方文档：low, medium, high, xhigh, max）。
+// 官方没有公布哪个模型支持哪几档，所以全部五档都给，CLI 自己校验（不认识的组合会在 headless 下报错退出）。
+const AGY_EFFORT = ["low", "medium", "high", "xhigh", "max"];
 export function effortLevelsOf(model, p = PROVIDER) {
-  // 清单可能来自用户可改的 ccapp-providers.json：supported_levels 不是数组时不能原样返回，
-  // 否则调用方的 .includes/.join 会抛 TypeError（审查 11-05）
   const lv = model && model.effort && model.effort.supported_levels;
-  return Array.isArray(lv) ? lv : (p.nativeModels ? CLAUDE_EFFORT : ["low", "high", "max"]);
+  return Array.isArray(lv) ? lv : AGY_EFFORT;
 }
 
-// 从 result.modelUsage 学到的真实窗口（按模型 id 记，落盘）—— 官方账户拿不到 /models，只能这样补
-// 文件是合法原语（null / 数字）时以前 learnWindow 往它身上写属性直接 TypeError，在 child close 回调里把网关带走（P1-16 / 195-Z.9）
-const windowsShape = (j) => {
-  if (!isObj(j)) return undefined;
-  const out = {};
-  for (const [k, v] of Object.entries(j)) {
-    if (!isObj(v)) continue;
-    const cw = Number(v.context_window);
-    if (!Number.isFinite(cw) || cw <= 0) continue;
-    out[k] = { context_window: cw, max_output_tokens: Number(v.max_output_tokens) || 0 };
-  }
-  return out;
-};
-let WINDOWS = loadState(PATHS.windows, { shape: windowsShape, fallback: () => ({}) }).data;
-export function learnWindow(result, p = PROVIDER) {
-  if (!p.nativeModels) return;
-  let changed = false;
-  for (const [id, u] of Object.entries((result && result.modelUsage) || {})) {
-    const w = { context_window: Number(u && u.contextWindow) || 0, max_output_tokens: Number(u && u.maxOutputTokens) || 0 };
-    if (!w.context_window) continue;
-    // 别名也记一份（opus → claude-opus-5-5 是 init 里看到的），下次列表里别名那项也有窗口
-    for (const k of [id, ...Object.keys(ALIAS_SEEN).filter((a) => ALIAS_SEEN[a] === id)]) {
-      if (JSON.stringify(WINDOWS[k]) !== JSON.stringify(w)) { WINDOWS[k] = w; changed = true; }
-    }
-  }
-  if (changed) saveState(PATHS.windows, WINDOWS);
-}
-/** 别名（opus）学不到窗口 —— modelUsage 里记的是全名；别名就借 init 报过的那个全名 */
+/** agy 不报上下文窗口：learnWindow 是空操作（保留导出名，调用方照调）。 */
+export function learnWindow(result, p = PROVIDER) {}
+/** 别名（init 里报的实际模型名） */
 export const ALIAS_SEEN = {};
-export function withWindows(list) {
-  return list.map((m) => {
-    const w = WINDOWS[m.id];
-    return w && !m.context_window ? { ...m, ...w } : m;
-  });
-}
+export function withWindows(list) { return list; }   // 没有窗口可补，原样返回
 
-// ── 目录补全：厂商 /models 只报 id 时，用 models.dev 的公开目录补窗口 ──
-// 不少兼容端点（比如 opencode 的 /v1/models）只回 id/created/owned_by，窗口和输出上限都没有，
-// 清单里就只剩「—」。models.dev 是公开的模型目录，按 id 能查到上下文档位。
-// 只补厂商没报的字段，不覆盖它自己给的值；拉不到就留空，不瞎编。
-const CATALOG_URL = "https://models.dev/api.json";
-const CATALOG_TTL = 12 * 3600e3, CATALOG_BACKOFF = 30 * 60e3;
-let CAT = null, CAT_AT = 0, CAT_TRY = null, CAT_FAIL_AT = 0;
-
-/** 把 models.dev 的原始 JSON 编成两张表：按厂商、按 id。纯函数，单测直接用。
- *  同一个 id 在多家目录里窗口可能不一样：按出现次数取多数，免得被冷门厂商的旧值带偏。 */
-export function buildCatalog(j) {
-  const byProv = new Map(), votes = new Map();
-  for (const [pid, pv] of Object.entries(j || {})) {
-    const m = new Map();
-    for (const [mid, mv] of Object.entries((pv && pv.models) || {})) {
-      const lim = (mv && mv.limit) || {};
-      const ctx = Number(lim.context) || 0;
-      if (!ctx) continue;
-      const v = { context_window: ctx, max_output_tokens: Number(lim.output) || 0 };
-      m.set(mid, v);
-      let vs = votes.get(mid);
-      if (!vs) votes.set(mid, vs = new Map());
-      const k = v.context_window + "/" + v.max_output_tokens;
-      vs.set(k, (vs.get(k) || 0) + 1);
-    }
-    if (m.size) byProv.set(pid, m);
-  }
-  const byId = new Map();
-  for (const [mid, vs] of votes) {
-    let best = "", n = 0;
-    for (const [k, c] of vs) if (c > n) { n = c; best = k; }
-    const [ctx, out] = best.split("/").map(Number);
-    byId.set(mid, { context_window: ctx, max_output_tokens: out });
-  }
-  return { byProv, byId };
-}
-
-async function loadCatalog() {
-  if (CAT && Date.now() - CAT_AT < CATALOG_TTL) return CAT;
-  if (CAT_TRY) return CAT_TRY;
-  if (Date.now() - CAT_FAIL_AT < CATALOG_BACKOFF) return null;
-  CAT_TRY = (async () => {
-    try {
-      const r = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(9000) });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await fetchJsonCapped(r, 32 << 20);   // models.dev 全量目录，几 MB
-      CAT = buildCatalog(j); CAT_AT = Date.now(); CAT_FAIL_AT = 0;
-      log(`[catalog] models.dev 已载入：${CAT.byProv.size} 家 / ${CAT.byId.size} 个型号`);
-      return CAT;
-    } catch (e) {
-      CAT_FAIL_AT = Date.now();
-      log(`[catalog] 拉 models.dev 失败：${e.message}`);
-      return null;
-    } finally { CAT_TRY = null; }
-  })();
-  return CAT_TRY;
-}
-
-/** 这家厂商在目录里对应哪几家：先看配置里写死的 catalog，再按 baseUrl 的域名猜
- *  （opencode.ai 的订阅端点在 /go/ 下，目录里分 opencode 和 opencode-go 两份） */
-export function catalogKeys(p) {
-  const keys = [];
-  if (p.catalog) keys.push(String(p.catalog));
-  let host = "";
-  try { host = new URL(p.baseUrl || "").hostname; } catch {}
-  const name = (host.split(".")[0] || "").replace(/^api$/, host.split(".")[1] || "");
-  if (name) keys.push(name + "-go", name);
-  return keys;
-}
-
-/** 补窗口的纯函数：先按这家的 catalog key 找，再退回全目录里同 id 的多数票。
- *  只补空着的字段，厂商自己报的值一律不动。 */
-export function applyCatalog(list, cat, keys) {
-  if (!cat || !list.some((m) => !m.context_window)) return list;
-  const maps = (keys || []).map((k) => cat.byProv.get(k)).filter(Boolean);
-  return list.map((m) => {
-    if (m.context_window) return m;
-    let lim = null;
-    for (const mp of maps) { lim = mp.get(m.id); if (lim) break; }
-    if (!lim) lim = cat.byId.get(m.id);
-    if (!lim) return m;
-    return { ...m, context_window: lim.context_window, max_output_tokens: m.max_output_tokens || lim.max_output_tokens };
-  });
-}
-
-// 目录有 6 MB，国内常要好几秒、甚至撞上超时：不让模型清单干等。没有就后台去拉，先出不带窗口的清单；
-// 拉到后让清单缓存过期，下次打开设置就补上。过期的旧目录照用，后台换新
-/** 自定义接口在设置里写的默认/快速模型：上游不给清单时也列出来，面板里点得到（#66 第 5 项）。
- *  窗口用用户在接口设置里声明的 contextWindow（只给这两个型号补），没声明就是 0 = 不知道，不瞎编（#67） */
-export function withConfigured(list, p) {
-  if (!p || !p.custom || p.local || p.login) return list;
-  const n = Number(p.contextWindow), cw = okWindow(n) ? n : 0;   // 手改配置文件塞的怪值不认
-  const ids = [...new Set([p.defaultModel, p.fastModel].filter((x) => typeof x === "string" && x))];
-  const one = (id, w) => ({ id, context_window: w, max_output_tokens: 0, input_modalities: ["text"], effort: null, configured: true });
-  const out = !list.length ? ids.map((id) => one(id, cw))
-    : cw ? list.map((m) => (ids.includes(m.id) && !m.context_window ? { ...m, context_window: cw, configured: true } : m)) : list;
-  // 用户在接口卡里另加的型号（第三方端口清单拉不到、或清单里没有的）：接在后面，没写窗口的按这家声明的窗口算
-  const more = extraModelsOf(p).filter((e) => !out.some((m) => m.id === e.id));
-  return more.length ? [...out, ...more.map((e) => one(e.id, e.contextWindow || cw))] : out;
-}
-const okWindow = (n) => Number.isInteger(n) && n >= 1024 && n <= 16777216;
-// 模型名由上游决定：除了英文，也有第三方调用用中文、方括号标价格（如「中转的中转:[特价C]claude-fable-5」）。
-// 只挡空白、逗号和控制 / 格式字符（换行、零宽、双向覆盖），其余交给上游；长度仍限 128。
+// 模型名由用户决定：除了英文，也有中文、方括号标价格的。
+// 只挡空白、逗号和控制 / 格式字符（换行、零宽、双向覆盖），其余交给 agy；长度仍限 128。
 export const MODEL_ID_RE = /^[^\s,\p{Cc}\p{Cf}]{1,128}$/u;
 /** 接口卡里另加的型号：[{ id, contextWindow }]。配置能分享导入、也能手改，按形状过一遍，最多 64 个 */
 export function extraModelsOf(p) {
@@ -269,183 +93,37 @@ export function extraModelsOf(p) {
   }
   return out;
 }
-
-// 先 withConfigured 再 withCatalog：用户在接口设置里明说的窗口优先于公共目录按名字猜的（#102 04-001）。
-// withConfigured 补出来的型号（configured）目录不碰：声明了就用声明的，没声明就是不知道（#67）
-function withCatalog(list, p) {
-  if (!list.some((m) => !m.context_window && !m.configured)) return list;
-  if (!CAT || Date.now() - CAT_AT >= CATALOG_TTL) loadCatalog().then((c) => { if (c) expireModelCache(); });
-  if (!CAT) return list;
-  const done = applyCatalog(list.map((m) => m.configured ? { ...m, context_window: m.context_window || -1 } : m), CAT, catalogKeys(p));
-  return done.map((m) => m.context_window === -1 ? { ...m, context_window: 0 } : m);
-}
+const okWindow = (n) => Number.isInteger(n) && n >= 1024 && n <= 16777216;
 
 // 清空 / 让它过期：别的模块改不了这几个变量（ES 模块的导入是只读的），走这两个函数
-// 代次：接口配置一改就加一。改之前发出去、改之后才回来的清单请求只交给当时的调用方，不再写回缓存（#77）
-let CACHE_GEN = 0, REQ_SEQ = 0;
-export function dropModelCache() { CACHE_GEN++; MODELS = null; MODELS_AT = 0; MODELS_FOR = null; CACHE.clear(); }
-export function expireModelCache() { CACHE_GEN++; MODELS_AT = 0; for (const c of CACHE.values()) c.at = 0; }   // 在途的旧结果别把过期的又续上（复核 L1）
+export function dropModelCache() { MODELS = null; MODELS_AT = 0; MODELS_FOR = null; CACHE.clear(); }
+export function expireModelCache() { MODELS_AT = 0; for (const c of CACHE.values()) c.at = 0; }
 
-/** p：哪家（缺省 = 全局生效的）。按家各缓存 10 分钟；全局那家的结果同时放进 MODELS。
- *  guess：自定义端口没填清单地址时去猜 /models。只在用户打开清单（面板、/model）时猜：开跑前要等清单，
- *  连不上的端口逐个试要白等好几个 15 秒 */
-export async function fetchModels(force, p = PROVIDER, { guess = false } = {}) {
-  const gen = CACHE_GEN, list = await fetchModelsOf(p, force, guess);
-  // 全局那份跟着按家缓存走：并发刷新时缓存里留的是后发起的那次（见 keep），这里不按完成顺序另写一份
-  if (gen === CACHE_GEN && p.id === PROVIDER.id) { const c = CACHE.get(p.id); MODELS = c && c.sig === sigOf(p) ? c.list : list; MODELS_AT = Date.now(); MODELS_FOR = sigOf(p); }
-  return list;
-}
-async function fetchModelsOf(p, force, guess) {
-  const sig = sigOf(p), c0 = CACHE.get(p.id), c = c0 && c0.sig === sig ? c0 : null, gen = CACHE_GEN, seq = ++REQ_SEQ;
-  // 同一配置两次刷新重叠、先发的后回来：不许盖掉后发的结果（#102 04-002）
-  const keep = (list, ttl = true) => {
-    const cur = CACHE.get(p.id);
-    if (gen === CACHE_GEN && !(cur && cur.sig === sig && cur.seq > seq)) CACHE.set(p.id, { list, at: ttl ? Date.now() : 0, sig, seq });
-    return list;
-  };
-  if (!force && c && c.at && Date.now() - c.at < 600000) return c.list;
-
-  if (p.local) return keep(localModels(), false);   // 端侧：模型目录里有什么就是什么（每次现扫，刚放进去的文件马上能选）
-  if (isLoginMode(p)) return keep((p.fallbackModels && p.fallbackModels.length) ? p.fallbackModels : LOGIN_MODELS);
-
-  // 写在配置里的内嵌清单（data:application/json,…）：本地解析，不发请求、不带密钥，网络那边的同主机限制不用放宽（#57）
-  const inline = inlineModels(p.modelsUrl);
-  if (inline) {
-    const list = withCatalog(withConfigured(mergeKnown(inline, p.fallbackModels, true), p), p);
-    if (list.length) return keep(list);
-  }
-
-  const key = keyOf(p);
-  // 一次拉取：头按 modelsAuth 配；拉到像样的清单返回 list，否则 null（失败原因记日志）
-  const pull = async (url) => {
-    try {
-      const headers = {};
-      if (key) {
-        if (p.modelsAuth === "x-api-key") {
-          headers["x-api-key"] = key;
-          headers["anthropic-version"] = "2023-06-01";
-        } else if (p.modelsAuth !== "none") {
-          headers.Authorization = `Bearer ${key}`;
-        }
-      }
-      const r = await fetchKeyed(url, { headers, signal: AbortSignal.timeout(15000) });
-      if (r.ok) {
-        const list = withCatalog(withConfigured(mergeKnown(normalizeModels(await morePages(url, headers, await fetchJsonCapped(r))), p.fallbackModels), p), p);
-        if (list.length) {
-          log(`[${p.id}] 模型清单：${list.map((m) => m.id).join(", ")}`);
-          return list;
-        }
-      }
-      log(`[${p.id}] 拉模型清单失败 HTTP ${r.status}${url !== p.modelsUrl ? `（试 ${url}）` : ""}`);
-    } catch (e) {
-      log(`[${p.id}] 拉模型清单出错: ${e.message}${url !== p.modelsUrl ? `（试 ${url}）` : ""}`);
-    }
-    return null;
-  };
-  // 不带密钥（modelsAuth:"none"）也一样要过 modelsUrlOk：配置能分享导入，不能让它拿网关当跳板，每轮去敲内网地址（v0513b 中-2）
-  if (p.modelsUrl && (key || p.modelsAuth === "none") && modelsUrlOk(p)) {
-    const list = await pull(p.modelsUrl);
-    if (list) return keep(list);
-  } else if (!p.modelsUrl && p.custom && key && (guess || GUESSED.has(sig))) {
-    // 自定义端口没填清单地址：按接口地址猜几个同主机的 /models（第三方端口多半同时开着 OpenAI 形状的清单）。
-    // 只试和接口同主机同端口的地址（照样过 modelsUrlOk），密钥不会被带去别处；猜中的记在这份配置名下，下次直接用
-    const hit = GUESSED.get(sig);
-    for (const url of hit ? [hit] : guessModelsUrls(p.baseUrl)) {
-      if (!modelsUrlOk({ baseUrl: p.baseUrl, modelsUrl: url })) continue;
-      const list = await pull(url);
-      if (list) { GUESSED.set(sig, url); return keep(list); }
-    }
-    if (hit) GUESSED.delete(sig);
-  }
-  // 该猜而这次没猜（开跑前那次）：先用兜底清单，但不记 10 分钟，用户打开清单时照样去猜
-  const skipped = !p.modelsUrl && p.custom && key && !guess && !GUESSED.has(sig);
-  return keep(c && c.list ? c.list
-    : withConfigured((p.fallbackModels || []).map((m) => ({ context_window: 0, max_output_tokens: 0, input_modalities: ["text"], effort: null, ...m })), p), !skipped);
-}
-// 自定义端口猜中的清单地址（按配置指纹记；改了配置指纹就变，重新猜）
-const GUESSED = new Map();
-/** 由接口地址猜清单地址：去掉末尾的 /anthropic、/v1 之类，拼 /v1/models、/models；再试主机根上的 /v1/models */
-export function guessModelsUrls(baseUrl) {
-  let u; try { u = new URL(String(baseUrl || "")); } catch { return []; }
-  const root = u.origin;
-  let p = u.pathname.replace(/\/+$/, "");
-  const out = [];
-  const add = (x) => { if (!out.includes(x)) out.push(x); };
-  for (let i = 0; i < 3; i++) {
-    const m = /\/(anthropic|claude|v1|messages)$/i.exec(p);
-    if (!m) break;
-    p = p.slice(0, -m[0].length);
-  }
-  add(root + p + "/v1/models");
-  add(root + p + "/models");
-  add(root + "/v1/models");
+/** 静态清单（见文件头）：文档示例 + 这家接口卡里用户自己加的 slug。 */
+function staticList(p) {
+  const one = (e) => ({ id: e.id, name: e.id, context_window: e.contextWindow || 0, max_output_tokens: 0, input_modalities: ["text"], effort: { supported_levels: AGY_EFFORT, default_level: null } });
+  const out = [...EXAMPLE_MODELS];
+  for (const e of extraModelsOf(p)) if (!out.some((m) => m.id === e.id)) out.push(one(e));
   return out;
 }
-/** 分页的清单（Anthropic 官方 /v1/models 默认一页 20 个，带 has_more / last_id）：顺着 after_id 接着拉，最多 10 页。
- *  不分页的厂商第一页里没有 has_more，原样返回；后面哪页出错就用已经拿到的（0.6.9 审计 195-U.7） */
-async function morePages(url, headers, j) {
-  if (!j || !Array.isArray(j.data)) return j;
-  const data = [...j.data];
-  let cur = j;
-  for (let i = 0; i < 9 && cur && cur.has_more === true && typeof cur.last_id === "string" && cur.last_id; i++) {
-    try {
-      const u = new URL(url);
-      u.searchParams.set("after_id", cur.last_id);
-      if (!u.searchParams.has("limit")) u.searchParams.set("limit", "1000");
-      const r = await fetchKeyed(u.href, { headers, signal: AbortSignal.timeout(15000) });
-      if (!r.ok) { try { await r.body?.cancel(); } catch {} break; }
-      cur = await fetchJsonCapped(r);
-      if (!cur || !Array.isArray(cur.data) || !cur.data.length) break;
-      data.push(...cur.data);
-    } catch (e) { log(`拉模型清单第 ${i + 2} 页出错: ${e.message}`); break; }
-  }
-  return { ...j, data };
-}
-/** data: 形式的内嵌清单 → 归一后的列表；不是 data: 或解不开就 null。只认 JSON，限 256 KB */
-export function inlineModels(url) {
-  if (typeof url !== "string" || !/^data:/i.test(url) || url.length > 512 << 10) return null;
-  const m = /^data:application\/json(;charset=[\w-]+)?(;base64)?,(.*)$/is.exec(url);
-  if (!m) return null;
-  try {
-    const text = m[2] ? Buffer.from(m[3], "base64").toString("utf8") : decodeURIComponent(m[3]);
-    if (text.length > 256 << 10) return null;
-    const list = normalizeModels(JSON.parse(text));
-    return list.length ? list : null;
-  } catch { return null; }
-}
 
-function cacheOf(p) { const c = CACHE.get(p.id); return c && c.sig === sigOf(p) ? c : null; }
-/** 已缓存的那家清单（不发请求）；没拉过就是目录里写的（配了内嵌清单就用它，冷启动也拿得到窗口） */
+/** p：哪家（缺省 = 全局生效的）。静态清单不需要网络，force 也一样。 */
+export async function fetchModels(force, p = PROVIDER, { guess = false } = {}) {
+  const list = staticList(p);
+  CACHE.set(p.id, { list, at: Date.now() });
+  if (p.id === PROVIDER.id) { MODELS = list; MODELS_AT = Date.now(); MODELS_FOR = p.id; }
+  return list;
+}
+/** 已缓存的那家清单（不发请求）；没拉过就现算一份静态清单 */
 export function cachedModels(p = PROVIDER) {
-  const c = cacheOf(p);
-  const list = (c && c.list) || (MODELS_FOR === sigOf(p) && MODELS);
-  if (list) return withWindows(list);
-  const inline = inlineModels(p.modelsUrl);
-  return withWindows(withConfigured(inline ? mergeKnown(inline, p.fallbackModels, true) : p.fallbackModels || [], p));
+  const c = CACHE.get(p.id);
+  if (c && c.list) return c.list;
+  return staticList(p);
 }
-/** 这家的清单拉过没有（过期的也算）：拉过就不必让这一轮干等网络 */
-export function modelsCached(p = PROVIDER) {
-  const c = cacheOf(p);
-  return !!((c && c.list) || (MODELS_FOR === sigOf(p) && MODELS));
-}
+/** 这家的清单拉过没有：静态清单永远算有 */
+export function modelsCached(p = PROVIDER) { return true; }
 
-/** 厂商的 /models 多是 OpenAI 形状：不报窗口，还混着向量、语音、画图模型。
- *  自动发现去掉明显不能对话的；用户显式内嵌的清单不凭名字过滤。窗口按同名补，不知道就留 0。 */
-function mergeKnown(list, known, configured = false) {
-  const byId = new Map((known || []).filter((m) => m && typeof m.id === "string").map((m) => [m.id, m]));
-  return list
-    .filter((m) => m && typeof m.id === "string" && (configured || !/embed|rerank|tts|asr|whisper|speech|audio|wanx|cogview|cogvideo|image-|moderation/i.test(m.id)))
-    .map((m) => {
-      const k = byId.get(m.id);
-      if (!k) return m;
-      return { ...m, name: m.name && m.name !== m.id ? m.name : (k.name || m.id),
-        context_window: m.context_window || k.context_window || 0,
-        max_output_tokens: m.max_output_tokens || k.max_output_tokens || 0,
-        effort: m.effort || k.effort || null };
-    });
-}
-
-/** claude 的 --effort 档位比 DeepSeek 多，收敛到该模型真正支持的档位。
+/** agy 的 --effort 档位收敛到该模型真正支持的档位。
  *  没设过（want 为空）就保持不设 —— 由模型自己决定，别替用户做主。 */
 export function normEffort(model, want, p = PROVIDER) {
   if (!want) return null;
@@ -454,27 +132,12 @@ export function normEffort(model, want, p = PROVIDER) {
   return (model && model.effort && model.effort.default_level) || null;
 }
 
-/** 压缩线 = min(设置的自动压缩窗口, 模型窗口)；第三方型号不知道窗口时 claude 按 200k 算 */
-/** 第三方型号没设压缩线时网关给的默认线（11-07 群友：deepseek-flash 涨到 1M 也不压缩）。
- *  网关原先对第三方带着 CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT（已去掉，见 claudeEnv），claude 这时不按阈值压，
- *  只等接口报「prompt is too long」；DeepSeek 报的是「maximum context length」，claude 认不出，于是一路涨到撞窗口，
- *  撞上之后连手动 /compact 都发不出去（全文 + 32k 输出超窗口）。所以窗口已知时总给一条线：
- *  窗口的八成，且至少给总结请求留 40k；claude 只认 100k–1M（大了按 1M、2.1.311 实测），够不着 100k 的窗口不给。
- *  原生厂商（claude 认得模型）和端侧小模型不给，见 claudeEnv */
-export function defaultCompactLine(win, p) {
-  if (!p || p.nativeModels || p.local || !(win > 0)) return null;
-  const n = Math.floor(Math.min(win * 0.8, win - 40000, 1000000) / 1000) * 1000;
-  return n >= 100000 ? n : null;
-}
-export function compactLineOf(set, win, p) {
-  if (!set) return null;
-  const w = win > 0 ? win : (p && !p.nativeModels && !p.local ? 200000 : 0);
-  return w ? Math.min(set, w) : set;
-}
+/** agy 没有 /compact、也不报窗口：压缩线恒为 null（保留导出名，调用方照调）。 */
+export function defaultCompactLine(win, p) { return null; }
+export function compactLineOf(set, win, p) { return null; }
 
 // ── 路由：/api/models ──
 export async function routeModels(req, res, u, p) {
-  // ── DeepSeek 模型清单 ──
   if (req.method === "GET" && p === "/api/models") {
     // ?sid=：按这个会话记下的接口 / 模型 / 档位回（0.3.16 起每个会话各用各的）；不给就是全局默认
     // ?model= / ?effort= / ?provider=：还没会话号的新会话在面板里先选了（前端暂存，随第一条消息带走），按选的回
@@ -491,7 +154,6 @@ export async function routeModels(req, res, u, p) {
     return sendJson(res, 200, {
       models: ms,
       current: now.model || null,
-      // 给前端判"这家用不用得着挑模型"：官方账户不挑就是用它的默认
       provider: pp.id,                       // 这个会话用的那家
       listProvider: bp.id,                   // models 是哪家的
       globalProvider: PROVIDER.id,
@@ -500,17 +162,13 @@ export async function routeModels(req, res, u, p) {
       defaultModel: bp.defaultModel || null,
       effort: now.effortRun || null,          // 真跑时的档位（跟来的档位那家不支持时已换过）
       effortLevels: effortLevelsOf(cur, pp),
-      // 原生厂商的默认档位由 claude 按模型定，我们不知道就别瞎报
-      effortDefault: (cur.effort && cur.effort.default_level) || (pp.nativeModels ? null : "high"),
-      // 真实窗口 —— 前端用量条和门限都按它算，不写死
+      effortDefault: (cur.effort && cur.effort.default_level) || null,
+      // agy 不报窗口：前端用量条和门限按 0（不知道）算，不写死
       contextWindow: Number(cur.context_window) || 0,
       maxOutputTokens: Number(cur.max_output_tokens) || 0,
       autoCompactWindow: effectiveAutoCompact(),
-      // 真正生效的压缩线：设得比模型窗口还大时，claude 按窗口来（不知道窗口的第三方型号按 200k 算），
-      // 界面别把 528k 当成压缩线报（#67）。设置页的输入框仍显示 autoCompactWindow
-      compactLine: compactLineOf(effectiveAutoCompact(), Number(cur.context_window) || 0, pp) ?? defaultCompactLine(Number(cur.context_window) || 0, pp),
-      // 没设、由网关给了默认线（第三方型号）：设置页的滑块按它画，别再说「交给 claude」
-      compactDefault: effectiveAutoCompact() ? null : defaultCompactLine(Number(cur.context_window) || 0, pp),
+      compactLine: null,
+      compactDefault: null,
     });
   }
   return NEXT;

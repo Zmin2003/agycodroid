@@ -3,36 +3,40 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { CFG, PATHS, log, tz } from "./config.mjs";
 import { isLoginMode, noteLoggedIn } from "./models.mjs";
-import { claudeArgv, claudeBlocked, claudeEnv, killTree } from "./claude.mjs";
+import { agyBlocked, agyCmd, agyEnv, killTree, runAntigravity } from "./agy.mjs";
 import { RUNS } from "./runs.mjs";
-import { providerById } from "./providers.mjs";
+import { keyOf, providerById, upsertProvider } from "./providers.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { toFront } from "./local.mjs";
-import { RATE_LIMITS, clearRateLimits } from "./stream.mjs";
 
-// ── 账户登录（OAuth 全程由 claude 自己完成；网关只转递地址，不碰凭据）────────
+// ── 账户登录（OAuth 全程由 agy 自己完成；网关只转递地址，不碰凭据）────────
 //
-// 两条路，同一个进程：
-//   自动：设了 BROWSER，claude 会把一个 redirect_uri=http://localhost:<端口>/callback 的地址
-//         交给"浏览器"，自己在那个端口等回调。手机浏览器和 claude 在同一台机器上，
-//         授权完浏览器跳回 localhost，claude 直接收到 —— 不用贴码。
-//         我们的"浏览器"是个小脚本，只把地址写进文件，由界面交给系统浏览器打开。
-//   手动：浏览器回不到 localhost 时（比如在别的设备上授权），页面会显示一个授权码。
-//         这个码网关**不经手**：界面打开一个终端跑 claude auth login，用户把码直接贴给 claude 自己的提示
-//         （终端只是通用的字节通道，和 Termux / SSH 一样）。以前的 /api/login/code 接收授权码再写进 stdin，
-//         条款要求登录走 Anthropic 自己的流程、开发者不得经手凭据，所以拿掉了。
+// 两条路：
+//   google（OAuth）：起一个裸 agy（交互式界面），它会自己打开系统浏览器完成 Google 登录，
+//         之后 headless 模式直接用缓存下来的凭据（官方文档原话：
+//         "Headless mode uses your cached credentials. Authenticate once with an interactive agy session first."）。
+//         网关尽力把授权地址递给界面：
+//           · agy 如果认 $BROWSER（Unix 惯例，未在官方文档里确认）：我们的"浏览器"是个小脚本，只把地址写进文件，由界面交给系统浏览器打开；
+//           · 否则 agy 会把授权地址打印到 stdout/stderr（SSH 流程就是这样：打印唯一授权地址，用户在本地登录，
+//             浏览器显示一串字母数字码，再贴回终端），网关从输出里扫出地址。
+//         注意：裸 agy 是交互式 TUI，没有 TTY 时它可能表现异常——最稳的路是在终端里直接跑一次 `agy`，
+//         或者走 Gemini API Key。网关这里不假装它一定能成：拿不到地址就如实报错。
+//   apikey（Gemini API Key）：不在这里登录。设置 → 接口与型号 里填 key，网关只在起 agy 子进程时
+//         把 GEMINI_API_KEY 写进那个进程的环境（agy 只从环境变量读 key，文件里配了 modelProvider: gemini
+//         但环境里没 key 时它启动不了）。
+// 以前的 /api/login/code（接收授权码再写进 stdin）没有了：授权码只贴给 agy 自己的提示，网关不经手凭据。
 let LOGIN = null;
-const LOGIN_DIR = path.join(CFG.home, ".cache", "ccapp-login");
+const LOGIN_DIR = path.join(CFG.home, ".cache", "agyapp-login");
 
 function authEnv() {
-  const env = claudeEnv();
-  for (const k of ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"]) delete env[k];
+  const P = providerById("google");
+  const env = agyEnv({ provider: P });
+  delete env.GEMINI_API_KEY;
   return env;
 }
 
-async function loginStart(flag) {
-  const blocked = await claudeBlocked();
+async function loginStart() {
+  const blocked = await agyBlocked();
   if (blocked) return { ok: false, message: blocked };
   if (LOGIN && LOGIN.child.exitCode === null) try { killTree(LOGIN.child); } catch {}
   fs.mkdirSync(LOGIN_DIR, { recursive: true });
@@ -41,9 +45,10 @@ async function loginStart(flag) {
   try { fs.unlinkSync(urlFile); } catch {}
   fs.writeFileSync(browser, '#!/system/bin/sh\nprintf "%s\\n" "$1" > "' + urlFile + '"\n', { mode: 0o700 });
   const env = { ...authEnv(), BROWSER: browser };
-  const child = spawn(PATHS.claudeLoader, claudeArgv(["auth", "login", flag]), { cwd: CFG.home, env, stdio: ["ignore", "pipe", "pipe"] });
-  const L = LOGIN = { child, out: "", startedAt: Date.now(), done: false, ok: false, flag, urlFile };
-  // 登录不完成不能永久挂：设备码流程最多 15 分钟，到点收掉子进程并把状态结掉（0.6.9 审计 195-R.9）
+  const [cmd0, args0] = agyCmd([]);
+  const child = spawn(cmd0, args0, { cwd: CFG.home, env, stdio: ["ignore", "pipe", "pipe"] });
+  const L = LOGIN = { child, out: "", startedAt: Date.now(), done: false, ok: false, urlFile };
+  // 登录不完成不能永久挂：最多 15 分钟，到点收掉子进程并把状态结掉（0.6.9 审计 195-R.9）
   const expire = setTimeout(() => {
     if (L.done) return;
     L.done = true; L.ok = false; L.out += "\n" + tz("登录超时（15 分钟）");
@@ -54,7 +59,6 @@ async function loginStart(flag) {
   const onData = (d) => { L.out += String(d); };
   child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
   child.stdout.on("data", onData); child.stderr.on("data", onData);
-  // loader 起不来（缺失/无权限/EAGAIN）只发 error：不接会把整个网关带走（#102 04-005）。runAuth 早就接了，这里补上
   child.on("error", (e) => {
     clearTimeout(expire);
     if (L.done) return;
@@ -65,12 +69,12 @@ async function loginStart(flag) {
     clearTimeout(expire);
     if (L.done) return;   // error / 超时之后可能还会补一个 close，已经结过账了
     L.done = true;
-    L.ok = code === 0 && /success/i.test(L.out);
+    L.ok = code === 0;
     log("登录：" + (L.ok ? "成功" : "结束（退出码 " + code + "）"));
-    // 浏览器授权完停在 claude 的托管成功页上，用户不知道怎么回来 —— 主动把界面叫回前台
+    // 浏览器授权完停在成功页上，用户不知道怎么回来 —— 主动把界面叫回前台
     if (L.ok) toFront("登录成功").then((r) => log("登录：回到前台 → " + (r.via || r.message || "?")));
   });
-  log("登录：已启动 claude auth login " + flag);
+  log("登录：已启动交互式 agy（Google OAuth）");
   return new Promise((resolve) => {
     const tick = setInterval(() => {
       let auto = "";
@@ -79,72 +83,41 @@ async function loginStart(flag) {
       if ((auto && manual) || L.done || Date.now() - L.startedAt > 20000) {
         clearInterval(tick);
         if (auto || manual) return resolve({ ok: true, url: auto || manual, manualUrl: manual, auto: !!auto });
-        // 20 秒还没拿到地址，但 claude 还在跑：别判失败（晚到的地址还能从 /api/login/status 取），
+        // 20 秒还没拿到地址，但 agy 还在跑：别判失败（晚到的地址还能从 /api/login/status 取），
         // 交给界面继续轮询；真退出了才算失败（0.6.9 审计 195-G.4）
         if (!L.done) return resolve({ ok: true, pending: true, url: null, message: tz("登录还在进行，拿到授权地址后会打开") });
-        resolve({ ok: false, message: tz("没拿到登录地址"), output: L.out.slice(-1500) });
+        resolve({ ok: false, message: tz("没拿到登录地址。交互式 agy 没有 TTY 时可能无法正常工作，请在终端里直接跑一次 agy 完成登录，或改用 Gemini API Key。"), output: L.out.slice(-1500) });
       }
     }, 200);
   });
 }
 
-/** 登录状态由 claude 自己报（claude auth status），网关不读凭据文件 */
-async function runAuth(args, timeoutMs = 20000) {
-  const blocked = await claudeBlocked();
-  if (blocked) return { code: -1, out: blocked };
-  return new Promise((resolve) => {
-    const child = spawn(PATHS.claudeLoader, claudeArgv(["auth", ...args]), { cwd: CFG.home, env: authEnv(), stdio: ["ignore", "pipe", "pipe"] });
-    let out = "", stdout = "";
-    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
-    child.stdout.on("data", (d) => { out += d; stdout += d; }); child.stderr.on("data", (d) => (out += d));
-    const t = setTimeout(() => { try { killTree(child); } catch {} }, timeoutMs);
-    child.on("close", (code) => { clearTimeout(t); resolve({ code, out, stdout }); });
-    child.on("error", (e) => { clearTimeout(t); resolve({ code: -1, out: e.message, stdout: "" }); });
-  });
-}
+/** 登录状态：用一次最小的 headless 调用探（`agy -p "ping" --output-format json`，30 秒超时，缓存 30 秒）。
+ *  注意这会产生一次真实的模型调用（很小），不是免费的。
+ *  成功 → 已登录；输出里有 authentication required → 未登录；别的失败（起不来、超时、解析不了）
+ *  不能当成「未登录」—— 有上次问出的就沿用并标明是旧的，没有就标「不知道」，把原因带给界面（#102 04-010）。
+ *  agy 不报账号/组织/套餐：email/org/plan 恒为 null。 */
 export let AUTH_CACHE = null;
 let AUTH_GOOD = null;   // 最后一次问出结果的状态
-/** 从 claude auth status 的 stdout 里找状态对象：优先「带 boolean loggedIn」的那一段，
- *  并从后往前找 —— 前面夹的 JSON 警告不能被当成 status（审查 11-05）。 */
-function statusJson(text) {
-  const s = String(text || ""), cands = [];
-  const push = (v) => { if (v && typeof v === "object" && !Array.isArray(v)) cands.push(v); };
-  try { push(JSON.parse(s.trim())); } catch {}
-  for (const line of s.split("\n").reverse()) {
-    const t = line.trim();
-    if (!t.includes("{")) continue;
-    try { push(JSON.parse(t)); } catch {}
-  }
-  // 兜底：整段里从第一个 { 到后面某个 } 逐个试（状态 JSON 被别的话包住时）
-  const at = s.indexOf("{");
-  for (let e = s.lastIndexOf("}"), n = 0; at >= 0 && e > at && n < 50; e = s.lastIndexOf("}", e - 1), n++) {
-    try { push(JSON.parse(s.slice(at, e + 1))); } catch {}
-  }
-  return cands.find((x) => typeof x.loggedIn === "boolean") || cands[0] || null;
-}
 export async function authStatus(force) {
   if (!force && AUTH_CACHE && Date.now() - AUTH_CACHE.at < 30000) return AUTH_CACHE.v;
-  const r = await runAuth(["status"]);
-  // 状态 JSON 走 stdout；stderr 只用于没解析出 loggedIn 时的「未登录」判断和错误提示
-  let j = statusJson(r.stdout) || statusJson(r.out) || {};
-  // 只转出界面要显示的几项；令牌之类的东西它本来也不报
-  // 问不出结果（claude 起不来、超时、输出解析不了）：不能当成「未登录」—— 有上次问出的就沿用并标明是旧的，
-  // 没有就标「不知道」，把原因带给界面（#102 04-010）
-  // 退出码是 0 也一样：解析不出 loggedIn 就不算知道（DeepSeek 复核 #2）；只有输出明说没登录才给确定的 false
-  if (typeof j.loggedIn !== "boolean" && !/not logged in|not authenticated/i.test(r.out || "")) {
-    const error = String(r.out || "").trim().split("\n").pop().slice(0, 300) || "exit " + r.code;
-    const v = AUTH_GOOD ? { ...AUTH_GOOD, stale: true, error } : { loggedIn: false, authMethod: "none", email: null, org: null, plan: null, unknown: true, error };
-    AUTH_CACHE = { at: Date.now(), v };
+  const r = await runAntigravity(["-p", "ping", "--output-format", "json"], { timeoutMs: 30000 });
+  const out = (r.out || "") + "\n" + (r.err || "");
+  if (r.code === 0) {
+    const v = { loggedIn: true, authMethod: "google", email: null, org: null, plan: null };
+    AUTH_CACHE = { at: Date.now(), v }; AUTH_GOOD = v;
+    noteLoggedIn(true);
     return v;
   }
-  const v = {
-    loggedIn: !!j.loggedIn, authMethod: j.authMethod || "none",
-    email: j.email || j.account?.email || null,
-    org: j.orgName || j.organization?.name || null,
-    plan: j.subscriptionType || j.plan || null,
-  };
-  AUTH_CACHE = { at: Date.now(), v }; AUTH_GOOD = v;
-  noteLoggedIn(v.loggedIn);
+  if (/authentication required/i.test(out)) {
+    const v = { loggedIn: false, authMethod: "none", email: null, org: null, plan: null };
+    AUTH_CACHE = { at: Date.now(), v }; AUTH_GOOD = v;
+    noteLoggedIn(false);
+    return v;
+  }
+  const error = String(out || "").trim().split("\n").pop().slice(0, 300) || "exit " + r.code;
+  const v = AUTH_GOOD ? { ...AUTH_GOOD, stale: true, error } : { loggedIn: false, authMethod: "none", email: null, org: null, plan: null, unknown: true, error };
+  AUTH_CACHE = { at: Date.now(), v };
   return v;
 }
 
@@ -152,10 +125,14 @@ export async function authStatus(force) {
 export async function routeLogin(req, res, u, p) {
   if (req.method === "POST" && p === "/api/login/start") {
     const b = JSON.parse((await readBody(req)) || "{}");
-    return sendJson(res, 200, await loginStart(b.method === "console" ? "--console" : "--claudeai"));
+    if (b.method === "apikey") {
+      return sendJson(res, 200, { ok: true, apikey: true,
+        message: tz("Gemini API Key 在 设置 → 接口与型号 里填。填好之后不用再登录，直接发消息就行。") });
+    }
+    return sendJson(res, 200, await loginStart());
   }
   if (req.method === "GET" && p === "/api/login/status") {
-    // 先置 reported 再 await：并发请求以前会各拉一次 claude auth status（0.6.9 审计 195-G.8）
+    // 先置 reported 再 await：并发请求以前会各拉一次状态探针（0.6.9 审计 195-G.8）
     const need = !!(LOGIN && LOGIN.done && !LOGIN.reported);
     if (LOGIN && LOGIN.done) LOGIN.reported = true;
     const st = await authStatus(need || u.searchParams.get("refresh") === "1");
@@ -168,7 +145,6 @@ export async function routeLogin(req, res, u, p) {
       ...st,
       pending: !!(LOGIN && !LOGIN.done),
       url: url || null,          // 20 秒后才拿到的授权地址，界面轮询时补开（0.6.9 审计 195-G.4）
-      limits: st.loggedIn && RATE_LIMITS && (!RATE_LIMITS.email || RATE_LIMITS.email === st.email) ? RATE_LIMITS : null,
       last: LOGIN && LOGIN.done ? { ok: LOGIN.ok, output: LOGIN.ok ? "" : LOGIN.out.slice(-800) } : null,
     });
   }
@@ -177,13 +153,20 @@ export async function routeLogin(req, res, u, p) {
     return sendJson(res, 200, { ok: true });
   }
   if (req.method === "POST" && p === "/api/login/logout") {
-    // 看每一轮实际用的那家，不只看全局默认：全局是第三方、某个会话单独选了官方账户时也算（审查 B19）
+    // 看每一轮实际用的那家，不只看全局默认：全局是 API Key、某个会话单独选了 Google 账户时也算（审查 B19）
     if ([...RUNS.values()].some((r) => !r.ended && isLoginMode(providerById(r.provider) || undefined))) return sendJson(res, 409, { error: "busy", message: tz("这一轮还在生成，等它跑完再退出登录。") });
-    const r = await runAuth(["logout"]);
+    const P = providerById("gemini");
+    if (P && keyOf(P)) {
+      // API Key 模式：清掉存着的 key 就等于退出
+      upsertProvider({ ...P, key: "" });
+      AUTH_CACHE = null; AUTH_GOOD = null; noteLoggedIn(false);
+      return sendJson(res, 200, { ok: true, message: tz("已清除保存的 Gemini API Key。") });
+    }
+    // OAuth 模式：`agy auth logout` 是未确认的子命令（官方文档没写），把结果原样带给界面
+    const r = await runAntigravity(["auth", "logout"], { timeoutMs: 20000 });
     AUTH_CACHE = null;
     if (r.code === 0) { noteLoggedIn(false); AUTH_GOOD = null; }
-    clearRateLimits();
-    return sendJson(res, 200, { ok: r.code === 0, output: r.out.slice(-500) });
+    return sendJson(res, 200, { ok: r.code === 0, output: (r.out + r.err).slice(-500) });
   }
   return NEXT;
 }

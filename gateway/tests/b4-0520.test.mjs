@@ -7,7 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 // 03-011 / 03-012 要在模块第一次载入前把坏文件放好：先换下别的测试留的，跑完放回
-const ARCH = path.join(CFG.home, "ccapp-archive.json");
+const ARCH = path.join(CFG.home, "agyapp-archive.json");
 const keep = (f) => { const b = fs.existsSync(f) ? fs.readFileSync(f) : null; after(() => { if (b) fs.writeFileSync(f, b); else fs.rmSync(f, { force: true }); }); };
 keep(ARCH); keep(PATHS.names);
 fs.writeFileSync(ARCH, JSON.stringify({ v: 1, sessions: [] }));
@@ -18,12 +18,12 @@ const { NAMES, findSessionFile, peekSession } = await import("../gw/sessions.mjs
 test("03-011 档案里 sessions 是数组：当坏文件，另存一份后从空的开始，之后存得住", () => {
   const db = archiveDb();
   assert.equal(Array.isArray(db.sessions), false);
-  assert.ok(fs.readdirSync(CFG.home).some((f) => f.startsWith("ccapp-archive.json.bad-")), "原文件留了底");
+  assert.ok(fs.readdirSync(CFG.home).some((f) => f.startsWith("agyapp-archive.json.bad-")), "原文件留了底");
   db.sessions["s-0520"] = { title: "x", chapters: {} };
   assert.equal(saveArchive(), true);
   assert.equal(JSON.parse(fs.readFileSync(ARCH, "utf8")).sessions["s-0520"].title, "x");
   delete db.sessions["s-0520"]; saveArchive();
-  for (const f of fs.readdirSync(CFG.home)) if (f.startsWith("ccapp-archive.json.bad-")) fs.rmSync(path.join(CFG.home, f));
+  for (const f of fs.readdirSync(CFG.home)) if (f.startsWith("agyapp-archive.json.bad-")) fs.rmSync(path.join(CFG.home, f));
 });
 
 test("03-012 会话名文件是数组：当空对象，改名照样存得进去", () => {
@@ -147,7 +147,7 @@ test("02-010 工作岛：等你确认时来一个状态快照，不刷回「正�
 
 test("02-008 同一秒里给同一个对象发两条长消息：外置成两个文件，不互相覆盖", async () => {
   const { agentBook } = await import("../gw/agents.mjs");
-  const cwd = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "ag0520-")), out = [];
+  const cwd = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "ag0520-")), out = [];
   const b = agentBook({ sessionId: "b4-0520-ag", cwd }, { emit: (e) => out.push(e) });
   const send = (id, text) => b.feed({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "SendMessage", input: { to: "worker", message: text } }] } });
   send("toolu_01AAAAAAAAAAAA1111", "甲".repeat(400));

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "a0610-bf-"));
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "a0610-bf-"));
 const cli = path.join(root, "fake-cli.sh");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 fs.writeFileSync(cli, `#!${sh}\nexec 0<&-\nexit 1\n`, { mode: 0o700 });

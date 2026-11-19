@@ -37,8 +37,8 @@
     if (n < 999500) return (n / 1000).toFixed(n < 9950 ? 1 : 0) + "k";
     return (n / 1e6).toFixed(2) + "M";
   }
-  /** 刻度以【自动压缩窗口】为准；没设才退回模型窗口。设得比窗口还大时 claude 按窗口压，刻度也按窗口（#67） */
-  /** 事件流送来的上下文用量（usage / 压缩 / 一轮收尾 / /context）：记下时间，在途的历史请求回来不许盖回旧值（#89）。
+  /** 刻度以【自动压缩窗口】为准；没设才退回模型窗口。设得比窗口还大时按窗口压，刻度也按窗口（#67） */
+  /** 事件流送来的上下文用量（usage / 一轮收尾）：记下时间，在途的历史请求回来不许盖回旧值（#89）。
    *  记的是「到达时刻」不是产生时刻：重放的是连上那一刻的快照，可能比随后发出的历史请求读到的旧一点，
    *  但那之后新来的 usage 会排在 sync 后面补到，最终收敛到最新值，只差一瞬。
    *  重放期间先攒着，到 sync 只落最后一个，不把旧轮次的数一个个闪一遍（#88） */
@@ -102,29 +102,10 @@
     ctxFill.style.width = pct + "%";
     ctxBar.style.setProperty("--p", pct + "%");   // 快满时字按这条分界线分两色（style.css #ctxbar.warn #ctxtxt）
     $("ctxctx").textContent = line > 0
-      ? t("上下文 {used} / 压缩线 {line} · {pct}%", { used: fmtTok(state.ctxUsed), line: fmtTok(line), pct })
+      ? t("上下文 {used} / 上限 {line} · {pct}%", { used: fmtTok(state.ctxUsed), line: fmtTok(line), pct })
       : t("上下文 {used} / {total} · {pct}%", { used: fmtTok(state.ctxUsed), total: fmtTok(state.ctxTotal), pct });
     saveUiState();
   }
-  /** 从 /context 的输出里抠出真实占用（形如 "**Tokens:** 17.9k / 200k (9%)"） */
-  function parseContextText(t) {
-    const num = (v, u) => {
-      let n = parseFloat(v);
-      const s = (u || "").toLowerCase();
-      if (s === "k") n *= 1000;
-      if (s === "m") n *= 1e6;
-      return Math.round(n);
-    };
-    let m = t.match(/\*{0,2}Tokens:?\*{0,2}\s*([\d.]+)\s*([km])?\s*\/\s*([\d.]+)\s*([km])?/i);
-    if (m) return liveCtx(num(m[1], m[2]), num(m[3], m[4]));
-    m = t.match(/\|\s*(?:Used|已用)\s*\|\s*([\d.]+)\s*([km])?\s*\|/i);
-    if (m) {
-      const used = num(m[1], m[2]);
-      const tot = t.match(/\|\s*(?:Total|总计)\s*\|\s*([\d.]+)\s*([km])?\s*\|/i);
-      return liveCtx(used, tot ? num(tot[1], tot[2]) : state.ctxTotal);
-    }
-  }
-
   // ── 会话切换 / 历史翻页 ────────────────────────────────────────────
   /** 历史首屏加载占位：大会话慢的时候不再整块空白像「会话空了」（0.6.9 审计 195-Q.9） */
   function histLoading() {
@@ -543,7 +524,7 @@
   });
   function welSync() {
     const w = histEl.childElementCount === 1 && !!histEl.querySelector(":scope > .msg.welcome") && !liveEl.childElementCount;
-    // 发出第一条后问候语就退场：留着会变成一条顶着「Claude」名字的假回复（重新打开会话时本来也没有它）。
+    // 发出第一条后问候语就退场：留着会变成一条顶着「Antigravity」名字的假回复（重新打开会话时本来也没有它）。
     // 首条画在 #live 不在 #hist：只看 #hist 的条数永远等不到（审查 11-05 #42）
     if (!w && (histEl.childElementCount > 1 || liveEl.childElementCount)) { const old = histEl.querySelector(":scope > .msg.welcome"); if (old) { old.remove(); return welSync(); } }
     if (document.documentElement.classList.contains("wel") === w) return;
@@ -568,7 +549,7 @@
     try { s = await api("/api/status", { timeout: 10000 }); } catch { return null; }
     let ready = !!(s.keyMode === "key" || s.otherKey);
     if (s.keyMode === "login") {
-      // 问不出登录状态（claude auth status 起不来 / 解析不了）时不能当成「未登录」：首屏会收起输入框，
+      // 问不出登录状态（agy 的登录状态问不出来 / 解析不了）时不能当成「未登录」：首屏会收起输入框，
       // 让人以为登录丢了。unknown / stale 都是「还不知道」（0.6.9 审计 195-G.2）
       try {
         const st = await api("/api/login/status");
@@ -603,11 +584,11 @@
     if (box.childElementCount) { box.classList.remove("hidden"); setupMode(true); return; }   // 接回去的首屏：卡片已经画过、监听也挂过
     box.innerHTML = `<p><strong>${esc(t("开始之前，先接上模型（两条路选一条）："))}</strong></p>
       <div class="setup-paths">
-        <div class="setup-path"><b>${esc(t("用 Claude 账户登录"))}</b>
-          <div class="tiny">${esc(t("有 Claude Pro / Max 订阅，或 Anthropic Console 账户：在浏览器里授权一次就好，不用填 Key。"))}</div>
+        <div class="setup-path"><b>${esc(t("登录 Google 账户"))}</b>
+          <div class="tiny">${esc(t("在浏览器里授权一次就好，不用填 Key。也可以先在终端里跑一次交互式 agy 完成认证。"))}</div>
           <button class="btn sm" data-p="login">${esc(t("去登录"))}</button></div>
-        <div class="setup-path"><b>${esc(t("填 API Key"))}</b>
-          <div class="tiny">${esc(t("用 Anthropic 的 Key，或 DeepSeek、智谱 GLM、通义千问、Kimi 等兼容接口的 Key，按用量付费。"))}</div>
+        <div class="setup-path"><b>${esc(t("填 Gemini API Key"))}</b>
+          <div class="tiny">${esc(t("在设置里填 Gemini API Key；也可以用 DeepSeek、智谱 GLM、通义千问、Kimi 等兼容接口的 Key，按用量付费。"))}</div>
           <button class="btn sm" data-p="key">${esc(t("去选接口、填 Key"))}</button></div>
       </div>
       <div class="tiny">${esc(t("两条路都在 ☰ → 设置 → 接口，以后随时能换。"))}</div>`;
@@ -618,9 +599,9 @@
       if (!p) return;
       openDrawer("settings");
       const sel = $("set-provider");
-      if (p === "login" && [...sel.options].some((o) => o.value === "anthropic")) {
-        sel.value = "anthropic";
-        sel.dispatchEvent(new Event("change"));
+      if (p === "login") {
+        const loginOpt = [...sel.options].find((o) => { const g = (state.providers || []).find((x) => x.id === o.value); return g && g.login; });
+        if (loginOpt) { sel.value = loginOpt.value; sel.dispatchEvent(new Event("change")); }
       }
       setTimeout(() => sel.scrollIntoView({ block: "center" }), 50);
       if (p === "key") sel.focus();
@@ -678,7 +659,7 @@
       // 一直连不上：多半是通知栏点了「停止」、网关服务没了，界面还开着就请壳把它拉起来（11-05 报告；服务在跑时壳那边什么也不做）
       const now = Date.now();
       if (!busDownAt) busDownAt = now;
-      if (now - busDownAt > 4000 && now - busKick > 10000 && !document.hidden && window.CCApp && window.CCApp.ensureGateway) { busKick = now; try { window.CCApp.ensureGateway(); } catch {} }
+      if (now - busDownAt > 4000 && now - busKick > 10000 && !document.hidden && window.AGApp && window.AGApp.ensureGateway) { busKick = now; try { window.AGApp.ensureGateway(); } catch {} }
       // 不让浏览器按服务端的 retry: 1500 一直原地重拨：关掉这条，自己按退避再拨（FIND-037）；拨上由 onopen 复位
       try { cur.close(); } catch {}
       clearTimeout(busWatch);
@@ -689,7 +670,7 @@
   function setConn(ok) {
     srv.connected = ok;
     // 浏览器从 127.0.0.1 / localhost 打开：网关在线，只是来源不对，别说「断开」盖掉「请在应用里打开」（195-G.6 真机）
-    if (!ok) setStatus(srv.foreign ? t("请在 cccodroid 应用里打开") : t("与网关断开，正在重连…（生成不受影响）"), "warn");
+    if (!ok) setStatus(srv.foreign ? t("请在 agycodroid 应用里打开") : t("与网关断开，正在重连…（生成不受影响）"), "warn");
     // 刚问过、网关确实不在：每次重拨失败不要把「网关离线」又盖回「生成不受影响」。
     // 45 秒盖住最长的 30 秒退避；连上（onopen）就清零，重新按原文案说（FIND-018）
     if (!ok && !srv.foreign && Date.now() - gwDeadAt < 45000) setStatus(t("网关离线"), "err");
@@ -760,7 +741,7 @@
   // 轮次 → 会话号：error 事件只带 runId，后台会话失败时要按会话留下提示（FIND-006）
   const runSid = new Map();
   // 会话号 → { text, at }：切走期间失败时网关给的错误文案没有别的落点（run_end 只有 failed 标记），
-  // 留到下次进入那个会话时补一行；claude 自己写的 is_error 正文仍在历史里，这里只补网关层的（FIND-006）
+  // 留到下次进入那个会话时补一行；agy 自己写的 is_error 正文仍在历史里，这里只补网关层的（FIND-006）
   const failNotes = new Map();
   function recordFailNote(ev) {
     if (runViews.has(ev.runId)) return;      // 在眼前：正常画进气泡
@@ -831,7 +812,7 @@
         if (ev.auto === "idle") av.note(t("会话闲置快一小时，提示缓存快过期了，先自动压缩上下文，下一条消息就不用把整段历史重算一遍。不需要可以在设置里关掉。"), true);
         const timer = RunTimer(ev.startedAt);
         timer.attach(av);
-        av.phase({ phase: "prep" });     // 网关起进程前的准备；起了进程换「启动中」，claude 就绪换「连接中」（F6）
+        av.phase({ phase: "prep" });     // 网关起进程前的准备；起了进程换「启动中」，agy 就绪换「连接中」（F6）
         runViews.set(ev.runId, { av, startedAt: ev.startedAt, timer, out: 0 });
         statLive(ev.runId);
         // 只有本窗口刚发的消息才强制回到底部；别的会话 / 别的窗口开始的轮次别把正在翻历史的人拽走（0.6.9 审计 196-聊天.4）
@@ -856,14 +837,14 @@
         return;
       }
       case "run_idle": {
-        // 这一轮答完了，只是 Claude 起的后台任务（本地服务之类）还在跑
+        // 这一轮答完了，只是 Antigravity 起的后台任务（本地服务之类）还在跑
         const rv = runViews.get(ev.runId);
         if (rv && rv.av && !rv.idle) { rv.idle = true; rv.timer?.stop(ev.at); rv.av.finish(); rv.avDone = true; }
         if (view.runIds.has(ev.runId)) setStatus(idleStatus(ev.bg), "ok");
         return;
       }
       case "run_busy": {
-        // 后台任务回报了，Claude 接着干：另起一个气泡、重新计时
+        // 后台任务回报了，Antigravity 接着干：另起一个气泡、重新计时
         const rv = runViews.get(ev.runId);
         if (!rv || !rv.idle) return;
         rv.idle = false;
@@ -880,15 +861,17 @@
         if (view.sessionId && ev.sessionId && ev.sessionId !== view.sessionId) return detachRun(ev.runId);
         if (!view.sessionId && ev.sessionId) { view.sessionId = ev.sessionId; draftAdopt(ev.sessionId); adoptPendingModel(); saveUiState(); }
         if (ev.model) { state.model = ev.model; paintModel(ev.model); }
-        if (ev.permissionMode) setPermChip(ev.permissionMode);
+        if (ev.toolPermission || ev.agentMode) setPermChip(ev.toolPermission, ev.agentMode);
         return;
       }
       case "run_end": refreshQuota(); return onRunEnd(ev);
       case "quota": case "billing": return refreshQuota();
       case "perm_mode":
-        state.settings.permissionMode = ev.mode;
-        setPermChip(ev.mode);
-        if ($("set-perm")) $("set-perm").value = ev.mode;
+        if (ev.toolPermission) state.settings.toolPermission = ev.toolPermission;
+        if (ev.agentMode != null) state.settings.agentMode = ev.agentMode;
+        setPermChip(state.settings.toolPermission, state.settings.agentMode);
+        if ($("set-toolperm")) $("set-toolperm").value = state.settings.toolPermission || "request-review";
+        if ($("set-agentmode")) $("set-agentmode").value = state.settings.agentMode || "";
         // 网关把在跑的每一轮都当场切到了这个模式（gw/queue.mjs setPermMode）：手里的快照跟着改，
         // 等着的计划卡按新模式重排按钮，别让旧按钮把刚切的模式改回去（#175-2）
         for (const r of srv.runs) if (r.permMode) r.permMode = ev.mode;
@@ -1059,7 +1042,7 @@
     if (!rv) { if (!ev.localCommand && ev.sessionId) { const st = statBits(ev); if (st) statSave(ev.sessionId, st); } if (belongs(ev)) loadSessions(); return; }
     const av = rv.av;
     rv.timer?.stop(ev.at);
-    // 实时那份先停；本地命令（/context 等）不算一轮，底栏回到上一轮的数，普通一轮下面再定格
+    // 实时那份先停；本地命令不算一轮，底栏回到上一轮的数，普通一轮下面再定格
     // 记到这一轮自己的会话头上：正在看的可能是刚认领的另一条草稿（FIND-008）
     if (statRun === ev.runId) { statStop(); statEl.textContent = statLast[ev.sessionId || view.sessionId] || ""; }
     if (ev.sessionId && !view.sessionId && view.runIds.has(ev.runId)) { view.sessionId = ev.sessionId; draftAdopt(ev.sessionId); adoptPendingModel(); saveUiState(); }
@@ -1070,10 +1053,6 @@
       if (av.empty) av.remove();
             const b = mkMsg("sys", t("命令"), liveEl);
       setHtml(b, `<div class="cmd-card"><div class="cmd-name">${esc("/" + ev.localCommand)}</div>${renderMd(ev.resultText)}</div>`);
-      if (ev.localCommand === "context") parseContextText(ev.resultText);
-      if (ev.localCommand === "model" || ev.localCommand === "effort") { loadSettings(); refreshSessModel(); }
-      // 压缩线的刻度在 loadModels 里刷（以前只有切模型才会调它，所以设完要切一次模型才看得到）
-      if (ev.localCommand === "autocompact") loadModels();
     } else {
       const bad = !!(ev.failed || ev.isError);
       av.finish(cut, bad);
@@ -1114,11 +1093,11 @@
       const files = e.files || [];
       const preview = (items) => items.slice(0, 3).join(", ") + (items.length > 3 ? " …" : "");
       let action;
-      if (e.src === "claude") action = t("Claude Code 程序被改过，已拒绝启动；") + preview(files);
+      if (e.src === "agy") action = t("Antigravity CLI 程序被改过，已拒绝启动；") + preview(files);
       else if (e.src === "app") action = t("应用文件被改过，已按安装包还原：") + preview(files);
       else {
         // runtime 也包含程序快照写回、等待空闲重启等；同一事件可能合并两类文件。
-        const config = e.src === "runtime" ? files.filter((f) => /^ccapp-(settings|providers)\.json$/.test(f)) : [];
+        const config = e.src === "runtime" ? files.filter((f) => /^agyapp-(settings|providers)\.json$/.test(f)) : [];
         const program = files.filter((f) => !config.includes(f));
         const parts = [];
         if (config.length) parts.push(t("配置文件被改过，已按应用里的当前设置写回：") + preview(config));
@@ -1151,7 +1130,7 @@
     srv.queueAll = s.queue || [];
     if (s.maxParallel) srv.max = s.maxParallel;
     pickViewRun();
-    if (srv.run?.permMode) setPermChip(srv.run.permMode);   // 这一轮实际在用的模式，以网关为准（安全通告 GHSA-2w6p）
+    if (srv.run && (srv.run.toolPermission || srv.run.agentMode)) setPermChip(srv.run.toolPermission, srv.run.agentMode);   // 这一轮实际在用的模式，以网关为准（安全通告 GHSA-2w6p）
     refreshPlanActs();
     const busy = isBusy();
     syncPlaceholder();
@@ -1182,7 +1161,7 @@
   }
 
   /** 网关给的中断记录：列表（旧网关是单条对象或 null） */
-  // 答完了、只剩后台任务：任务清零后网关还要等一会儿才收尾（claude 可能接着起一轮），这段时间别显示「在跑（0 个）」（195-P.9）
+  // 答完了、只剩后台任务：任务清零后网关还要等一会儿才收尾（agy 可能接着起一轮），这段时间别显示「在跑（0 个）」（195-P.9）
   function idleStatus(n) { return n > 0 ? t("就绪 · 后台任务在跑（{n} 个）", { n }) : t("就绪 · 后台任务都结束了，正在收尾"); }
   function intrList(v) { return (Array.isArray(v) ? v : v ? [v] : []).filter((e) => e && e.id); }
   /** 上一轮被系统结束（App 连同网关被杀）：每个被打断的会话底部各挂一张卡，给「继续」 */
@@ -1199,8 +1178,8 @@
     const b = mkMsg("sys", t("已中断"), liveEl);
     el = b.closest(".msg"); el.id = "intr-card"; el.dataset.id = it.id; el.dataset.n = others + "/" + drafts;
     const when = new Date(it.startedAt || it.at).toLocaleString();
-    // why: card —— 启动前的确认卡没人答、超时停下的（#171）：claude 根本没起，有会话也只能「重发」，不能「继续」
-    // why: unstarted —— 还没起 claude 就被结束了（等确认卡、等桥…，195-P.3）：同样只能「重发」
+    // why: card —— 启动前的确认卡没人答、超时停下的（#171）：agy 根本没起，有会话也只能「重发」，不能「继续」
+    // why: unstarted —— 还没起 agy 就被结束了（等确认卡、等桥…，195-P.3）：同样只能「重发」
     const card = it.why === "card", unstarted = it.why === "unstarted", cont = !!it.sessionId && !card && !unstarted;
     // 有副作用、没等到结果的工具（网关记的台账，FIND-039/049）：点「继续」之前就摆在眼前，
     // 让用户先核对文件 / 命令结果，别默认它们没执行
@@ -1214,9 +1193,9 @@
         : it.cause === "stop" ? t("这一轮没跑完：网关被关闭或重启了（{when} 开始的）。", { when })
         : t("这一轮没跑完：App 在后台被系统结束了（{when} 开始的）。", { when }))}</p>
       <blockquote>${esc(String(it.text || "").slice(0, 300))}</blockquote>
-      <p class="perm-sub">${esc(card || unstarted ? t("Claude 没收到这条消息。点「重发」把它放回输入框。")
-        : it.sessionId ? t("已经做完的部分都在会话里。点「继续」让 Claude 从断开的地方接着做。")
-        : t("会话还没来得及建立，Claude 没收到这条消息。点「重发」把它放回输入框。"))}</p>
+      <p class="perm-sub">${esc(card || unstarted ? t("Antigravity 没收到这条消息。点「重发」把它放回输入框。")
+        : it.sessionId ? t("已经做完的部分都在会话里。点「继续」让 Antigravity 从断开的地方接着做。")
+        : t("会话还没来得及建立，Antigravity 没收到这条消息。点「重发」把它放回输入框。"))}</p>
       ${sideNote ? `<p class="perm-sub intr-side">${esc(sideNote)}</p>` : ""}
       ${others ? `<p class="perm-sub">${esc(t("另有 {n} 个会话同时被中断，在会话列表里标着「已中断」。", { n: others }))}</p>` : ""}
       ${drafts ? `<p class="perm-sub">${esc(t("还有 {n} 条没建会话的消息也停下了，处理完这条接着显示下一条。", { n: drafts }))}</p>` : ""}

@@ -13,9 +13,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ACCESS = pathToFileURL(fileURLToPath(new URL("../gw/access.mjs", import.meta.url))).href;
-const TOKEN_FILE = path.join(process.env.CCAPP_HOME, ".gateway-token");
+const TOKEN_FILE = path.join(process.env.AGAPP_HOME, ".gateway-token");
 const NONCE = "a".repeat(32);
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP || process.env.TMPDIR || os.tmpdir(), "g1-spawn-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP || process.env.TMPDIR || os.tmpdir(), "g1-spawn-"));
 const FIFO = path.join(DIR, "stdin");
 for (const bin of ["mkfifo", "/system/bin/mkfifo"]) {
   try { execFileSync(bin, [FIFO], { stdio: "ignore" }); break; } catch {}
@@ -27,7 +27,7 @@ function start(script) {
   const wfd = fs.openSync(FIFO, fs.constants.O_RDWR);   // O_RDWR：同一描述符里读写两端都开着，读空时阻塞、不 EOF
   const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
     stdio: [wfd, "pipe", "pipe"],
-    env: { ...process.env, CCAPP_SPAWN_KEY: "stdin" },
+    env: { ...process.env, AGAPP_SPAWN_KEY: "stdin" },
   });
   return { child, wfd };
 }
@@ -92,7 +92,7 @@ test("Node 自己起的子进程：stdin 是 socketpair，也读得到随机数"
     console.log(JSON.stringify({ proof: proof(${JSON.stringify(NONCE)}, "127.0.0.2"), token }));
   `;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-    env: { ...process.env, CCAPP_SPAWN_KEY: "stdin" }, input: key + "\n", encoding: "utf8",
+    env: { ...process.env, AGAPP_SPAWN_KEY: "stdin" }, input: key + "\n", encoding: "utf8",
   });
   assert.equal(r.status, 0, r.stderr + r.stdout);
   const j = JSON.parse(r.stdout.trim().split("\n").pop());

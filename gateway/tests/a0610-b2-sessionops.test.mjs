@@ -13,10 +13,10 @@ import * as sessmodel from "../gw/sessmodel.mjs";
 import * as integration from "../gw/integrity.mjs";
 import { lineageDb, recordPrimary } from "../gw/lineage-store.mjs";
 
-const EDITS = path.join(CFG.home, ".ccapp-trash", ".edits");
+const EDITS = path.join(CFG.home, ".agyapp-trash", ".edits");
 // 共用临时 home：跑完清掉本测试留下的会话（含恢复/导入回去的），别影响后面的用量补算
 after(() => fs.rmSync(path.join(PATHS.projects, "-b2-ops"), { recursive: true, force: true }));
-const ORPHANS = path.join(CFG.home, "ccapp-session-orphans.json");
+const ORPHANS = path.join(CFG.home, "agyapp-session-orphans.json");
 const readJson = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
 const uid = () => crypto.randomUUID();
 
@@ -103,11 +103,11 @@ test("恢复时原 cwd 已不在：改写成当前工作区，能接着 --resume
 
 test("恢复时标题写盘失败：不挪文件、不删回收站，（Y.2）", () => {
   const s = makeSession();
-  const namesFile = path.join(CFG.home, "ccapp-session-names.json");
+  const namesFile = path.join(CFG.home, "agyapp-session-names.json");
   const marker = "恢复用的名字";
   // 先把标题记进去，trash 时才会写 meta.renamed
   ops.trashSession(s.sid);
-  const metaFile = path.join(CFG.home, ".ccapp-trash", s.sid, "meta.json");
+  const metaFile = path.join(CFG.home, ".agyapp-trash", s.sid, "meta.json");
   const m = readJson(metaFile); m.renamed = true; m.title = marker; fs.writeFileSync(metaFile, JSON.stringify(m));
   const oldNames = fs.existsSync(namesFile) ? fs.readFileSync(namesFile) : null;
   fs.rmSync(namesFile, { force: true }); fs.mkdirSync(namesFile);
@@ -133,13 +133,13 @@ test("彻底删除清掉 archive、sessmodel、书签、封签、脉络、.edits
   archiveImport(s.sid, { chapters: { 1: { title: "章一" } } }); saveArchive();
   assert.ok(archiveDb().sessions[s.sid]);
   sessmodel.setSessModel(s.sid, { model: "m1" }); sessmodel.flushSessModel();
-  const bmFile = path.join(CFG.home, "ccapp-bookmarks.json");
+  const bmFile = path.join(CFG.home, "agyapp-bookmarks.json");
   fs.writeFileSync(bmFile, JSON.stringify([{ id: "b1", sid: s.sid, uuid: uid(), off: 0, para: 0, role: "assistant", excerpt: "", at: 0 }]));
   integration.sealSession(s.sid, s.file);
   recordPrimary(s.sid, "parent-x");
   fs.mkdirSync(EDITS, { recursive: true }); fs.writeFileSync(path.join(EDITS, s.sid + ".1.jsonl"), "x");
   const hist = path.join(CFG.home, ".claude", "file-history", s.sid); fs.mkdirSync(hist, { recursive: true }); fs.writeFileSync(path.join(hist, "a"), "x");
-  const agentDir = path.join(cwd, ".cccodroid", "agents", s.sid.slice(0, 8)); fs.mkdirSync(agentDir, { recursive: true }); fs.writeFileSync(path.join(agentDir, "a"), "x");
+  const agentDir = path.join(cwd, ".agycodroid", "agents", s.sid.slice(0, 8)); fs.mkdirSync(agentDir, { recursive: true }); fs.writeFileSync(path.join(agentDir, "a"), "x");
   // claude 按会话号另存的几处（D10）：环境快照、任务清单、调试日志、$TMPDIR 下的后台命令输出；别的会话的不动
   const C = (...r) => path.join(CFG.home, ".claude", ...r), other = uid();
   const sideDirs = [C("session-env", s.sid), C("tasks", s.sid), path.join(ops.claudeTmpRoot(), "-b2-slug", s.sid, "tasks")];
@@ -149,11 +149,11 @@ test("彻底删除清掉 archive、sessmodel、书签、封签、脉络、.edits
   for (const d of keep) fs.mkdirSync(d, { recursive: true });
   assert.equal(ops.trashSession(s.sid).ok, true);
   assert.equal(await ops.purgeTrash([s.sid]), 1);
-  assert.equal(fs.existsSync(path.join(CFG.home, ".ccapp-trash", s.sid)), false);
+  assert.equal(fs.existsSync(path.join(CFG.home, ".agyapp-trash", s.sid)), false);
   assert.equal(archiveDb().sessions[s.sid], undefined);
-  assert.equal(readJson(path.join(CFG.home, "ccapp-session-models.json"))[s.sid], undefined);
+  assert.equal(readJson(path.join(CFG.home, "agyapp-session-models.json"))[s.sid], undefined);
   assert.equal(readJson(bmFile).some((b) => b.sid === s.sid), false);
-  assert.equal(readJson(path.join(CFG.home, "ccapp-session-seals.json"))[s.sid], undefined);
+  assert.equal(readJson(path.join(CFG.home, "agyapp-session-seals.json"))[s.sid], undefined);
   assert.equal(lineageDb().edges[s.sid], undefined);
   assert.equal(fs.existsSync(path.join(EDITS, s.sid + ".1.jsonl")), false);
   assert.equal(fs.existsSync(hist), false);

@@ -96,44 +96,31 @@ test("component UI: installed OpenAI bridge keeps its card and places configurat
   assert.match(u.html, /1\.0/);
   assert.ok(u.html.includes(u.t("已装")));
   assert.match(u.html, /data-c="configure"[^>]*>Config<\/button><button[^>]*data-c="remove"/);
-  const pending = deferred();
-  let opens = 0, options;
-  u.config({ open(opts) { opens++; options = opts; return pending.promise; } });
+  // agy 只有 google/gemini 两家：桥不能接进聊天，点「配置」直接说明不支持，不打开面板
+  // （面板的保存必然报 provider_save_failed），也不选接口、不动会话、不调接口。
   const click = u.click("configure");
-  assert.equal(opens, 1);
-  assert.equal(click.button.disabled, true);
-  assert.equal(u.calls.length, 0, "configuration entry never posts a component lifecycle operation");
-  assert.deepEqual(u.sessionActions, [], "opening the form does not select a provider or leave the current session");
-  assert.equal(options.anchor, click.button);
-  assert.equal(typeof options.useNew, "function");
-  pending.resolve();
   await click.done;
   assert.equal(click.button.disabled, false);
-  assert.equal(u.toasts.length, 0);
-  assert.deepEqual(u.sessionActions, [], "loading configuration never runs the success-page action");
-  await options.useNew({ provider: "custom-openai-bridge", model: "example-model" });
-  assert.deepEqual(u.sessionActions, [
-    { action: "newConversation" }, { action: "closeDrawer" },
-    { action: "pickSessModel", patch: { provider: "custom-openai-bridge", model: "example-model" } },
-  ], "only an explicit success-page action pins the provider after moving to a new session");
-  assert.equal(u.calls.length, 0);
+  assert.deepEqual(u.toasts, [{ message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true }]);
+  assert.equal(u.calls.length, 0, "configuration entry never posts a component lifecycle operation");
+  assert.deepEqual(u.sessionActions, [], "unsupported configuration does not select a provider or leave the current session");
 });
 
-test("component UI: configuration is only offered for the installed OpenAI bridge and missing form is visible", async () => {
+test("component UI: configuration button is only offered for the installed OpenAI bridge and always explains it is unsupported", async () => {
   for (const component of [item("ok", { id: "python" }), item("absent", { installedVersion: null }), item("installing"), item("removing"), item("configuring")]) {
     const u = ui(component);
     await u.load();
     assert.doesNotMatch(u.html, /data-c="configure"/);
   }
   const u = ui();
+  await u.load();
+  // 面板再也不会打开：不管配置表单在不在，点的结果都一样。
   await u.click("configure").done;
-  assert.deepEqual(u.toasts, [{ message: u.t("配置界面尚未就绪，请刷新后重试"), error: true }]);
+  assert.deepEqual(u.toasts, [{ message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true }]);
   assert.equal(u.calls.length, 0);
   u.config({ open: async () => { throw new Error("form failed"); } });
-  const failed = u.click("configure");
-  await failed.done;
-  assert.equal(failed.button.disabled, false);
-  assert.deepEqual(u.toasts.at(-1), { message: u.t("失败：{msg}", { msg: "form failed" }), error: true });
+  await u.click("configure").done;
+  assert.deepEqual(u.toasts.at(-1), { message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true });
   assert.equal(u.calls.length, 0);
 });
 
@@ -199,7 +186,7 @@ test("component UI: rejected or interrupted uninstall clears only the local lock
     const u = ui();
     u.post = async () => {
       if (rejectedRequest) throw new Error("connection lost");
-      return { ok: false, message: u.t(retainedError), data: { bytes: 100, path: "~/.cccodroid/openai-bridge" } };
+      return { ok: false, message: u.t(retainedError), data: { bytes: 100, path: "~/.agycodroid/openai-bridge" } };
     };
     await u.load();
     await u.click("remove").done;
@@ -268,6 +255,10 @@ test("component UI: late removal poll cannot overwrite a newer completed-state r
   assert.equal(u.timers.size, 0);
 });
 
+// 注意：本测试在 ar 词典上失败是已知生产问题，不是测试 bug——
+// 移植时 8 个非英文 i18n 文件（lang-ar/es/fr/id/ja/ko/ru/zh-Hant.js）从约第 3005 条起
+// 每个值都错位成下一条的翻译（见 tamper.test.mjs 里的说明），ar 的这条因此多了 {n} 占位符。
+// 恢复词典后本测试应恢复通过；不要把断言放宽去迁就错位的翻译。
 test("bridge form literal and conditional labels are translated in every shipped dictionary", () => {
   const form = fs.readFileSync(new URL("app/bridge-config.js", WEB), "utf8"), keys = new Set();
   // Include conditional t() branches: the general scanner cannot infer those keys.

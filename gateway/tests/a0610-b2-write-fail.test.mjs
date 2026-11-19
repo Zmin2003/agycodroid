@@ -18,7 +18,7 @@ const call = async (route, method, p, body) => {
 };
 
 test("会话模型写失败：500、不假装保存成功（197-2.7）", async () => {
-  const file = path.join(CFG.home, "ccapp-session-models.json");
+  const file = path.join(CFG.home, "agyapp-session-models.json");
   const old = fs.existsSync(file) ? fs.readFileSync(file) : null;
   fs.rmSync(file, { force: true }); fs.mkdirSync(file);
   try {
@@ -30,7 +30,7 @@ test("会话模型写失败：500、不假装保存成功（197-2.7）", async (
 });
 
 test("用量开关写失败：500（195-N.1）", async () => {
-  const file = path.join(CFG.home, "ccapp-usage.json");
+  const file = path.join(CFG.home, "agyapp-usage.json");
   const old = fs.readFileSync(file);
   fs.rmSync(file); fs.mkdirSync(file);
   try {

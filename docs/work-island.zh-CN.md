@@ -1,12 +1,12 @@
 # 工作岛（可选集成）
 
-把 cccodroid 里 Claude 的实时工作状态，显示在 **ColorOS 16 的流体云 / 灵动岛**上。
+把 agycodroid 里 Antigravity 的实时工作状态，显示在 **ColorOS 16 的流体云 / 灵动岛**上。
 
 - 干活时：「正在干活」+ 当前动作（用执行命令 / 正在想 / 等你确认…）
 - 收工：「任务完成」+ 用时
 - 8 秒后：岛上收起，通知栏保留一条安静的通知
 
-这是**第三方应用的可选集成**：cccodroid 只负责把状态送出去，不包含也不负责「工作岛」应用本身的功能。
+这是**第三方应用的可选集成**：agycodroid 只负责把状态送出去，不包含也不负责「工作岛」应用本身的功能。
 
 ---
 
@@ -38,7 +38,7 @@
 1. 安装「工作岛」应用（[releases](https://github.com/STUTTEFRFIX/WorkIsland-Android/releases)），
    打开一次，确认：通知开 / 实时更新允许 / 电池不优化。
    - 1.1 起支持英文的完成/收起文案；更早版本只有中文的完成/收起。
-2. cccodroid 设置 → **工作岛（ColorOS 灵动岛）** → 打开。
+2. agycodroid 设置 → **工作岛（ColorOS 灵动岛）** → 打开。
 3. 网关日志出现：
 
    ```
@@ -50,7 +50,7 @@
 ## 关闭
 
 - 设置页关掉开关：网关取消订阅，并给应用发一次 IDLE 让岛收起。
-- 环境变量 `CCAPP_WORK_ISLAND=0`：强制关闭；`=1`：跳过安装检测强制开启。
+- 环境变量 `AGAPP_WORK_ISLAND=0`：强制关闭；`=1`：跳过安装检测强制开启。
 - 换一个包名：`WORK_ISLAND_PKG=your.package`。
 
 ---
@@ -97,7 +97,7 @@ node scripts/test.mjs work-island
 
 ## 已知限制
 
-- cccodroid 被强行停止后，网关来不及发 IDLE；重开 cccodroid 后恢复。
+- agycodroid 被强行停止后，网关来不及发 IDLE；重开 agycodroid 后恢复。
 - 其他 ColorOS 版本与厂商的“灵动岛”实现未验证。
 - 工作岛应用的通知服务是 exported 的，同机应用可以伪造显示状态（仅影响显示）。
 - 系统岛路径的胶囊外观由系统绘制，未使用 OPPO UPK 自定义卡片；工作岛 1.5+ 在没有岛的设备上

@@ -6,7 +6,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
 const { PROJECTS } = await import("../gw/projects.mjs");
@@ -72,7 +72,7 @@ test("排队后当天额度用完：开跑前复核拦下（#119-2）", async ()
 
 // 接着的会话得真有记录文件：会话不在了的任务开跑前会放下 lastSid、新开一个（#173-3）
 const realSid = () => {
-  const sid = crypto.randomUUID(), d = path.join(CFG.home, ".claude", "projects", "-sched-real");
+  const sid = crypto.randomUUID(), d = path.join(PATHS.projects, "-sched-real");
   fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(path.join(d, sid + ".jsonl"), JSON.stringify({ type: "user", sessionId: sid, uuid: crypto.randomUUID(), message: { role: "user", content: "hi" } }) + "\n");
   return sid;

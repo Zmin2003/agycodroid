@@ -7,7 +7,7 @@ import path from "node:path";
 import { CFG } from "../gw/config.mjs";
 
 const old = Date.now() + 5 * 3600e3 + 12345;   // 不是 09:00:00.000
-fs.writeFileSync(path.join(CFG.home, "ccapp-sched.json"), JSON.stringify({
+fs.writeFileSync(path.join(CFG.home, "agyapp-sched.json"), JSON.stringify({
   tasks: [{ id: "b2-start", name: "n", prompt: "p", on: true, freq: { kind: "daily", time: "09:00" }, nextAt: old }],
   dailyBudget: 0, missed: [], sids: [], lastTick: 0, allowLogin: false, spent: {}, monthly: {}, monthlySeeded: true,
 }));
@@ -16,7 +16,7 @@ const { _schedForTest: S } = await import("../gw/sched.mjs");
 // 共用临时 home：把这条测试任务从盘上摘掉，别让后面的定时任务测试看见它
 after(() => {
   try {
-    const f = path.join(CFG.home, "ccapp-sched.json");
+    const f = path.join(CFG.home, "agyapp-sched.json");
     const j = JSON.parse(fs.readFileSync(f, "utf8"));
     j.tasks = (j.tasks || []).filter((t) => t.id !== "b2-start");
     fs.writeFileSync(f, JSON.stringify(j));

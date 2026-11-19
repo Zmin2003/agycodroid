@@ -9,8 +9,8 @@ import crypto from "node:crypto";
 import { pget, ghProxy } from "../gw/pget.mjs";
 import { writeAll } from "../gw/bigfile.mjs";
 
-const CURL = path.join(process.env.CCAPP_PREFIX, "bin", "curl");
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "pget-"));
+const CURL = path.join(process.env.AGAPP_PREFIX, "bin", "curl");
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "pget-"));
 const DATA = crypto.randomBytes(20 << 20);            // 20 MB：够切 2 段（每段至少 8 MB）
 const SHA = crypto.createHash("sha256").update(DATA).digest("hex");
 const sha = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");

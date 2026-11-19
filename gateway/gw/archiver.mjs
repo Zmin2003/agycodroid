@@ -9,13 +9,13 @@ import { holdsPrivate } from "./pathguard.mjs";
 import { ZIP_ENCODINGS, zipExtract, zipList, zipNative } from "./zipread.mjs";
 
 // ── 文件管理器的压缩包：浏览、预览单个文件、解压、压缩（对标 ZArchiver） ──
-// 7-Zip 随 APK 走（lib/arm64-v8a/libcc7zz.so，应用经 CCAPP_7ZZ 交来，见 third_party/7zip）。
+// 7-Zip 随 APK 走（lib/arm64-v8a/libcc7zz.so，应用经 AGAPP_7ZZ 交来，见 third_party/7zip）。
 // zip 系（zip / jar / apk / epub…）由网关自己读目录（zipread.mjs）：文件名按原始字节解码，GBK 包不乱码；
 // 加密条目、stored / deflate 以外的方法、分卷才交给 7-Zip。tar.gz / tar.xz / tar.zst… 两段：外层解压的输出直接喂给内层列 tar。
 // 口令只在这一次请求里用：经 7-Zip 的标准输入交过去（不进命令行，同 uid 的进程读 /proc/<pid>/cmdline 看不到），不落盘、不写日志。
 
 const sevenZ = () => {
-  const own = process.env.CCAPP_7ZZ;
+  const own = process.env.AGAPP_7ZZ;
   if (own && fs.existsSync(own)) return own;
   for (const d of (process.env.PATH || "").split(":")) { const f = path.join(d, "7zz"); if (d && fs.existsSync(f)) return f; }
   return "";

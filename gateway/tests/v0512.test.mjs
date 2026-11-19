@@ -1,4 +1,5 @@
-// v0.5.12 之后：独立审查（中1 公共后缀、低1 列目录、低3 环境变量、低5 循环依赖）
+// v0.5.12 之后（agy 版）：独立审查（低1 列目录、低3 环境变量、低5 循环依赖）
+// 旧版中1（模型清单地址 modelsUrlOk）已不存在：agy 没有 /models 可拉，没有第三方清单地址可核。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,23 +8,32 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { CFG } from "../gw/config.mjs";
-import { modelsUrlOk } from "../gw/providers.mjs";
 import { routeFiles } from "../gw/files.mjs";
 
 const GW = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ok = (b, m) => modelsUrlOk({ baseUrl: b, modelsUrl: m });
 
-test("模型清单地址：多级公共后缀、托管平台子域不算同站", () => {
-  assert.equal(ok("https://relay.example.co.uk/v1", "https://telemetry.attacker.co.uk/m"), false);
-  assert.equal(ok("https://api.example.com.cn/v1", "https://evil.com.cn/m"), false);
-  assert.equal(ok("https://api.example.com.au/v1", "https://evil.com.au/m"), false);
-  assert.equal(ok("https://relay.workers.dev", "https://evil.workers.dev/m"), false);
-  assert.equal(ok("https://a.vercel.app", "https://b.vercel.app/m"), false);
-  assert.equal(ok("https://api.deepseek.com/anthropic", "https://api.deepseek.com/models"), true);
-  assert.equal(ok("https://open.bigmodel.cn/api/anthropic", "https://open.bigmodel.cn/api/paas/v4/models"), true);
-  assert.equal(ok("https://api.example.co.uk/v1", "https://models.example.co.uk/m"), false, "不同主机一律不带密钥");
-  for (const suf of ["ddns.net", "hopto.org", "blogspot.com", "azureedge.net", "surge.sh", "gitbook.io", "sch.uk", "k12.ca.us"])
-    assert.equal(ok(`https://victim.${suf}/v1`, `https://evil.${suf}/m`), false, suf);
+test("agy 子进程不继承 CLASSPATH / 证书注入变量 / 密钥变量", () => {
+  const src = fs.readFileSync(path.join(GW, "gw/agy.mjs"), "utf8");
+  const re = new RegExp(/const EXTRA_ENV_DENY = (\/.*\/);/.exec(src)[1].slice(1, -1));
+  for (const k of ["CLASSPATH", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "LD_PRELOAD", "PATH", "HOME"]) assert.ok(re.test(k), k);
+  assert.ok(!re.test("LANG"));
+});
+
+test("extraEnv 拒单补证书注入与登录令牌（红队 11-07 探针 18→15）；旧的 Claude 变量一律清掉", async () => {
+  const src = fs.readFileSync(path.join(GW, "gw/agy.mjs"), "utf8");
+  const re = new RegExp(/const EXTRA_ENV_DENY = (\/.*\/);/.exec(src)[1].slice(1, -1));
+  for (const k of ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"]) assert.ok(re.test(k), k);
+  // 设计放行的照旧
+  for (const k of ["API_TIMEOUT_MS", "TZ", "HTTP_PROXY"]) assert.ok(!re.test(k), k);
+  // 继承来的 Claude 变量不进 agy 进程（agy.mjs 的 agyEnv 开头就清）
+  const { agyEnv } = await import("../gw/agy.mjs");
+  process.env.CLAUDE_CODE_MAX_RETRIES = "3";
+  process.env.ANTHROPIC_API_KEY = "<redacted>";
+  try {
+    const env = agyEnv({});
+    assert.equal(env.CLAUDE_CODE_MAX_RETRIES, undefined);
+    assert.equal(env.ANTHROPIC_API_KEY, undefined);
+  } finally { delete process.env.CLAUDE_CODE_MAX_RETRIES; delete process.env.ANTHROPIC_API_KEY; }
 });
 
 function fakeRes() {
@@ -53,23 +63,8 @@ test("列目录：home 根拒绝，工作区照常，凭据文件名不出现", 
   assert.equal((await list(path.join(CFG.workspace, ".ssh"))).code, 403);
 });
 
-test("claude 子进程不继承 CLASSPATH / TEXINPUTS", () => {
-  const src = fs.readFileSync(path.join(GW, "gw/claude.mjs"), "utf8");
-  const re = new RegExp(/const EXTRA_ENV_DENY = (\/.*\/);/.exec(src)[1].slice(1, -1));
-  for (const k of ["CLASSPATH", "TEXINPUTS", "JDK_JAVA_OPTIONS", "TEXMFHOME", "ERL_LIBS"]) assert.ok(re.test(k), k);
-  assert.ok(!re.test("LANG"));
-});
-
-test("extraEnv 拒单补证书注入与登录令牌（红队 11-07 探针 18→15）", () => {
-  const src = fs.readFileSync(path.join(GW, "gw/claude.mjs"), "utf8");
-  const re = new RegExp(/const EXTRA_ENV_DENY = (\/.*\/);/.exec(src)[1].slice(1, -1));
-  for (const k of ["REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "CLAUDE_CODE_OAUTH_TOKEN"]) assert.ok(re.test(k), k);
-  // 设计放行的照旧
-  for (const k of ["API_TIMEOUT_MS", "CLAUDE_CODE_MAX_RETRIES", "TZ", "HTTP_PROXY"]) assert.ok(!re.test(k), k);
-});
-
 test("各网关模块单独导入都不崩（不靠 server.mjs 的导入顺序）", async () => {
-  for (const m of ["providers", "settings", "models", "queue", "run", "claude"]) {
+  for (const m of ["providers", "settings", "models", "queue", "run", "agy"]) {
     const r = await new Promise((done) => execFile(process.execPath, ["-e", `import(${JSON.stringify(path.join(GW, "gw", m + ".mjs"))}).then(()=>process.exit(0),e=>{console.error(e.message);process.exit(1)})`], { env: process.env, timeout: 60000 }, (e, out, err) => done({ code: e ? e.code : 0, err })));
     assert.equal(r.code, 0, m + ": " + r.err);
   }

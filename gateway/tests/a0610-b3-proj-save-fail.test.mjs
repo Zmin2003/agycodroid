@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 
-const FILE = path.join(process.env.CCAPP_HOME, "ccapp-projects.json");
+const FILE = path.join(process.env.AGAPP_HOME, "agyapp-projects.json");
 
 // 起一个只挂某个路由的小服务，测完关掉
 async function serve(route) {
@@ -20,7 +20,7 @@ async function serve(route) {
 test("项目修改写盘失败：500 + { ok:false, error:'save_failed', message }", async () => {
   const { routeProjects } = await import("../gw/projects.mjs");
   const go = await serve(routeProjects);
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "b3-proj-"));
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "b3-proj-"));
   const made = await go("/api/projects", { method: "POST", body: JSON.stringify({ name: "写盘测", mode: "dir", path: dir }) });
   assert.equal(made.status, 200, await made.clone().text());
   const id = (await made.json()).project.id;

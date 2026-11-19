@@ -39,11 +39,15 @@ test("195-E.8 每次打开设置页重取设置，不只吃启动时那一次", 
   assert.doesNotMatch(s, /openSettings[\s\S]{0,800}?loadProviders\(\); loadModels\(\);/, "不再绕过 loadSettings 单独拉");
 });
 
-test("195-E.5/E.10/E.12 跟随默认看会话/项目默认；窗口未知仍显示已设压缩线；附加目录增删串行", () => {
+test("195-E.5/E.10/E.12 跟随默认看会话/项目默认；窗口未知只报已用量不画进度（agy 没有压缩线）；附加目录增删串行", () => {
   const s = src("12-model-caps.js");
   has(s, /const followEff = \(\) => \{[\s\S]*?state\.sessEff/, "跟随默认取有效默认");
   has(s, /const to = followEff\(\)\.prov;/, "改回默认的确认按有效接口");
-  has(s, /已设 \{line\}（模型窗口未知，按你设的生效）/, "窗口未知显示已设值");
+  // E.10 旧断言「窗口未知仍显示已设压缩线」已删：agy 没有压缩线（compactLineOf 恒为 null），
+  // 窗口未知时界面只报已用量、不画进度
+  const flow = src("04-session-flow.js");
+  has(flow, /上下文 \{used\} · 容量未知/, "窗口未知只报已用量");
+  has(flow, /第三方接口不报窗口、也没设压缩线：没刻度就只报已用量，不画进度/, "没刻度不画进度");
   has(s, /let dirQ = Promise\.resolve\(\);[\s\S]*?dirQ = dirQ\.then/, "目录增删排队");
   has(s, /const r = await api\("\/api\/settings"\); if \(r && Array\.isArray\(r\.addDirs\)\) base = r\.addDirs;/, "以服务端当前值为底");
   has(s, /updateDirs\(\(ds\) => ds\.filter\(\(d\) => d !== gone\)\)/, "按目录名删而不是下标");

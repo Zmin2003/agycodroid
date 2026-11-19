@@ -9,7 +9,7 @@ import path from "node:path";
 import http from "node:http";
 import { PREFIX } from "../gw/config.mjs";
 
-process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
+process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
 const COMP_DIR = path.join(path.dirname(PREFIX), "components");
 fs.mkdirSync(COMP_DIR, { recursive: true });
 const CACHE = path.join(COMP_DIR, "index.cache");
@@ -27,8 +27,8 @@ const server = http.createServer((req, res) => {
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const B = `http://127.0.0.1:${server.address().port}`;
 Object.assign(process.env, {
-  CCAPP_COMPONENTS_INDEX: B + "/i.json", CCAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
-  CCAPP_COMPONENTS_COMMUNITY_INDEX: B + "/missing-c.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
+  AGAPP_COMPONENTS_INDEX: B + "/i.json", AGAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
+  AGAPP_COMPONENTS_COMMUNITY_INDEX: B + "/missing-c.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
 });
 after(() => {
   server.close();
@@ -88,7 +88,7 @@ test("卸载旧工具包上的组件：它记录里的同名包清单不能顶�
   fs.mkdirSync(info, { recursive: true });
   fs.mkdirSync(path.join(PREFIX, "bin"), { recursive: true });
   fs.writeFileSync(path.join(PREFIX, "bin/basepkg-tool"), "belongs to the current devkit");
-  fs.writeFileSync(path.join(info, "basepkg.list"), "/data/data/cc.codroid/files/usr/bin/basepkg-tool\n");
+  fs.writeFileSync(path.join(info, "basepkg.list"), "/data/data/cc.agyroid/files/usr/bin/basepkg-tool\n");
   compWriteRecord("stale06", rec("stale06", { base: OLD,
     files: ["var/lib/dpkg/info/basepkg.list", "bin/basepkg-tool"] }));
   const r = await compRemove("stale06");

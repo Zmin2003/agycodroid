@@ -7,7 +7,7 @@ import path from "node:path";
 import { CFG } from "../gw/config.mjs";
 import { LAST_SESSION, forgetSession, rememberSession } from "../gw/runs.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-last-session.json");
+const FILE = path.join(CFG.home, "agyapp-last-session.json");
 
 test("换名失败时旧指针原样保留，目标文件不会出现半截", () => {
   fs.writeFileSync(FILE, JSON.stringify({ id: "old", at: 1 }));

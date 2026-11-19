@@ -7,16 +7,16 @@
  * 全部是 glibc 的 execve / execvp / posix_spawn / posix_spawnp，就在这里拦下来改写：
  *
  *   ELF，解释器是 linker64        →  /system/bin/linker64 <绝对路径> 参数…        （环境里补上 bionic 的 LD_PRELOAD）
- *   ELF，解释器是 glibc ld.so     →  $CCAPP_LD --argv0 … --library-path … --preload … <路径> 参数…（环境里去掉 LD_PRELOAD）
- *   直接 exec glibc 的 ld.so 本身  →  换成 $CCAPP_LD
+ *   ELF，解释器是 glibc ld.so     →  $AGAPP_LD --argv0 … --library-path … --preload … <路径> 参数…（环境里去掉 LD_PRELOAD）
+ *   直接 exec glibc 的 ld.so 本身  →  换成 $AGAPP_LD
  *   #! 脚本                       →  解释器 [参数] <路径> 参数…，解释器再按上面几条处理（/usr/bin/env、/bin/x 改指 $PREFIX/bin）
  *   系统目录里的程序               →  原样执行（只补 bionic 的 LD_PRELOAD，让它再往下拉的子进程也走 linker）
  *
  * 配置全走环境变量（Env.java 设好）：
- *   CCAPP_LD            APK 里的 glibc ld.so（libldlinux.so）
- *   CCAPP_GLIBC_LIB     glibc 库目录（给 --library-path）
- *   CCAPP_GLIBC_PRELOAD glibc 子进程要挂的 --preload 列表（seccomp-enosys.so 和本库，冒号分隔）
- *   CCAPP_BIONIC_PRELOAD bionic 子进程的 LD_PRELOAD（termux-exec 的 linker 版）
+ *   AGAPP_LD            APK 里的 glibc ld.so（libldlinux.so）
+ *   AGAPP_GLIBC_LIB     glibc 库目录（给 --library-path）
+ *   AGAPP_GLIBC_PRELOAD glibc 子进程要挂的 --preload 列表（seccomp-enosys.so 和本库，冒号分隔）
+ *   AGAPP_BIONIC_PRELOAD bionic 子进程的 LD_PRELOAD（termux-exec 的 linker 版）
  *   PREFIX              工具包前缀
  *
  * 和 seccomp-enosys.so 一样不链 libc（-nostdlib），只在运行时从 glibc 取 getenv / dlsym / __errno_location，
@@ -25,7 +25,7 @@
  * 同一份源码加 -DBIONIC 编出 exec-shim-bionic.so，挂在 bionic 进程的 LD_PRELOAD 里、排在 termux-exec 前面：
  * termux-exec 的 linker 模式把一切都改成「linker64 <程序>」，可 glibc 程序和 glibc 的 ld.so 交给 linker64 只会报
  * "Could not find a PHDR"。所以 bionic 这边接三种：glibc 程序、直接 exec 工具包里的 ld.so（组件脚本常这么起），
- * 改走 $CCAPP_LD；系统程序原样 exec 但保住 LD_PRELOAD（termux-exec 起系统脚本时会摘掉它）。其余交给下一个 execve（termux-exec）。
+ * 改走 $AGAPP_LD；系统程序原样 exec 但保住 LD_PRELOAD（termux-exec 起系统脚本时会摘掉它）。其余交给下一个 execve（termux-exec）。
  */
 typedef unsigned long size_t;
 typedef long ssize_t;
@@ -136,25 +136,25 @@ enum { ENV_KEEP, ENV_BIONIC, ENV_GLIBC };
 /* 环境：去掉旧的 LD_PRELOAD，bionic 目标再补上 termux-exec */
 /*
  * 经加载器起的程序，/proc/self/exe 指向加载器（bionic：linker64；glibc：APK 里的 ld.so），真实路径记进环境变量
- * （见下面的 readlink）：bionic 用 termux-exec 的 TERMUX_EXEC__PROC_SELF_EXE，glibc 用 CCAPP_SELF_EXE。
+ * （见下面的 readlink）：bionic 用 termux-exec 的 TERMUX_EXEC__PROC_SELF_EXE，glibc 用 AGAPP_SELF_EXE。
  * var=要改的变量（"X="），val=新值；val 为 0 表示删掉（程序是谁不知道时，别让旧值冒充）
  */
 static char **fixenv2(char *const *envp, char **ev, int mode, arena *a, const char *var, const char *val) {
     int n = 0;
     for (int i = 0; envp && envp[i]; i++)
         if (!pre(envp[i], "LD_PRELOAD=") && !(var && pre(envp[i], var))) ev[n++] = envp[i];
-    const char *bp = getenv("CCAPP_BIONIC_PRELOAD");
+    const char *bp = getenv("AGAPP_BIONIC_PRELOAD");
     if (mode == ENV_BIONIC && bp && *bp) { char *s = put(a, "LD_PRELOAD=", bp, 0); if (s) ev[n++] = s; }
     if (var && val) { char *s = put(a, var, val, 0); if (s) ev[n++] = s; }
     ev[n] = 0;
     return ev;
 }
 #define SELF_B "TERMUX_EXEC__PROC_SELF_EXE="
-#define SELF_G "CCAPP_SELF_EXE="
+#define SELF_G "AGAPP_SELF_EXE="
 static char **fixenv(char *const *envp, char **ev, int mode, arena *a) {
     int n = 0;
     for (int i = 0; envp && envp[i]; i++) if (!pre(envp[i], "LD_PRELOAD=")) ev[n++] = envp[i];
-    const char *bp = getenv("CCAPP_BIONIC_PRELOAD");
+    const char *bp = getenv("AGAPP_BIONIC_PRELOAD");
     if (mode == ENV_BIONIC && bp && *bp) { char *s = put(a, "LD_PRELOAD=", bp, 0); if (s) ev[n++] = s; }
     ev[n] = 0;
     return ev;
@@ -165,7 +165,7 @@ static char **fixenv(char *const *envp, char **ev, int mode, arena *a) {
  * av 至少 argc + 24 格，ev 至少 envc + 2 格。返回 0 表示原样执行。
  */
 static int mkplan(const char *path, char *const *argv, char *const *envp, char **av, char **ev, arena *a, plan *p) {
-    const char *ld = getenv("CCAPP_LD");
+    const char *ld = getenv("AGAPP_LD");
     if (!ld || !*ld) return 0;                       /* 没开「经加载器」：什么都不改 */
     int argc = 0; while (argv && argv[argc]) argc++;
     /* 先把要跑的命令行放在 av 的后半段，每过一层脚本往前挪 */
@@ -187,7 +187,7 @@ static int mkplan(const char *path, char *const *argv, char *const *envp, char *
             /* bionic 这边也自己来：termux-exec 起系统脚本（如 /system/bin/pm）时会摘掉 LD_PRELOAD，
                脚本里再拉工具包里的同名程序（$PREFIX/bin/cmd）就被直接 exec、Permission denied */
             if (!scripted) {                         /* 原样执行，只把 termux-exec 塞进环境 */
-                if (!getenv("CCAPP_BIONIC_PRELOAD")) return 0;
+                if (!getenv("AGAPP_BIONIC_PRELOAD")) return 0;
                 p->path = path; p->argv = (char **)argv; p->envp = fixenv(envp, ev, ENV_BIONIC, a);
                 return 1;
             }
@@ -232,7 +232,7 @@ static int mkplan(const char *path, char *const *argv, char *const *envp, char *
             return 1;
         }
         if (k == K_GLIBC) {
-            const char *lib = getenv("CCAPP_GLIBC_LIB"), *pl = getenv("CCAPP_GLIBC_PRELOAD");
+            const char *lib = getenv("AGAPP_GLIBC_LIB"), *pl = getenv("AGAPP_GLIBC_PRELOAD");
             char *abs = (char *)cur;
             if (cur[0] != '/') {
                 char cwd[512];
@@ -288,9 +288,9 @@ static const char *realself(void) {
     if (!ends(b, "/linker64")) return 0;
     const char *e = getenv("TERMUX_EXEC__PROC_SELF_EXE");
 #else
-    const char *ld = getenv("CCAPP_LD");
+    const char *ld = getenv("AGAPP_LD");
     if (!ld || !ends(b, "libldlinux.so") || !ends(ld, "libldlinux.so")) return 0;
-    const char *e = getenv("CCAPP_SELF_EXE");
+    const char *e = getenv("AGAPP_SELF_EXE");
 #endif
     return e && *e == '/' ? e : 0;
 }
@@ -468,7 +468,7 @@ int posix_spawn(int *pid, const char *path, const void *fa, const void *at, char
 int posix_spawnp(int *pid, const char *file, const void *fa, const void *at, char *const argv[], char *const envp[]) {
     if (!real_spawnp) real_spawnp = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawnp");
     char tmp[1024];
-    const char *p = getenv("CCAPP_LD") ? which(file, tmp, sizeof tmp) : 0;
+    const char *p = getenv("AGAPP_LD") ? which(file, tmp, sizeof tmp) : 0;
     if (!p) return real_spawnp(pid, file, fa, at, argv, envp);
     return posix_spawn(pid, p, fa, at, argv, envp);
 }

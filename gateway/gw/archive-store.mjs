@@ -1,4 +1,4 @@
-// 建档 · 档案文件：home/ccapp-archive.json。题名、章节状态、改动历史都在这里，会话记录（jsonl）一个字节都不改。
+// 建档 · 档案文件：home/agyapp-archive.json。题名、章节状态、改动历史都在这里，会话记录（jsonl）一个字节都不改。
 // 单独成一个小模块：会话列表（sessions.mjs）要读题名，不和 archive / lineage 绕成循环引用。
 // 格式：{ v: 1, sessions: { <会话>: { title, misc, miscBy, chapters: { <章序>: { title, status, same, by, at, spec, locked, hist: [ { title, at, by } ] } } } } }
 //   title：最新一章（卷）的题名，交档时算好存着，会话列表直接用
@@ -7,7 +7,7 @@ import path from "node:path";
 import { CFG } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-archive.json");
+const FILE = path.join(CFG.home, "agyapp-archive.json");
 let DB = null;
 
 // sessions 得是普通对象：数组也是 object，可往里放会话号键，JSON.stringify 时全丢（#98 03-011）。

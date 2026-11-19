@@ -146,7 +146,7 @@
   // 浏览器：把占位框的位置报给外壳（CSS px，相对页面左上角）；不在最上面、或被浮层盖着就报 0 让它先藏起来
   let lastB = "";
   function placeBrowser() {
-    if (!(window.CCApp && CCApp.paneBounds)) return;
+    if (!(window.AGApp && AGApp.paneBounds)) return;
     let r = null;
     const open = recent.filter(isOpen);
     const covered = ovCover || COVERS.some((id) => isOpen(id)
@@ -159,7 +159,7 @@
     const k = r ? r.join(",") : "0";
     if (k === lastB) return;
     lastB = k;
-    if (r) CCApp.paneBounds(r[0], r[1], r[2], r[3]); else CCApp.paneBounds(0, 0, 0, 0);
+    if (r) AGApp.paneBounds(r[0], r[1], r[2], r[3]); else AGApp.paneBounds(0, 0, 0, 0);
   }
 
   function renderTabs(open, top) {
@@ -282,7 +282,7 @@
     if (ready) { cancelAnimationFrame(raf); raf = requestAnimationFrame(apply); }
   }
   addEventListener("ccfold", (e) => takeFold(e.detail));
-  if (window.__ccFold) takeFold(window.__ccFold);
+  if (window.__agyFold) takeFold(window.__agyFold);
   // 设置 → 外观「折叠屏适配（实验）」：只在报过折痕的设备上露出来
   function syncFoldSetting() {
     const row = $("row-fold");

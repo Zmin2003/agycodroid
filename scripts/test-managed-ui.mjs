@@ -63,7 +63,7 @@ class CDP {
 
 const base = process.env.TMPDIR || path.join(os.homedir(), ".cache");
 await fs.mkdir(base, { recursive: true });
-const lock = path.join(base, "cccodroid-managed-ui-chromium.lock");
+const lock = path.join(base, "agycodroid-managed-ui-chromium.lock");
 try { await fs.mkdir(lock); }
 catch (e) { if (e.code === "EEXIST") throw new Error(`Another managed UI Chromium test holds ${lock}; run only one browser at a time.`); throw e; }
 // Chromium's Unix singleton socket has a 108-byte pathname limit (Android's prefix is already long).
@@ -74,7 +74,7 @@ const ok = (name, detail) => { results.push({ name, detail }); console.log(`PASS
 const q = JSON.stringify;
 try {
   fixture = await startManagedUiServer();
-  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("CCAPP_")));
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AGAPP_")));
   const profile = path.join(tmp, "profile");
   browser = spawn(process.env.CHROMIUM_BIN || "chromium-headless", [
     "--headless=new", "--disable-gpu", "--disable-dev-shm-usage",
@@ -115,7 +115,7 @@ try {
     window.__fixtureErrors = [];
     addEventListener('error', e => __fixtureErrors.push(e.message));
     addEventListener('unhandledrejection', e => __fixtureErrors.push(String(e.reason?.message || e.reason)));
-    localStorage.setItem('ccapp.lang', 'en');
+    localStorage.setItem('agyapp.lang', 'en');
     localStorage.setItem('cc.navMore', '1');
     localStorage.setItem('cc.motion', 'auto');
   ` });
@@ -142,7 +142,7 @@ try {
     await cdp.eval(`document.querySelector(${q(sel)}).dispatchEvent(new Event('change', { bubbles: true }))`);
   };
   const openExt = async () => {
-    await cdp.eval(`window.__cc.openPage('ext')`);
+    await cdp.eval(`window.__agy.openPage('ext')`);
     await until(() => cdp.eval(visible("#comp-list .ccard")), "synthetic component card");
   };
   const refreshComponents = async () => {
@@ -152,7 +152,7 @@ try {
     await sleep(100);
   };
   await cdp.call("Page.navigate", { url: fixture.origin + "/?lang=en" });
-  await until(() => cdp.eval("!!(window.__cc && __cc.srv.connected && __cc.state.settings && __cc.state.sessions.length === 2)"), "synthetic app boot");
+  await until(() => cdp.eval("!!(window.__agy && __agy.srv.connected && __agy.state.settings && __agy.state.sessions.length === 2)"), "synthetic app boot");
   ok("isolated boot", `Chromium ${await cdp.eval("navigator.userAgent.match(/Chrome\\/([\\d.]+)/)?.[1]")}; in-memory APIs/SSE only`);
 
   // Real controls, desktop and narrow viewport. No screenshot or repeated rendering loop.
@@ -166,7 +166,7 @@ try {
   await sleep(250);
   assert.equal(await cdp.eval("document.querySelectorAll('.pop-menu').length"), 0, "Esc removes account menu");
   ok("desktop menus", "plus/account open and Escape close");
-  await cdp.eval("__cc.openPage('settings')");
+  await cdp.eval("__agy.openPage('settings')");
   await until(() => cdp.eval(visible("#set-ov")), "desktop settings modal");
   await click('#set-cats button[data-cat="general"]');
   await key("Tab");
@@ -236,11 +236,11 @@ try {
   fixture.resetComponent();
   await refreshComponents();
   assert.ok(await cdp.eval(`(() => { const a = document.querySelector(${q(configure)}), b = document.querySelector('#comp-list button[data-c="remove"]'); return !!(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING && a.getBoundingClientRect().x < b.getBoundingClientRect().x); })()`), "configuration entry precedes uninstall on original card");
-  await cdp.eval(`__cc.openSession(${q(SESSION_A)})`);
-  await until(() => cdp.eval(`__cc.view.sessionId === ${q(SESSION_A)} && __cc.view.histOk`), "existing session before configuration");
+  await cdp.eval(`__agy.openSession(${q(SESSION_A)})`);
+  await until(() => cdp.eval(`__agy.view.sessionId === ${q(SESSION_A)} && __agy.view.histOk`), "existing session before configuration");
   await openExt();
-  await until(() => cdp.eval("!!__cc.state.providerActive"), "provider snapshot loaded before config");
-  const beforeConfig = await cdp.eval("({ session: __cc.view.sessionId, provider: __cc.state.providerActive, model: __cc.state.model, count: __cc.state.sessions.length })");
+  await until(() => cdp.eval("!!__agy.state.providerActive"), "provider snapshot loaded before config");
+  const beforeConfig = await cdp.eval("({ session: __agy.view.sessionId, provider: __agy.state.providerActive, model: __agy.state.model, count: __agy.state.sessions.length })");
   const configOpen = async (saved = false) => {
     await click(configure);
     await until(() => cdp.eval(visible(saved ? "#bc-saved" : "#bc-form")), saved ? "saved configuration shown" : "bridge form shown");
@@ -252,7 +252,7 @@ try {
     await until(() => cdp.eval("!document.querySelector('#tab-ext').classList.contains('bridge-config-open')"), "return to Extensions card");
   };
   const unchanged = async () => {
-    assert.deepEqual(await cdp.eval("({ session: __cc.view.sessionId, provider: __cc.state.providerActive, model: __cc.state.model, count: __cc.state.sessions.length })"), beforeConfig, "configuration does not switch existing session/provider/model");
+    assert.deepEqual(await cdp.eval("({ session: __agy.view.sessionId, provider: __agy.state.providerActive, model: __agy.state.model, count: __agy.state.sessions.length })"), beforeConfig, "configuration does not switch existing session/provider/model");
     assert.equal(fixture.state.providerActive, "synthetic");
     assert.equal(fixture.state.sessionModelWrites.length, 0, "save does not change session selection");
     assert.equal(fixture.state.requests.filter((r) => r.path === "/api/chat" || r.path === "/api/providers/test").length, 0, "save does not test a remote or send chat");
@@ -537,43 +537,43 @@ try {
   await until(() => cdp.eval("document.querySelector('#bc-use').disabled === false"), "new-session action enabled by integrated entry callback");
   const connectionsBeforeUse = fixture.state.sseConnections;
   await click("#bc-use");
-  await until(() => cdp.eval("__cc.view.sessionId === null && !document.querySelector('#tab-ext').classList.contains('bridge-config-open')"), "explicit create new session");
+  await until(() => cdp.eval("__agy.view.sessionId === null && !document.querySelector('#tab-ext').classList.contains('bridge-config-open')"), "explicit create new session");
   await until(() => fixture.state.sseConnections > connectionsBeforeUse, "new-session EventSource reconnect");
-  await until(() => cdp.eval("__cc.srv.connected && !__cc.view.loading"), "new-session hello settles");
+  await until(() => cdp.eval("__agy.srv.connected && !__agy.view.loading"), "new-session hello settles");
   await sleep(300); // Observe the persisted selection after hello/resetView, not its transient pre-hello value.
-  const pendingModel = await cdp.eval("__cc.state.pendingModel");
+  const pendingModel = await cdp.eval("__agy.state.pendingModel");
   assert.equal(pendingModel?.provider, fixture.state.config.providerId, "new provider survives async SSE hello/resetView");
   assert.equal(pendingModel?.model, fixture.state.config.model, "new model survives async SSE hello/resetView");
   assert.equal(fixture.state.providerActive, "synthetic", "global provider not switched");
-  assert.equal(await cdp.eval("__cc.state.sessions.length"), beforeConfig.count, "no persisted chat until user actually sends");
+  assert.equal(await cdp.eval("__agy.state.sessions.length"), beforeConfig.count, "no persisted chat until user actually sends");
   assert.equal(fixture.state.requests.filter((r) => r.path === "/api/chat").length, 0);
   ok("bridge explicit new session", "only user action leaves current session and stages new provider/model; no chat or global switch");
   for (const [model, window] of [["large-synthetic", 512000], ["unknown-synthetic", 200000], ["small-synthetic", 128000]]) {
     await click("#model-chip .chip");
     await until(() => cdp.eval(`!!document.querySelector('#model-pick .mp-item[data-id="${model}"]')`), "all configured models available in conversation picker");
     await click(`#model-pick .mp-item[data-id="${model}"]`);
-    await until(() => cdp.eval(`__cc.state.pendingModel?.model === ${q(model)} && __cc.state.ctxTotal === ${window}`), "model switch updates its context window");
+    await until(() => cdp.eval(`__agy.state.pendingModel?.model === ${q(model)} && __agy.state.ctxTotal === ${window}`), "model switch updates its context window");
   }
   assert.equal(fixture.state.providerActive, "synthetic");
   assert.equal(fixture.state.requests.filter((r) => r.path === "/api/chat").length, 0);
   ok("bridge conversation model switching", "three models selected back and forth with separate context windows; no chat sent");
 
   // One browser, two viewport sizes; exercise interrupted transitions rather than claiming device FPS.
-  await cdp.eval("__cc.openPage('sessions')");
+  await cdp.eval("__agy.openPage('sessions')");
   await cdp.call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await sleep(100);
   await click("#btn-menu");
   await until(() => cdp.eval(visible("#drawer")), "narrow drawer open");
   await key("Escape");
   // Native WebView back hook is the app's drawer/page back route; Esc is for menus/settings.
-  await cdp.eval("window.__ccBack()");
+  await cdp.eval("window.__agyBack()");
   await sleep(300);
-  await cdp.eval(`(async () => { for (let i = 0; i < 4; i++) { __cc.openPage(i % 2 ? 'caps' : 'ext'); await new Promise(r => setTimeout(r, 30)); } __cc.openPage('sessions'); })()`);
+  await cdp.eval(`(async () => { for (let i = 0; i < 4; i++) { __agy.openPage(i % 2 ? 'caps' : 'ext'); await new Promise(r => setTimeout(r, 30)); } __agy.openPage('sessions'); })()`);
   await sleep(900);
   assert.equal(await cdp.eval("document.querySelectorAll('.mo-ghost').length"), 0, "rapid page switches leave no ghost panels");
   assert.equal(await cdp.eval("getComputedStyle(document.querySelector('#pages')).pointerEvents"), "auto");
   ok("narrow viewport and rapid page switching", "390×844; no retained animation ghosts");
-  await cdp.eval("__cc.openPage('settings')");
+  await cdp.eval("__agy.openPage('settings')");
   await until(() => cdp.eval("document.querySelector('#tab-settings').classList.contains('set-list')"), "narrow settings category list");
   await click('#set-cats button[data-cat="general"]');
   await until(() => cdp.eval("document.querySelector('#tab-settings').classList.contains('set-one')"), "narrow settings category opens");
@@ -633,10 +633,10 @@ try {
 
   await cdp.call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await until(() => cdp.eval("document.documentElement.dataset.motion === 'off'"), "reduced-motion preference applied");
-  await cdp.eval("__cc.openPage('ext')");
+  await cdp.eval("__agy.openPage('ext')");
   await sleep(80);
   assert.equal(await cdp.eval("document.querySelectorAll('.mo-ghost').length"), 0);
-  await cdp.eval("window.__ccBack()");
+  await cdp.eval("window.__agyBack()");
   await click("#btn-plus");
   await until(() => cdp.eval(visible("#sheet")), "reduced-motion plus menu");
   await key("Escape");
@@ -645,10 +645,10 @@ try {
 
   // Real loopback EventSource frames, including stale-history races and unrelated session events.
   fixture.state.historyDelay[SESSION_A] = 450;
-  await cdp.eval(`__cc.openSession(${q(SESSION_A)})`);
+  await cdp.eval(`__agy.openSession(${q(SESSION_A)})`);
   await until(() => fixture.state.requests.some((r) => r.path === "/api/session/" + SESSION_A), "delayed session A history");
-  await cdp.eval(`__cc.openSession(${q(SESSION_B)})`);
-  await until(() => cdp.eval(`__cc.view.sessionId === ${q(SESSION_B)} && __cc.view.histOk`), "session B history");
+  await cdp.eval(`__agy.openSession(${q(SESSION_B)})`);
+  await until(() => cdp.eval(`__agy.view.sessionId === ${q(SESSION_B)} && __agy.view.histOk`), "session B history");
   await sleep(500);
   const history = await cdp.eval("document.querySelector('#hist').innerText");
   assert.match(history, /Synthetic history B/);
@@ -668,7 +668,7 @@ try {
   fixture.emit({ type: "state", runs: [], queue: [] });
   await until(() => cdp.eval("document.querySelector('#live').innerText.includes('Synthetic SSE answer arrived over loopback.')"), "synthetic SSE response rendered");
   assert.doesNotMatch(await cdp.eval("document.querySelector('#live').innerText"), /DO NOT RENDER/);
-  assert.equal(await cdp.eval("__cc.state.ctxUsed"), 1234);
+  assert.equal(await cdp.eval("__agy.state.ctxUsed"), 1234);
   await click("#live .tgroup .tg-head");
   await until(() => cdp.eval("document.querySelector('#live .tgroup').classList.contains('open')"), "synthetic tool group opens");
   await click("#live .tool .tool-head");

@@ -204,7 +204,7 @@ function gitNetHuman(err) {
     return tz("连不上远端，检查一下网络或代理。");
   if (/\[rejected\]|non-fast-forward|fetch first/i.test(e)) return tz("远端有你本地没有的新提交，先「拉取」再推送。");
   if (/Not possible to fast-forward|diverging|have diverged/i.test(e))
-    return tz("本地和远端各有新提交（分叉了），没法直接快进。可以让 Claude 帮你合并或变基。");
+    return tz("本地和远端各有新提交（分叉了），没法直接快进。可以让 Antigravity 帮你合并或变基。");
   if (/would be overwritten|Please commit your changes or stash them/i.test(e)) return tz("有没提交的改动会被覆盖。先提交或撤销那些文件再试。");
   if (/No configured push destination|does not appear to be a git repository|No such remote/i.test(e)) return tz("这个仓库还没有设置远端（remote）。");
   if (/no tracking information/i.test(e)) return tz("当前分支没有对应的远端分支，先推送一次建立关联。");
@@ -223,7 +223,7 @@ async function gitRepo(p) {
   if (gitPrivate(root)) return { error: "forbidden", status: 403 };
   return { root, dir };
 }
-/** 仓库根落在私有目录（HOME / 运行时）里就不碰；但 cccodroid 的工作区本身就在 HOME 下面，工作区里的仓库放行 */
+/** 仓库根落在私有目录（HOME / 运行时）里就不碰；但 agycodroid 的工作区本身就在 HOME 下面，工作区里的仓库放行 */
 // 私有目录按目录身份判（gw/pathguard.mjs）：别名、应用数据目录里的 shared_prefs 之类也算（0.6.9 审计 P0-1 / P2 R1）
 function gitPrivate(d) {
   return isPrivate(d) || holdsPrivate(d, { workspace: false });

@@ -1,31 +1,27 @@
-// 流事件翻译（gw/stream.mjs translate）：子代理 / 旁链的消息不打乱主会话的「已逐字推过」标记（0.6.9 审计 195-U.1）
+// 流事件翻译（gw/stream.mjs translate）：子代理的增量不打乱主会话的 delta（0.6.9 审计 195-U.1 的 agy 版）
+// 移植：旧版测的是 Claude 的 message_start / content_block_delta / assistant 全文重发时的
+// 「已逐字推过不再重复」——那套 laneFlags / contentBlocks 机制随 Claude 事件格式一起删了，
+// agy 只有 step_update 的 text_delta，用例 1、2 随之删除。剩下这条测 agy 的等价不变量：
+// 子代理的 text_delta 只走 sub_text，主会话的 delta 不丢、不重复。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { translate } from "../gw/stream.mjs";
 
 function run(events) {
-  const out = [], flags = { gotDelta: false };
+  const out = [], flags = {};
   for (const ev of events) translate(ev, { flags, sse: (e) => out.push(e), onInit() {}, onResult() {}, provider: {} });
   return out;
 }
-const se = (event, extra = {}) => ({ type: "stream_event", event, ...extra });
-const start = (extra) => se({ type: "message_start", message: { usage: {} } }, extra);
-const delta = (text, extra) => se({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }, extra);
-const asst = (text, extra = {}) => ({ type: "assistant", message: { model: "m", content: [{ type: "text", text }] }, ...extra });
-const texts = (out) => out.filter((e) => e.type === "delta" || e.type === "assistant_text").map((e) => e.text).join("");
+const step = (i, type, extra) => ({ event: "step_update", conversation_id: "s1", step_update: { step_index: i, step_type: type, ...extra } });
 
-test("主会话逐字推过、中间子代理开了一条消息 → 主会话的整段不再重复发", () => {
-  const out = run([start(), delta("你好"), start({ parent_tool_use_id: "tu1" }), asst("你好")]);
-  assert.equal(texts(out), "你好");
-});
-
-test("旁链推过增量、主会话这条没增量 → 主会话整段照发，不丢", () => {
-  const out = run([start({ isSidechain: true }), delta("旁", { isSidechain: true }), start(), asst("主会话正文")]);
-  assert.match(texts(out), /主会话正文/);
-});
-
-test("旁链的 message_start 不删主会话已显示的半截", () => {
-  const out = run([start(), delta("半截"), start({ isSidechain: true })]);
-  assert.equal(out.some((e) => e.type === "discard_partial"), false);
+test("主会话逐字推过、中间子代理开了一条消息 → 主会话的 delta 不丢，子代理的只走 sub_text", () => {
+  const out = run([
+    step(0, "agent_response", { text_delta: "你好" }),
+    step(1, "agent_response", { text_delta: "子代理在说", subagent_info: { subagents: [{ conversation_id: "agy-sub-9" }] } }),
+    step(2, "agent_response", { text_delta: "继续" }),
+  ]);
+  assert.equal(out.filter((e) => e.type === "delta").map((e) => e.text).join(""), "你好继续");
+  assert.equal(out.filter((e) => e.type === "sub_text").map((e) => e.text).join(""), "子代理在说");
+  assert.equal(out.some((e) => e.type === "discard_partial"), false, "agy 没有 discard_partial 这种事件");
 });

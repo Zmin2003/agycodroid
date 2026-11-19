@@ -1,13 +1,13 @@
-# cccodroid help
+# agycodroid help
 
-cccodroid runs the **official, unmodified Claude Code** on your phone, wraps it in a graphical interface and ships a full developer toolchain. Claude can read and write files, run commands and start local servers, just as it would in a terminal on a computer.
+agycodroid runs the **official, unmodified Antigravity CLI** on your phone, wraps it in a graphical interface and ships a full developer toolchain. Antigravity can read and write files, run commands and start local servers, just as it would in a terminal on a computer.
 
 ## Getting started
 
 1. **Install the toolkit**: on first launch, tick the modules you want. The default set is about 330 MB and resumes if interrupted.
-2. **Sign in or add a key**: authorize your Claude account once in the browser, or enter a key for Anthropic, DeepSeek, Qwen or another compatible endpoint.
+2. **Sign in or add a key**: sign in with your Google account once in the browser (or run interactive agy once in a terminal to authenticate), or enter a Gemini API key in Settings — or a key for DeepSeek, Qwen or another compatible endpoint.
 3. **Start a conversation**: tap ＋ in the top bar, or New chat in the sidebar.
-4. **Put it to work**: Claude asks before editing files or running commands; switch the permission mode under the input bar.
+4. **Put it to work**: Antigravity asks before editing files or running commands; switch the permission mode under the input bar.
 
 ## The screen
 
@@ -16,7 +16,7 @@ The right end of the top bar normally shows just ⋯. Tap it and the shortcuts y
 | Button | What it does |
 |---|---|
 | 📁 | Files: browse, edit and preview files in the workspace |
-| >_ | Terminal: the same toolchain Claude uses |
+| >_ | Terminal: the same toolchain Antigravity uses |
 | 🌐 | Browser: local servers and links from replies; docks on the right on a tablet |
 | ‹› | Command palette: slash commands, skills and common actions |
 | ＋ | New conversation |
@@ -24,13 +24,13 @@ The right end of the top bar normally shows just ⋯. Tap it and the shortcuts y
 
 The menu button at the top left opens the sidebar: places to go at the top (Chats, Projects, Scheduled tasks, with Extensions, Capabilities, Usage and Help under More), recent chats in the middle, and the account row at the bottom, which opens Settings.
 
-The thin line under the top bar shows **context usage**; the further right, the fuller. Its second half shows what is left on the current provider: the share of the 5-hour and weekly limits used when you sign in with a Claude account, or the balance for DeepSeek, Kimi and similar. If a provider doesn't report its context window, fill in **Context window** for that custom provider under **Provider & model** in Settings, and the compaction line and scale follow it; without one the bar shows "capacity unknown". Tap the line for details; every provider’s quota and spending, plus low-quota reminders, are under **Quota and spending** at the top of the Usage page. In the input area, ＋ attaches files and opens common actions. The row below shows the model, thinking effort and permission mode; tap any of them to change it. The model picker only lists providers you can use: a Claude account that isn’t signed in, or an on-device model with nothing downloaded, is left out. To hide a provider you’ve set up, pick it under **Provider & model** in Settings and turn off **Show in the model picker** (its settings are kept, and the one in use is always listed).
+The thin line under the top bar shows **context usage**; the further right, the fuller. Its second half shows the current provider's usage: agy's usage (input / output / thinking / cache_read / total tokens) when you sign in with a Google account, or the balance for DeepSeek, Kimi and similar. If a provider doesn't report its context window, fill in **Context window** for that custom provider under **Provider & model** in Settings, and the usage bar's scale follows it; without one the bar shows "capacity unknown". Tap the line for details; every provider’s usage and spending, plus reminders, are under **Usage and spending** at the top of the Usage page. In the input area, ＋ attaches files and opens common actions. The row below shows the model, thinking effort and permission mode; tap any of them to change it. The model picker only lists providers you can use: a Antigravity account that isn’t signed in, or an on-device model with nothing downloaded, is left out. To hide a provider you’ve set up, pick it under **Provider & model** in Settings and turn off **Show in the model picker** (its settings are kept, and the one in use is always listed).
 
 ## Make it yours
 
 - **Appearance**: Settings → General → Appearance offers five styles: Native, Qiusuo, Zhuyue, Construct and Material, each in light and dark. Construct has square corners, heavy ink lines and red on kraft paper, for when you want something bolder; Material takes its colors from your wallpaper (Material You).
 - **Accent color**: Settings → General → Accent color offers eight presets or a color of your own. It's adjusted for the current appearance, so it stays readable in light and dark.
-- **Buttons under messages**: in Settings → General, tap the ones you don't use (bookmark or fork, say) to hide them; your messages and Claude's replies are set separately.
+- **Buttons under messages**: in Settings → General, tap the ones you don't use (bookmark or fork, say) to hide them; your messages and Antigravity's replies are set separately.
 - **Top bar buttons**: Settings → General → Top bar buttons. Each button can be Pinned (always on the top bar, no need to tap ⋯ first), In ⋯, or Hidden. Hold the handle on the left and drag to reorder. Restore default puts everything back.
 - **Fonts**: the interface and replies can each use a different font. Under Settings → General → Imported fonts, import a ttf / otf / woff / woff2 file, then pick it with Custom… on the row you want. Characters the font lacks (say, Chinese in a Latin font) fall back to the built-in fonts. Code and the terminal always use the built-in monospace font.
 - **Saved prompts**: save long prompts you send often and pick them by typing / in the input box; see Extensions below.
@@ -40,52 +40,59 @@ These choices are stored in the app's own data, so clearing the WebView cache wo
 
 ## Conversations
 
-- **Enter sends.** Sending while Claude is busy queues the message; ⚡ interjects into the running turn without stopping it.
-- `/` opens slash commands and `@` references a file. Use Share → cccodroid in other apps to attach files directly.
+- **Enter sends.** Sending while Antigravity is busy queues the message; ⚡ interjects into the running turn without stopping it.
+- `/` opens slash commands and `@` references a file. Use Share → agycodroid in other apps to attach files directly.
 - The top row of ＋ next to the input box: Attach file, Take photo, Screenshot, Browse files. Photos are scaled to 2048 px on the long side before they're attached. **Long-press Screenshot to take it in 5 seconds**: switch to the app you want to capture in the meantime, and you'll be brought back afterwards.
 - Tool calls collapse into one line such as "3 steps · done"; tap to see each step. Steps that need you, or that failed, open on their own.
-- **Subagents** get their own card below the steps that launched them: one row per subagent with its status, step count and what it's doing; tap a row to open its steps. At the bottom, the message log shows "who → whom · what about". Each subagent's brief and report are saved under `.cccodroid/agents/` in the project folder; tap "Brief" or "Report" to read them.
+- **Subagents** get their own card below the steps that launched them: one row per subagent with its status, step count and what it's doing; tap a row to open its steps. At the bottom, the message log shows "who → whom · what about". Each subagent's brief and report are saved under `.agycodroid/agents/` in the project folder; tap "Brief" or "Report" to read them.
 - Paths in replies open in the viewer; web links open in the in-app browser.
-- Every message has four buttons. Yours: copy, resend, rewind to here, delete. Claude's: copy, share, fork from here, delete.
+- Every message has four buttons. Yours: copy, resend, rewind to here, delete. Antigravity's: copy, share, fork from here, delete.
 - **Rewind to here** first lists the files changed since, then lets you undo just the code, or the code and the conversation. Files changed by shell commands are not restored.
-- `/goal <condition>` keeps Claude working turn after turn until the condition is met. Background tasks and the task list appear above the input box, and each can be stopped; several background tasks fold into one line, tap it to expand.
+- `/goal <condition>` keeps Antigravity working turn after turn until the condition is met. Background tasks and the task list appear above the input box, and each can be stopped; several background tasks fold into one line, tap it to expand.
 - Conversations that were running when the gateway restarted or the system killed the app are marked "Interrupted" in the list; open one and tap "Continue" to pick it up. Each has its own.
-- **Misc**: throwaway sessions such as trying a model or saying hi are filed under "Misc" by Claude when it catalogs them. They stay out of the sidebar and appear as the last group on the Chats page; pinned ones and ones that are running or waiting for your confirmation still show in the sidebar. If a session Claude put in Misc gets compacted once or grows past 512 KB, it goes back to its normal group automatically. Sessions you moved there yourself with "Move to Misc" stay put; "Remove from Misc" brings any session back.
+- **Misc**: throwaway sessions such as trying a model or saying hi are filed under "Misc" by Antigravity when it catalogs them. They stay out of the sidebar and appear as the last group on the Chats page; pinned ones and ones that are running or waiting for your confirmation still show in the sidebar. If a session Antigravity put in Misc gets compacted once or grows past 512 KB, it goes back to its normal group automatically. Sessions you moved there yourself with "Move to Misc" stay put; "Remove from Misc" brings any session back.
 - The Chats page searches message content, filters, and exports or imports zips. Deleted chats stay in the trash for 30 days.
 
 ## Permissions and safety
 
-| Mode | Behaviour |
-|---|---|
-| Ask me (default) | Reads freely; asks before editing files, running commands or going online |
-| Accept edits | Edits without asking; still asks before commands |
-| Plan | Reads and plans only, and acts once you approve |
-| Auto | Claude's classifier decides what needs asking (experimental) |
-| Deny unasked | Anything that would need approval is refused; for unattended runs |
-| Allow everything | Never asks; only when you trust the task completely |
+Permissions are two groups of settings (Settings → Antigravity behaviour; you can also switch them temporarily under the input bar):
 
-**What "Allow everything" really means.** Claude stops asking and edits any file or runs any command directly, including deleting things, going online and sending data out. The main risk is not Claude itself but what it reads: web pages, downloaded files, other people's repositories and issues can hide instructions aimed at the AI (prompt injection) that tell it to read your keys, change settings or upload something. In "Ask me" mode you see that step and can refuse; with "Allow everything" that check is gone. So:
+| Tool approval | Behaviour |
+|---|---|
+| Ask each time (default) | Reads freely; asks before editing files, running commands or going online |
+| Proceed in sandbox | Carries on inside a sandbox; actions outside it still ask |
+| Always proceed | Never asks; only when you trust the task completely |
+| Strict | Asks whenever it can; the strictest |
+
+| Agent mode | Behaviour |
+|---|---|
+| Default | agy's own default |
+| Accept edits | Edits without asking; still asks before commands |
+| Auto | Decided automatically by agy |
+| Plan | Reads and plans only, and acts once you approve |
+
+**What "Always proceed" really means.** agy stops asking and edits any file or runs any command directly, including deleting things, going online and sending data out. The main risk is not agy itself but what it reads: web pages, downloaded files, other people's repositories and issues can hide instructions aimed at the AI (prompt injection) that tell it to read your keys, change settings or upload something. In "Ask each time" mode you see that step and can refuse; with "Always proceed" that check is gone. So:
 
 - Turn it on only for a clear task where you know which files it will touch, and switch back afterwards.
-- Leave it off when Claude is reading unfamiliar web pages, repositories or files of unknown origin.
-- "Confirm sensitive actions" (Settings → Claude behaviour, on by default) is a safety net: when Claude is about to read keys or sign-in credentials (.env, SSH keys, API keys, the gateway token and so on), read the screen or tap in other apps, read the clipboard, or share a file out, a red-bordered card asks you even under "Allow everything". If you see one and did not ask Claude to do that, deny it. It only recognises the obvious forms and can be sidestepped on purpose, so do not treat it as insurance for "Allow everything".
+- Leave it off when agy is reading unfamiliar web pages, repositories or files of unknown origin.
 
-- Approval cards appear under the tool that needs them, and a bar above the input box keeps them in view. Allow, always allow, or deny with an optional reason. Approving a request never loosens the mode; change that in Settings.
-- If Claude enters plan mode by itself while "Allow everything" is on, tap "Approve, keep current mode" on the plan card: that turn goes back to your previous mode and the global setting stays as it was.
+**Tools that aren't pre-approved are soft-denied.** In headless mode there is no interactive confirmation: a tool that needs approval and hasn't been pre-approved doesn't pop up a prompt — it is soft-denied, the run continues, the exit code is 0, and a note is printed on stderr. Pre-approve tools in the permission rules, or use --dangerously-skip-permissions (not as a default).
+
+- Approval cards appear under the tool that needs them, and a bar above the input box keeps them in view. Allow or deny, with an optional reason. Approving a request once never loosens the mode; change that in Settings.
 - In the background you are notified when a turn ends or needs you. Notifications can only deny; to allow, come back and read the full command.
-- Swiping cccodroid away in Recents closes it: if nothing is running, the gateway stops, the ongoing notification goes away and it won't restart itself; a running turn keeps going and the gateway stops after it finishes. Scheduled tasks are still woken by a system alarm when they're due.
-- Keys stay in the app's private directory. Account sign-in is handled by Claude Code itself; the app never touches your credentials.
+- Swiping agycodroid away in Recents closes it: if nothing is running, the gateway stops, the ongoing notification goes away and it won't restart itself; a running turn keeps going and the gateway stops after it finishes. Scheduled tasks are still woken by a system alarm when they're due.
+- Keys stay in the app's private directory. Account sign-in is handled by Antigravity CLI itself; the app never touches your credentials.
 
 ## Projects and scheduled tasks
 
-A **project** is a working folder with its own instructions (CLAUDE.md) and default model, effort and permissions. Conversations started in a project run in that folder and pick up its instructions automatically.
+A **project** is a working folder with its own instructions and default model, effort and permissions. Conversations started in a project run in that folder and pick up its instructions automatically.
 
 - Sidebar → Projects → New project: create a folder in the workspace, use an existing folder, or clone from git. With an existing folder, conversations you started there before are added automatically.
 - The welcome screen of a new conversation lets you pick a project; a project tag then appears under the input box.
 - Long-press an existing conversation (or tap ⋯) and choose Move to project; its record moves along.
 - The filter bar on the Chats page can show one project, or only conversations created by scheduled tasks (marked with a clock).
 
-A **scheduled task** runs Claude once on this device at the set time. Nobody is there to ask, so anything that needs your approval is denied. Start with read-only for a few days before giving it more.
+A **scheduled task** runs Antigravity once on this device at the set time. Nobody is there to ask, so anything that needs your approval is denied. Start with read-only for a few days before giving it more.
 
 - Daily, weekly, monthly, every few hours, once, or a cron expression. The form shows the next two run times as you edit.
 - For "don't bother me unless something's up": have it reply with one fixed phrase when nothing is found (e.g. "All green") and set notifications to Only when something is found.
@@ -101,7 +108,7 @@ The Lineage page in the sidebar draws all your sessions as a subway map: time ru
 - **Where a line comes from.** A line branching off another midway is a fork. One that turns back at the branch point is a rewind. One that flows in with an arrow is a merge. Old chapters without a title show their first prompt in gray; "Backfill titles" in the toolbar names them all at once.
 - **Merging.** When several sessions each got halfway and you want to carry on in one new session: select a line, tap "Merge…" on its card, check the other sessions, then tap "Next". The wizard has three steps: for each source, choose its compaction summary or a few hand-picked turns; write one line about what comes next; preview the first message (you can edit it). Once sent, a line flows into the new session from each source.
 - **Add sources, fork from here.** Under "More…" on the card: sessions where you once pasted a hand-off by hand have no inferable source, so link them with "Add sources…", and undo if you got it wrong. "Fork from here" branches a new session from this session's latest turn.
-- **Archive references.** Write "see a1b2·3" in a message and the compaction summary from the end of that chapter is attached for Claude (it doesn't show in your bubble). Up to three per message. If that chapter is still open and has no summary yet, Claude is told where the session file is so it can read it if needed.
+- **Archive references.** Write "see a1b2·3" in a message and the compaction summary from the end of that chapter is attached for Antigravity (it doesn't show in your bubble). Up to three per message. If that chapter is still open and has no summary yet, Antigravity is told where the session file is so it can read it if needed.
 - **Drill down.** "Drill down" on the card lays a session out turn by turn: when each turn ran, how many tool calls it made, how many subagents it sent, how many errors. Sessions forked off a turn hang under it; tap one to drill into it. Tap a turn to see every tool call (the light part is thinking before the call, the dark part is the tool running) and how long each subagent ran, with nested subagents indented. The back button steps out one level at a time.
 - **Export.** "Export" in the toolbar saves the current map as an image (PNG), a vector file (SVG), or a single-file web page you can pan and tap (HTML), then lets you save it elsewhere or share it.
 
@@ -123,7 +130,7 @@ Layout follows the window width, not orientation:
 
 First check which protocol the endpoint speaks; the setup differs:
 
-- **Anthropic protocol** (the address usually ends in `/anthropic`, or the provider says it is for Claude Code): Settings → Provider & model → "＋ Add a custom endpoint…", then fill in the address, key and default model name. **You can leave the model list URL empty**: the app then looks for `/v1/models` and `/models` on the same host as the API address, and if it finds a list you can pick models from it. If the provider doesn't publish a list, typing the model name still works.
+- **Anthropic protocol** (the address usually ends in `/anthropic`, or the provider says it is for Antigravity CLI): Settings → Provider & model → "＋ Add a custom endpoint…", then fill in the address, key and default model name. **You can leave the model list URL empty**: the app then looks for `/v1/models` and `/models` on the same host as the API address, and if it finds a list you can pick models from it. If the provider doesn't publish a list, typing the model name still works.
 - **OpenAI protocol** (only `/v1/chat/completions`): Extensions → Optional components → install "OpenAI API local protocol bridge", then tap "Config". The bridge translates between the two protocols on the device; the model still runs remotely, on your own key and quota.
   - **Several APIs are supported**: each API has its own address, key, models (tick the option to read the model list automatically to pick from suggestions) and context window, and you choose one default model across all of them. Saving shows which services your conversations will be sent to and only takes effect after you confirm. Saved keys are never shown again; leave the key empty when changing other fields to keep it.
   - `https://api.example.com` or `…/v1` is completed to `/v1` automatically; if the provider uses a custom path, enter the full `…/chat/completions` address it gives you. Services that only offer `/v1/responses` won't work.
@@ -150,30 +157,30 @@ Third-party endpoints are your choice; the app does not vet or endorse them. The
 ## Extensions
 
 - **Toolkit modules**: install and remove as needed; each shows what it is for, its size and what uses it. Typing a missing command in the terminal tells you which module has it.
-- **Components**: large tools such as Chromium, Blender, Godot, LibreOffice, llama.cpp, GPU drivers and QQ bots (native NapCat / SnowLuma), installed when you need them. Signatures are checked first, and each component ships a skill so Claude knows how to use it.
-- **Saved prompts**: create one under Saved prompts on the Extensions page: give it a name (say, issue) and write what should be sent to Claude. Then type `/issue your details` in the input box, and the text after the name fills `$ARGUMENTS`. A prompt can be for all projects or just the current one. They're stored as standard Claude Code command files, so claude in the terminal can use them too.
-- **Plugins, skills, MCP**: add, edit and manage them on the Extensions page (long-press or double-tap an MCP entry to edit it directly; tokens are never echoed, only their names); changes apply from the next message. More → Capabilities shows everything Claude can use this turn.
+- **Components**: large tools such as Chromium, Blender, Godot, LibreOffice, llama.cpp, GPU drivers and QQ bots (native NapCat / SnowLuma), installed when you need them. Signatures are checked first.
+- **Saved prompts**: create one under Saved prompts on the Extensions page: give it a name (say, issue) and write what should be sent to Antigravity. Then type `/issue your details` in the input box, and the text after the name fills `$ARGUMENTS`. A prompt can be for all projects or just the current one. They're stored as command files, so agy in the terminal can use them too.
+- **MCP**: add, edit and manage servers on the Extensions page (long-press or double-tap an MCP entry to edit it directly; tokens are never echoed, only their names); changes apply from the next message. Plugin and skill support is yet to be verified. More → Capabilities shows everything Antigravity can use this turn.
 - **pkg**: in the terminal, `pkg install rust` installs packages from the Termux repository; `pkg verified` lists the ones tested on device.
 
 ## Shizuku and system permissions
 
-- Settings → Device & permissions → Install and activate. It activates over wireless debugging with no computer, and reactivates itself after a reboot. If you already have **Sui** (a Magisk / KernelSU module), grant cccodroid in Sui and you're done; no Shizuku app needed.
-- Once active, the terminal and Claude can run `priv '<command>'` as the shell user; every call is kept in the Privileged command log.
-- **Privileged commands need your OK.** Only read-only commands such as `dumpsys <service>`, `pm list` and `settings get` run straight away. Anything else shows a dialog in cccodroid with the exact command, and runs only if you allow it. If cccodroid isn't in the foreground, or another command is already waiting, it is refused, so a task left running in the background stops at its first privileged command. Ways to loosen this, from narrowest to widest:
+- Settings → Device & permissions → Install and activate. It activates over wireless debugging with no computer, and reactivates itself after a reboot. If you already have **Sui** (a Magisk / KernelSU module), grant agycodroid in Sui and you're done; no Shizuku app needed.
+- Once active, the terminal and Antigravity can run `priv '<command>'` as the shell user; every call is kept in the Privileged command log.
+- **Privileged commands need your OK.** Only read-only commands such as `dumpsys <service>`, `pm list` and `settings get` run straight away. Anything else shows a dialog in agycodroid with the exact command, and runs only if you allow it. If agycodroid isn't in the foreground, or another command is already waiting, it is refused, so a task left running in the background stops at its first privileged command. Ways to loosen this, from narrowest to widest:
   - "Allow, and don't ask again for this command for 10 minutes": only for that exact command.
   - Tick "Allow all later privileged commands in this session" before allowing: that session won't be asked again and can keep going in the background. It resets when the app restarts and never applies to scheduled tasks.
   - Settings → Device & permissions → "Stop confirming privileged commands one by one (at your own risk)": every privileged command runs directly. Turning it on shows a disclaimer: damage caused by a wrong command, a model's mistake or an injected script is your own responsibility.
-  - Whichever you choose, commands that touch cccodroid itself or Shizuku / Sui are caught and confirmed where possible, but not every form can be caught (for example, one hidden in a script file).
-- **Device tools** (off by default): let Claude post notifications, use the clipboard and share files. Reading and tapping the screen needs accessibility, which can switch on only while in use.
+  - Whichever you choose, commands that touch agycodroid itself or Shizuku / Sui are caught and confirmed where possible, but not every form can be caught (for example, one hidden in a script file).
+- **Device tools** (off by default): let Antigravity post notifications, use the clipboard and share files. Reading and tapping the screen needs accessibility, which can switch on only while in use.
 - **Memory manager** (off by default): stops background apps outside your allow list before heavy jobs. In the terminal, use `cc-mem run -- <command>`.
 
 ## Updates and repair
 
-- **Auto-update** (on by default): Claude Code updates silently; a new app version is signature-checked, then offered for install; toolkit updates download on Wi‑Fi and are applied the next time you open the app.
+- **Auto-update** (on by default): Antigravity CLI updates silently; a new app version is signature-checked, then offered for install; toolkit updates download on Wi‑Fi and are applied the next time you open the app.
 - The toolkit can come from GitHub, the cccodroid.net mirror or a local file. If one source stalls, the other takes over and resumes; everything is checked against hashes shipped in the APK.
 - Updates are verified against the release manifest before anything is replaced. If one is interrupted, it finishes or rolls back on the next launch.
 - The Repair ledger under Settings → Troubleshooting records every install, check and repair.
-- **Two install packages**: the usual `cccodroid.apk` targets SDK 28 and runs on the widest range of devices; `cccodroid-36.apk` targets SDK 36 for newer phones whose system refuses apps with an old target SDK. Both have the same features and share data, and you can switch at any time under Settings → Updates → Install package. If the system ever refuses the 28 build, the app remembers it and only updates to 36 from then on; choosing 28 is then blocked. In the 36 build, toolkit programs are started through the system loader, so the odd program that locates its data relative to its own path may misbehave — please report it if you hit one.
+- **Two install packages**: the usual `agycodroid.apk` targets SDK 28 and runs on the widest range of devices; `agycodroid-36.apk` targets SDK 36 for newer phones whose system refuses apps with an old target SDK. Both have the same features and share data, and you can switch at any time under Settings → Updates → Install package. If the system ever refuses the 28 build, the app remembers it and only updates to 36 from then on; choosing 28 is then blocked. In the 36 build, toolkit programs are started through the system loader, so the odd program that locates its data relative to its own path may misbehave — please report it if you hit one.
 
 ## Known issues
 
@@ -191,4 +198,4 @@ Third-party endpoints are your choice; the app does not vet or endorse them. The
 
 Start with Settings → Troubleshooting → Check records, then the Repair ledger. If that does not help, send a Diagnostics bundle to whoever is helping you, or use Report on GitHub: the device, system and self-test results are filled in, and keys and your messages are left out.
 
-If a hook, plugin or CLAUDE.md breaks things, turn on **Safe mode** under Settings → Claude behavior. Nothing custom is loaded until you turn it off again.
+If a bad configuration breaks things, turn on **Safe mode** under Settings → Antigravity behavior: it starts with only agy's default configuration and loads no extra settings until you turn it off again.

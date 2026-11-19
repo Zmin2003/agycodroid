@@ -7,7 +7,7 @@ import path from "node:path";
 import { CFG } from "../gw/config.mjs";
 import { _schedForTest } from "../gw/sched.mjs";
 
-const SCHED_FILE = path.join(CFG.home, "ccapp-sched.json");
+const SCHED_FILE = path.join(CFG.home, "agyapp-sched.json");
 // provider 指向已删掉的接口：fire() 第一步就以「指定的接口已经删掉了」跳过，不会真去起 claude
 const task = (id, nextAt) => ({ id, name: id, prompt: "x", on: true, nextAt, missed: "skip", provider: "gone-" + id, freq: { kind: "once" } });
 const lastMsg = () => { const r = _schedForTest.runlog().at(-1); return r ? String(r.msg || "") : ""; };
@@ -37,6 +37,6 @@ test("闹钟推迟 10 分钟仍按到点执行；不带计划时刻或推迟太�
   } finally {
     DB.tasks = keep.tasks; DB.missed = keep.missed; DB.lastTick = keep.lastTick;
     if (before != null) fs.writeFileSync(SCHED_FILE, before); else fs.rmSync(SCHED_FILE, { force: true });
-    for (const f of ["ccapp-sched-runs.json", "ccapp-sched-next"]) fs.rmSync(path.join(CFG.home, f), { force: true });
+    for (const f of ["agyapp-sched-runs.json", "agyapp-sched-next"]) fs.rmSync(path.join(CFG.home, f), { force: true });
   }
 });

@@ -14,14 +14,14 @@
 //      <div data-i18n-skip>…</div>                         整个子树不翻译（语言选择区块就是这样）
 //  键是元素**原始**内容（首次 apply 时记下；data-i18n-html 的键会把连续空白压成一个空格）。
 //
-//  语言设置存在 localStorage["ccapp.lang"]（"auto" 或 langs.js 里的 code）。
+//  语言设置存在 localStorage["agyapp.lang"]（"auto" 或 langs.js 里的 code）。
 //  只加载当前语言的词典（document.write 同步插入，保证在 app.js 之前就位）；切换后整页 reload ——
 //  app.js 里的动态文本都是渲染时现取的，reload 最省事也最不会漏。
 //  网关请求会带 X-CC-Lang 头（见 app.js 的 api()），网关侧要本地化提示语时按它来。
 // ─────────────────────────────────────────────────────────────────────
 (() => {
   "use strict";
-  const LS = "ccapp.lang";
+  const LS = "agyapp.lang";
   const SRC = "zh", FALLBACK = "en";
   const LANGS = Array.isArray(window.I18N_LANGS) && window.I18N_LANGS.length
     ? window.I18N_LANGS
@@ -55,8 +55,8 @@
   }
   if (pref !== "auto" && !byCode[pref]) pref = "auto";   // 存了个不认识的值（比如语言被撤掉了）：别卡死在它上面
   const lang = pref === "auto" ? systemLang() : pref;
-  // 告诉 cccodroid 的原生外壳（通知、安装页、更新文案）界面最终用哪种语言；开发端 / 浏览器里没有这个桥就跳过
-  try { const a = window.CCApp; if (a && typeof a.langPref === "function") a.langPref(lang); } catch {}
+  // 告诉 agycodroid 的原生外壳（通知、安装页、更新文案）界面最终用哪种语言；开发端 / 浏览器里没有这个桥就跳过
+  try { const a = window.AGApp; if (a && typeof a.langPref === "function") a.langPref(lang); } catch {}
   const missing = new Set();   // 本次运行里查过但当前语言没译的键，调试用：[...I18N.missing]
 
   window.I18N_DICT = window.I18N_DICT || {};

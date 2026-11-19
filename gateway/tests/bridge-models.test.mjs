@@ -17,14 +17,14 @@ const upstreamSecret = "fixture-models-upstream-NOT-FOR-OUTPUT";
 const oldSecret = "fixture-models-old-key-NOT-FOR-APP";
 const ambientSecret = "fixture-models-ambient-NOT-FORWARD";
 const localSecret = "e".repeat(48);
-for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "CCAPP_RUN", "CCAPP_FIXTURE_SECRET"])
+for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "AGAPP_RUN", "AGAPP_FIXTURE_SECRET"])
   process.env[name] = ambientSecret;
 
-const home = process.env.CCAPP_HOME, prefix = process.env.CCAPP_PREFIX, temporary = process.env.CCAPP_TMP;
-assert.equal(process.env.CCAPP_TEST, "1");
-assert.ok(temporary && path.basename(temporary).startsWith("cccodroid-test-"), "必须由 scripts/test.mjs 创建临时根目录");
+const home = process.env.AGAPP_HOME, prefix = process.env.AGAPP_PREFIX, temporary = process.env.AGAPP_TMP;
+assert.equal(process.env.AGAPP_TEST, "1");
+assert.ok(temporary && path.basename(temporary).startsWith("agycodroid-test-"), "必须由 scripts/test.mjs 创建临时根目录");
 assert.equal(home, path.join(temporary, "home")); assert.equal(prefix, path.join(temporary, "usr"));
-assert.equal(process.env.HOME, home); assert.equal(process.env.CCAPP_WORKSPACE, path.join(temporary, "workspace"));
+assert.equal(process.env.HOME, home); assert.equal(process.env.AGAPP_WORKSPACE, path.join(temporary, "workspace"));
 
 const { routeComponents, compIndexCache } = await import("../gw/components.mjs");
 const providers = await import("../gw/providers.mjs");
@@ -32,9 +32,9 @@ const { SETTINGS } = await import("../gw/settings-store.mjs");
 const { CFG } = await import("../gw/config.mjs");
 const { RUNS } = await import("../gw/runs.mjs");
 const { fetchBridgeModels } = await import("../gw/bridge-config.mjs");
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "bridge-models-"));
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "bridge-models-"));
 const target = path.join(home, ".local/share/ccr-bridge-kit");
-const registration = path.join(home, ".cccodroid/services/openai-bridge.json");
+const registration = path.join(home, ".agycodroid/services/openai-bridge.json");
 const mapping = path.join(path.dirname(registration), "openai-bridge-app.json");
 const record = path.join(path.dirname(prefix), "components/openai-bridge.json");
 const component = path.join(prefix, "lib/openai-bridge/component.cjs");
@@ -90,10 +90,10 @@ let raw='';process.stdin.on('data',c=>raw+=c);process.stdin.on('end',()=>{
  output();
 });`;
 
-const providerFile = path.join(home, "ccapp-providers.json");
-const settingsFile = path.join(home, "ccapp-settings.json");
-const configFile = path.join(home, "ccapp-config.json");
-const seedFile = path.join(home, "ccapp-seed.json");
+const providerFile = path.join(home, "agyapp-providers.json");
+const settingsFile = path.join(home, "agyapp-settings.json");
+const configFile = path.join(home, "agyapp-config.json");
+const seedFile = path.join(home, "agyapp-seed.json");
 const credentialsFile = path.join(home, ".claude/.credentials.json");
 const oldConfigFiles = [path.join(target, "config.json"), path.join(target, "ccr-config.json"), path.join(target, ".claude-code-router/config.json")];
 const protectedFiles = [registration, mapping, providerFile, settingsFile, configFile, seedFile, credentialsFile,
@@ -244,7 +244,7 @@ test("固定 gui-models 命令与 Key 只经 stdin；不带 consent，不转发 
   assert.equal(call.entry, component); assert.deepEqual(call.args, ["gui-models"]);
   assert.deepEqual(call.input, { endpoint: normalizedEndpoint, apiKey: upstreamSecret });
   assert.equal(call.secretInArgv, false); assert.equal(call.secretInEnv, false);
-  assert.equal(call.envNames.some((name) => /^(?:ANTHROPIC_|OPENAI_|CCAPP_)/.test(name)), false);
+  assert.equal(call.envNames.some((name) => /^(?:ANTHROPIC_|OPENAI_|AGAPP_)/.test(name)), false);
   assert.deepEqual(snapshot(), before, "获取模型不得保存、启动、切换 provider 或修改既有配置");
 });
 

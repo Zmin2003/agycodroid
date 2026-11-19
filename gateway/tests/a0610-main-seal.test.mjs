@@ -10,12 +10,12 @@ import { sealPrepare, sealCleanup, stripFrontHooks } from "../gw/seal.mjs";
 
 const put = (abs, s) => { fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, s); };
 const at = (args, flag) => args.flatMap((a, i) => (a === flag ? [args[i + 1]] : []));
-const PJ = path.join(CFG.home, "ccapp-projects.json");
+const PJ = path.join(CFG.home, "agyapp-projects.json");
 const hadPJ = fs.existsSync(PJ) ? fs.readFileSync(PJ) : null;
 const PUB = path.join(CFG.home, "a0610-pub");                         // 当共享存储：不在工作区里
 const WS = path.join(CFG.workspace, "a0610-seal");
 const WS_UP = path.join(path.dirname(CFG.workspace), "CLAUDE.md");   // 工作区上一级
-const cleanup = [PUB, WS, WS_UP, path.join(CFG.home, ".claude"), path.join(CFG.home, ".cache/ccapp-seal")];
+const cleanup = [PUB, WS, WS_UP, path.join(CFG.home, ".claude"), path.join(CFG.home, ".cache/agyapp-seal")];
 after(() => {
   for (const p of cleanup) fs.rmSync(p, { recursive: true, force: true });
   if (hadPJ) fs.writeFileSync(PJ, hadPJ); else fs.rmSync(PJ, { force: true });

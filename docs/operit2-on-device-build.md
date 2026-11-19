@@ -1,10 +1,10 @@
-# Case study: building Operit2 (Flutter + Rust) from source on a phone with cccodroid
+# Case study: building Operit2 (Flutter + Rust) from source on a phone with agycodroid
 
 [中文](operit2-on-device-build.zh-CN.md)
 
-On 2026-10-20, a complete from-source build of [Operit2](https://github.com/AAswordman/Operit2) was done on an Android arm64 device with cccodroid, producing an installable arm64 release APK that also launched successfully. No PC, no root, no cloud CI — everything ran on the device.
+On 2026-10-20, a complete from-source build of [Operit2](https://github.com/AAswordman/Operit2) was done on an Android arm64 device with agycodroid, producing an installable arm64 release APK that also launched successfully. No PC, no root, no cloud CI — everything ran on the device.
 
-This is not a built-in cccodroid feature; it is a boundary test. The build exercised two runtimes (glibc and bionic), Android NDK cross-compilation, Rust target builds, Flutter AOT, proot, user-mode qemu, and SELinux workarounds. It is written down because most of the pitfalls are not specific to this project: anyone compiling another large project on a phone is likely to meet them again.
+This is not a built-in agycodroid feature; it is a boundary test. The build exercised two runtimes (glibc and bionic), Android NDK cross-compilation, Rust target builds, Flutter AOT, proot, user-mode qemu, and SELinux workarounds. It is written down because most of the pitfalls are not specific to this project: anyone compiling another large project on a phone is likely to meet them again.
 
 ## 1. Result
 
@@ -35,7 +35,7 @@ This is not a built-in cccodroid feature; it is a boundary test. The build exerc
 The final setup used two layers:
 
 1. **A proot-distro Ubuntu 26.04 arm64 container (glibc)** to run the official Flutter/Dart Linux tools and an official Linux-aarch64 CMake.
-2. **cccodroid's bundled Termux tools (bionic)** — Java 21, clang, Rust, Node, Python, aapt2, ninja — injected into the container through proot binds.
+2. **agycodroid's bundled Termux tools (bionic)** — Java 21, clang, Rust, Node, Python, aapt2, ninja — injected into the container through proot binds.
 
 Neither layer alone is enough: the Ubuntu container has no usable Android build tools (apt also hit TLS certificate failures there), while the bionic environment cannot run Flutter's glibc host tools.
 
@@ -44,14 +44,14 @@ Neither layer alone is enough: the Ubuntu container has no usable Android build 
 proot only exposes explicitly bound paths. The login command used was:
 
 ```sh
-P=/data/user/0/cc.codroid/files/usr
-W=/data/user/0/cc.codroid/files/home/workspace
+P=/data/user/0/cc.agyroid/files/usr
+W=/data/user/0/cc.agyroid/files/home/workspace
 
 proot-distro login ubuntu --shared-tmp \
   -b /system:/system \
   -b /apex:/apex \
-  -b $P:/data/data/cc.codroid/files/usr \
-  -b $P:/data/user/0/cc.codroid/files/usr \
+  -b $P:/data/data/cc.agyroid/files/usr \
+  -b $P:/data/user/0/cc.agyroid/files/usr \
   -b $W:/workspace -- /bin/bash -lc '<command>'
 ```
 
@@ -62,7 +62,7 @@ proot-distro login ubuntu --shared-tmp \
 
 | Tool | Version |
 |---|---|
-| cccodroid devkit | Java 21.0.12, clang 21.1.8, Rust 1.99.1, Node 26.4.0, Python 3.14.6, aapt2 16.0.0.4, ninja 1.13.2 |
+| agycodroid devkit | Java 21.0.12, clang 21.1.8, Rust 1.99.1, Node 26.4.0, Python 3.14.6, aapt2 16.0.0.4, ninja 1.13.2 |
 | proot-distro / Ubuntu | 5.10.0 / Ubuntu 26.04.1 LTS arm64 |
 | Flutter | 3.41.10-ohos (engine pinned to stock `42d3d75a56efe1a2e9902f52dc8006099c45d937`) |
 | Dart | 3.11.5 |
@@ -89,7 +89,7 @@ proot-distro login ubuntu --shared-tmp \
 | 12 | No prebuilt terminal runtime | bash/busybox/proot/loader had to be cross-compiled | Built four `.so` files; added `#include <string.h>` to `ashmem_memfd.c` |
 | 13 | Alpine rootfs build failed | Missing TLS certs; apk-tools 3.x writes its database with `O_TMPFILE` + `linkat(/proc/self/fd/…)`, which Android SELinux denies | Switched to an http mirror and copied in a CA bundle; used apk-tools-static 2.14.4 (named temp files); fixed permissions and repacked with a fixed mtime |
 | 14 | Plugin packaging tools missing | TypeScript and pnpm dependencies were needed | Installed typescript 5.9.3; ran `pnpm install --frozen-lockfile` in the workflow package |
-| 15 | Gradle/AGP environment | Needed a pinned Gradle, aapt2, JVM settings and signing | Pointed the wrapper at a local Gradle distribution; set `android.aapt2FromMavenOverride` to cccodroid's aapt2; tuned JVM memory and worker count; generated a local keystore |
+| 15 | Gradle/AGP environment | Needed a pinned Gradle, aapt2, JVM settings and signing | Pointed the wrapper at a local Gradle distribution; set `android.aapt2FromMavenOverride` to agycodroid's aapt2; tuned JVM memory and worker count; generated a local keystore |
 | 16 | **Wrong AOT snapshot target** | The desktop Linux-arm64 `gen_snapshot` emits `arm64 linux no-compressed-pointers`, while the Android engine requires `arm64 android compressed-pointers` | Used the official x86_64 Android `gen_snapshot` under `qemu-user-x86-64` with an x86_64 Ubuntu rootfs; replaced `linux-arm64/gen_snapshot` with a qemu wrapper; cleared the stale build cache |
 | 17 | Gradle daemon disappeared mid-build | The daemon was killed near the end of AOT (no hs_err, memory was plentiful) | The kernel dill was cached, so a rerun only redid AOT (~15 min) and succeeded |
 | 18 | Install blocked by SELinux | system_server cannot read /sdcard (FUSE) | Copied the APK to `/data/local/tmp` as shell, then ran `pm install` from there |
@@ -107,7 +107,7 @@ A clang 21 driver with clang 19 `include` fails on builtin headers such as NEON 
 ```sh
 NDK=/workspace/dl/android-ndk-r28c
 mkdir -p /workspace/dl/clang-merged
-ln -s /data/data/cc.codroid/files/usr/lib/clang/21/include /workspace/dl/clang-merged/include
+ln -s /data/data/cc.agyroid/files/usr/lib/clang/21/include /workspace/dl/clang-merged/include
 ln -s $NDK/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/19/lib /workspace/dl/clang-merged/lib
 ```
 
@@ -143,9 +143,9 @@ head -c 1200 libapp.so | strings -n 20 | grep -o "product .*pointers"
 The fix is the official x86_64 `gen_snapshot` from the Android artifacts (`android-arm64-release/linux-x64/gen_snapshot`), run through qemu:
 
 ```sh
-#!/data/data/cc.codroid/files/usr/bin/bash
+#!/data/data/cc.agyroid/files/usr/bin/bash
 unset LD_PRELOAD
-exec /data/data/cc.codroid/files/usr/bin/qemu-x86_64 \
+exec /data/data/cc.agyroid/files/usr/bin/qemu-x86_64 \
   -L /workspace/dl/amd64-rootfs \
   /workspace/flutter-sdk/bin/cache/artifacts/engine/android-arm64-release/linux-x64/gen_snapshot "$@"
 ```
@@ -163,7 +163,7 @@ These steps reflect the versions at the time of writing; re-check after upstream
 ### 6.1 Preparation
 
 ```sh
-# Java/clang/Rust/Node/Python/CMake/Ninja/aapt2 are bundled with cccodroid's
+# Java/clang/Rust/Node/Python/CMake/Ninja/aapt2 are bundled with agycodroid's
 # devkit. Just confirm the commands work; reinstalling may override the
 # devkit's pinned versions.
 pip install proot-distro
@@ -178,8 +178,8 @@ The Android SDK needs build-tools 35.0.0, platforms;android-36 and NDK 28.2.1367
 For API 23 (repeat for the other API levels):
 
 ```sh
-#!/data/data/cc.codroid/files/usr/bin/bash
-exec /data/data/cc.codroid/files/usr/bin/clang \
+#!/data/data/cc.agyroid/files/usr/bin/bash
+exec /data/data/cc.agyroid/files/usr/bin/clang \
   --target=aarch64-linux-android23 \
   --sysroot=/workspace/dl/android-ndk-r28c/toolchains/llvm/prebuilt/linux-x86_64/sysroot \
   -resource-dir=/workspace/dl/clang-merged "$@"
@@ -191,14 +191,14 @@ Replace `llvm-ar`, `llvm-ranlib`, `llvm-strip`, etc. with scripts forwarding to 
 
 ```sh
 # android-sdk/cmake/3.22.1/bin/cmake
-#!/data/data/cc.codroid/files/usr/bin/bash
+#!/data/data/cc.agyroid/files/usr/bin/bash
 exec /workspace/dl/cmake-3.31.6-linux-aarch64/bin/cmake "$@"
 ```
 
 ```sh
 # android-sdk/cmake/3.22.1/bin/ninja
-#!/data/data/cc.codroid/files/usr/bin/bash
-exec /data/data/cc.codroid/files/usr/bin/ninja "$@"
+#!/data/data/cc.agyroid/files/usr/bin/bash
+exec /data/data/cc.agyroid/files/usr/bin/ninja "$@"
 ```
 
 Reason: row 9 above — Flutter's Gradle plugin attaches an empty CMake project to the app to trigger the NDK download (`forceNdkDownload`), so CMake must work even when the project has no C++.
@@ -216,10 +216,10 @@ Operit2-specific adaptations (see its repository for details):
 
 ```sh
 #!/bin/bash
-export PATH=/data/data/cc.codroid/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export JAVA_HOME=/data/data/cc.codroid/files/usr/lib/jvm/java-21-openjdk
+export PATH=/data/data/cc.agyroid/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export JAVA_HOME=/data/data/cc.agyroid/files/usr/lib/jvm/java-21-openjdk
 export FLUTTER_OHOS_STORAGE_BASE_URL=https://storage.googleapis.com
-export OPERIT_LIBCLANG_DIR=/data/data/cc.codroid/files/usr/lib
+export OPERIT_LIBCLANG_DIR=/data/data/cc.agyroid/files/usr/lib
 export ANDROID_HOME=/workspace/android-sdk
 export ANDROID_SDK_ROOT=/workspace/android-sdk
 export LANG=C.UTF-8
@@ -252,7 +252,7 @@ unzip -p $APK assets/android-runtime/arm64-v8a/rootfs.tar.gz.bin | sha256sum
 SELinux prevents system_server from reading /sdcard, so stage the APK first:
 
 ```sh
-priv 'cp /sdcard/cccodroid/app.apk /data/local/tmp/app.apk'
+priv 'cp /sdcard/agycodroid/app.apk /data/local/tmp/app.apk'
 priv 'pm install -r /data/local/tmp/app.apk'
 priv 'am start -W -n app.operit/.MainActivity'
 ```
@@ -273,4 +273,4 @@ The measured cold start was 518 ms; Flutter rendered the first-run and user-agre
 
 ## 9. Scope
 
-This is a one-off case study, not official build support from cccodroid. Versions, script paths and upstream project layouts can change. Verify component versions before following it, generate your own signing key, and never commit someone else's key or password.
+This is a one-off case study, not official build support from agycodroid. Versions, script paths and upstream project layouts can change. Verify component versions before following it, generate your own signing key, and never commit someone else's key or password.

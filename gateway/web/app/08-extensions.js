@@ -41,13 +41,13 @@
   // 模块装完 / 卸完后组件卡要跟着刷新：组件装的正是刚补上的模块，不刷新的话安装按钮一直是灰的（0.6.10 审计 195-I.4）
   let modTouched = false;
   const MOD_USES = () => ({
-    claude: t("Claude Code 本身"), git: t("git 面板"), terminal: t("终端"), shizuku: t("Shizuku 一键启动（无线调试）"), search: t("Claude 搜代码、看差异"),
+    claude: t("Antigravity CLI 本身"), git: t("git 面板"), terminal: t("终端"), shizuku: t("Shizuku 一键启动（无线调试）"), search: t("Antigravity 搜代码、看差异"),
     "native-build": t("编译原生程序"), apk: t("打 APK"), "usb-adb": t("USB 调试"), "gpu-components": t("GPU 组件（Blender、浏览器等）"),
     media: t("音视频处理"), docs: t("排版、表格分析、图片处理"),
   });
-  // 停用名单（F5）：组件、模块停用 = 不再告诉 Claude，命令文件还在
+  // 停用名单（F5）：组件、模块停用 = 不再告诉 Antigravity，命令文件还在
   const extOffNow = () => api("/api/ext/off").catch(() => ({ comp: [], mod: [] }));
-  const OFF_TIP = () => t("停用后 Claude 看不到它，命令文件还在，随时可以启用。");
+  const OFF_TIP = () => t("停用后 Antigravity 看不到它，命令文件还在，随时可以启用。");
   async function loadModules() {
     clearTimeout(modTimer);
     const [r, xoff] = await Promise.all([api("/api/devkit/modules").catch(() => null), extOffNow()]);
@@ -415,7 +415,7 @@
     const ok = new Set(["glibc", "bionic", "static", "script"]);
     const rows = r.programs.map((p, i) => {
       const can = ok.has(p.kind);
-      const clash = p.clash === "toolkit" ? t("工具包里已有同名命令，换个名字") : p.clash === "system" ? t("系统或 cccodroid 自带同名命令，换个名字") : p.clash === "custom" ? t("别的自定义组件占了这个名字") : p.clash === "busy" ? t("另一个组件正在安装这个名字，稍后再试或换个名字") : p.clash === "bad" ? t("改个名字（只能用字母、数字和 ._+-）") : "";
+      const clash = p.clash === "toolkit" ? t("工具包里已有同名命令，换个名字") : p.clash === "system" ? t("系统或 agycodroid 自带同名命令，换个名字") : p.clash === "custom" ? t("别的自定义组件占了这个名字") : p.clash === "busy" ? t("另一个组件正在安装这个名字，稍后再试或换个名字") : p.clash === "bad" ? t("改个名字（只能用字母、数字和 ._+-）") : "";
       return '<div class="cu-prog' + (can ? "" : " dim") + '" data-i="' + i + '">' +
         '<label class="cu-row"><input type="checkbox" class="cu-on"' + (can ? "" : " disabled") + (can && p.suggest && !p.clash ? " checked" : "") + "> <code>" + esc(p.rel) + "</code>" +
         ' <span class="tiny">' + esc(KIND()[p.kind] || p.kind) + "</span></label>" +
@@ -432,7 +432,7 @@
       '<div class="tiny">' + t("{src}：{n} 个文件，{size}", { src: esc(r.source), n: r.files, size: MB(r.bytes) }) + "</div>" +
       '<div class="cu-row"><span class="tiny">' + t("名称") + '</span> <input id="cu-name" value="' + esc(r.name) + '"></div>' +
       '<div class="cu-row"><span class="tiny">ID</span> <input id="cu-id" value="' + esc(r.id) + '" spellcheck="false" autocapitalize="off"></div>' +
-      '<div class="cu-row"><span class="tiny">' + t("说明") + '</span> <input id="cu-desc" placeholder="' + esc(t("可选：它是干什么的，Claude 会看到")) + '"></div>' +
+      '<div class="cu-row"><span class="tiny">' + t("说明") + '</span> <input id="cu-desc" placeholder="' + esc(t("可选：它是干什么的，Antigravity 会看到")) + '"></div>' +
       '<div class="tiny">' + t("要用哪些命令") + "</div>" + rows + fix + unres +
       r.warnings.map((w) => '<div class="tiny warn">' + esc(w) + "</div>").join("") +
       '<div class="tiny dim">' + t("程序来源由你负责：它能读写本应用里的所有文件。") + "</div>" +
@@ -459,7 +459,7 @@
         .catch((err) => ({ ok: false, message: err.message })).finally(() => { cust.installing = false; });
       if (!x.ok) { b.disabled = false; b.textContent = t("安装"); return toast(t("失败：{msg}", { msg: x.message || "" }), true); }
       if (cust.rep === r) { cust.rep = null; custSave(); renderCustomWiz(); }
-      toast(x.unresolved && x.unresolved.length ? t("已安装，但还缺 {n} 个库", { n: x.unresolved.length }) : t("已安装，Claude 和终端里都能用了"), !!(x.unresolved && x.unresolved.length));
+      toast(x.unresolved && x.unresolved.length ? t("已安装，但还缺 {n} 个库", { n: x.unresolved.length }) : t("已安装，Antigravity 和终端里都能用了"), !!(x.unresolved && x.unresolved.length));
       loadExtSkills();   // 自定义组件会生成一个技能：同页的技能列表跟着刷新（195-J.9）
       return loadCustom();
     }
@@ -515,7 +515,7 @@
     const fams = [];
     for (const m of r.items || []) if (!m.custom && !fams.includes(m.fam)) fams.push(m.fam);
     const custom = (r.items || []).filter((m) => m.custom);
-    llmDl.html = '<div class="tiny dim">' + t("模型放在 /sdcard/cccodroid/models，下好后到 设置 → 模型服务 → 端侧小模型 使用。本机内存 {ram} GB。都是 Q4_K_M 量化；手机上 1–4B 比较实用，超过 6B 会很慢。", { ram: r.ram || "?" }) + "</div>" +
+    llmDl.html = '<div class="tiny dim">' + t("模型放在 /sdcard/agycodroid/models，下好后到 设置 → 模型服务 → 端侧小模型 使用。本机内存 {ram} GB。都是 Q4_K_M 量化；手机上 1–4B 比较实用，超过 6B 会很慢。", { ram: r.ram || "?" }) + "</div>" +
       (r.err ? '<div class="tiny err">' + esc(r.err) + "</div>" : "") +
       fams.map((f) => {
         const list = r.items.filter((m) => !m.custom && m.fam === f);
@@ -612,100 +612,37 @@
   }
 
   async function loadExtPlugins() {
-    const box = $("ext-plugins");
-    let r;
-    try { r = await api("/api/ext/plugins"); } catch (e) { box.innerHTML = `<div class="tiny">${esc(e.message)}</div>`; return; }
-    if (r.ok === false) { box.innerHTML = `<div class="tiny">${esc(r.message)}</div>`; return; }
-    $("ext-p-count").textContent = r.installed.length;
-    box.innerHTML = r.installed.length ? r.installed.map((p) => extItem(
-      esc(p.id.split("@")[0]) + (p.enabled ? "" : ` <span class="badge">${t("已停用")}</span>`),
-      `<span>${esc(p.id.split("@")[1] || "")}</span><span>${esc(String(p.version || "").slice(0, 16))}</span><span>${esc(p.scope || "")}</span>`,
-      `<button data-x="${p.enabled ? "disable" : "enable"}" data-id="${esc(p.id)}">${p.enabled ? t("停用") : t("启用")}</button>
-       <button data-x="uninstall" data-id="${esc(p.id)}">${t("卸载")}</button>`, "", [p.enabled ? "on" : "off", "m:" + tg(p.id.split("@")[1] || "")])).join("")
-      : `<div class="tiny">${t("还没装插件。在下面搜索可安装的。")}</div>`;
-    renderIdx("plugin", [["on", t("已启用")], ["off", t("已停用")]]);
+    // 插件是 Claude Code 专属，Antigravity CLI 没有：网关的 /api/ext/plugins* 一律返回 400，这里直接写明不支持，不调接口。
+    // 搜索框、目录和市场入口一并藏起来，免得点进去才看到报错。
+    $("ext-p-count").textContent = "—";
+    $("ext-plugins").innerHTML = `<div class="tiny">${esc(t("插件是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。"))}</div>`;
+    $("ext-p-q")?.closest("label")?.classList.add("hidden");
+    $("ext-catalog")?.classList.add("hidden");
+    $("ext-markets")?.closest("details")?.classList.add("hidden");
   }
 
   async function searchPlugins(more) {
-    const box = $("ext-catalog");
-    // 翻页在途再点「再显示」：两次都按同一个 offset 取，同一页追加两遍、最后一页反而没取（审查 F-003）
-    if (more && ext.busy) return;
-    // 连着搜两个词，慢的那个迟到不许盖掉新词的结果（审查 F-004）；新搜索也让在途的翻页作废
-    // 新搜索清掉分类筛选：否则选了「已启用 / 某个市场」后搜别的，结果全被旧筛选藏起来（195-J.2）
-    if (!more) { latest("plugcat"); ext.busy = false; ext.offset = 0; extPick.plugin = ""; ext.q = $("ext-p-q").value.trim(); box.innerHTML = `<div class="tiny">${t("正在拉取插件目录…")}</div>`; }
-    const n = LATEST.plugcat, ok = () => LATEST.plugcat === n;
-    if (more) ext.busy = true;
-    let r;
-    try { r = await api(`/api/ext/plugins?available=1&q=${encodeURIComponent(ext.q)}&offset=${ext.offset}`); }
-    catch (e) { if (!ok()) return; ext.busy = false; box.innerHTML = `<div class="tiny">${esc(e.message)}</div>`; return; }
-    if (!ok()) return;
-    ext.busy = false;
-    if (r.ok === false) { box.innerHTML = `<div class="tiny">${esc(r.message)}</div>`; return; }
-    const html = (r.available || []).map((p) => extItem(
-      esc(p.name),
-      `<span>${esc(p.marketplace)}</span>${p.version ? `<span>${esc(p.version)}</span>` : ""}`,
-      `<button data-x="install" data-id="${esc(p.id)}">${t("安装")}</button>`,
-      `<div class="tiny ext-desc">${esc(p.description)}</div>`, ["m:" + tg(p.marketplace)])).join("");
-    const old = box.querySelector(".ext-more-btn"); if (old) old.remove();
-    if (!more) box.innerHTML = `<div class="tiny">${t("找到 {n} 个", { n: Number(r.total) || 0 })}</div>` + html;
-    else box.insertAdjacentHTML("beforeend", html);
-    ext.offset += (r.available || []).length;
-    if (ext.offset < (r.total || 0)) box.insertAdjacentHTML("beforeend", `<button class="btn ghost sm ext-more-btn">${t("再显示 40 个")}</button>`);
-    renderIdx("plugin");
+    // 见 loadExtPlugins：插件不支持，搜索也不跑。
+    return;
   }
 
   async function installPlugin(id, btn) {
-    btn.disabled = true; btn.textContent = t("安装中…");
-    let r = await post("/api/ext/plugins/install", { id }).catch((e) => ({ ok: false, message: e.message }));
-    // 要执行命令才能装的插件：claude 把命令亮出来，人点头了才装
-    if (r.needConfirm) {
-      if (confirm(t("这个插件安装时要在本机执行下面这条命令，确认是你信任的来源再继续：\n\n{cmd}", { cmd: r.command }))) {
-        r = await post("/api/ext/plugins/install", { id, accept: r.sha256 }).catch((e) => ({ ok: false, message: e.message }));
-      } else {
-        // 用户自己点的取消不是「安装失败」（195-J.12）
-        toast(t("已取消"));
-        btn.disabled = false; btn.textContent = t("安装");
-        return;
-      }
-    }
-    if (r.ok) { toast(t("已安装 {name}，下一条消息生效", { name: id.split("@")[0] })); btn.closest(".item").remove(); loadExtPlugins(); }
-    else { toast(t("安装失败：{msg}", { msg: r.message || "" }), true); btn.disabled = false; btn.textContent = t("安装"); }
+    toast(t("插件是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。"), true);
+    if (btn) { btn.disabled = false; btn.textContent = t("安装"); }
   }
 
   async function loadExtMarkets() {
-    // 读失败要报错，不能画成「只有内置的官方目录」（195-N.4 / X.2）
-    const r = await api("/api/ext/marketplaces").catch((e) => ({ items: [], err: e.message }));
-    if (r.ok === false) r.err = r.err || r.message || "?";
-    if (r.err) {
-      $("ext-markets").innerHTML = `<div class="tiny err">${esc(t("插件市场读取失败：{msg}", { msg: r.err }))}</div><div class="it-acts"><button class="btn ghost sm" data-x="market-retry">${t("重试")}</button></div>`;
-      return;
-    }
-    $("ext-markets").innerHTML = (r.items || []).map((m) => extItem(esc(m.name), `<span>${esc(m.source)}</span>`,
-      `<button data-x="market-rm" data-id="${esc(m.name)}">${t("移除")}</button>`)).join("")
-      || `<div class="tiny">${t("只有内置的官方目录。可以添加别的插件市场（GitHub 仓库或网址）。")}</div>`;
+    // 见 loadExtPlugins：插件市场随插件一起不支持，入口已藏起来，这里什么也不做。
+    return;
   }
 
   async function loadExtSkills() {
-    // 读失败不能显示成「还没有技能」、计数 0（审查 F-007）
-    const r = await api("/api/ext/skills").catch((e) => ({ items: [], err: e.message || "?" }));
-    if (r.ok === false) r.err = r.message || "?";   // 200 + {ok:false}（195-X.2）
-    if (r.err) {
-      $("ext-s-count").textContent = "—";
-      $("ext-skills").innerHTML = `<div class="tiny err">${esc(t("技能列表读取失败：{msg}", { msg: r.err }))}</div><div class="it-acts"><button class="btn ghost sm" id="ext-s-retry">${esc(t("重试"))}</button></div>`;
-      $("ext-s-retry").onclick = () => loadExtSkills();
-      return;
-    }
-    $("ext-s-count").textContent = (r.items || []).length;
-    // 发行版：skill 经检查后以插件「user」交给 Claude Code，斜杠调用时名字带 user: 前缀（见 gw/seal.mjs）
-    // 模式（F5）：开 / 只露名字（省上下文）/ 只能你用斜杠调用 / 关。发行版的技能由网关打包交给 claude，只认开 / 关
-    const modes = r.sealed ? [["on", t("开")], ["off", t("关")]] : [["on", t("开")], ["name-only", t("只露名字")], ["user-invocable-only", t("只能你调用")], ["off", t("关")]];
-    const modeSel = (s) => s.orphan ? "" : `<select class="sk-mode" data-id="${esc(s.dir)}" aria-label="${esc(t("技能模式"))}">${modes.map(([v, l]) => `<option value="${v}"${(s.mode || "on") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-    $("ext-skills").innerHTML = (r.sealed && (r.items || []).length ? `<div class="tiny">${esc(t("cccodroid 检查过这些技能再交给 Claude Code，用斜杠调用时名字前面带 user:，比如 /user:{name}。", { name: r.items[0].name }))}</div>` : "") + (r.items || []).map((s) => extItem(esc(s.name) + (s.mode && s.mode !== "on" ? ` <span class="badge">${esc((modes.find(([v]) => v === s.mode) || [, t("已停用")])[1])}</span>` : ""), "",
-      modeSel(s) + `<button data-x="skill-rm" data-id="${esc(s.dir)}">${t("删除")}</button>`,
-      `<div class="tiny ext-desc">${esc(s.orphan ? t("这个文件夹里没有 SKILL.md（可能是以前导入到一半失败留下的），可以删掉。") : !isZh() && s.descEn ? s.descEn : s.description)}</div>`, [s.component ? "comp" : s.official ? "official" : "user"])).join("")
-      || `<div class="tiny">${t("~/.claude/skills 里还没有技能。插件也可能自带技能。")}</div>`;
-    renderIdx("skill", [["official", t("官方")], ["comp", t("组件自带")], ["user", t("自己装的")]]);
-    if ($("ext-s-catbox").open) loadSkillCat();
+    // 技能是 Claude Code 专属，Antigravity CLI 没有：网关的 /api/ext/skills* 一律返回 400，这里直接写明不支持，不调接口。
+    // 导入按钮和官方目录入口一并藏起来。
+    $("ext-s-count").textContent = "—";
+    $("ext-skills").innerHTML = `<div class="tiny">${esc(t("技能是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。"))}</div>`;
+    $("ext-s-import")?.closest(".row-actions")?.classList.add("hidden");
+    $("ext-s-catbox")?.classList.add("hidden");
   }
 
   $("ext-skills").addEventListener("change", async (e) => {
@@ -717,16 +654,17 @@
     loadExtSkills();
   });
 
-  // ── Hooks（自动规则）：到某个时刻自动跑一条命令。常用规则点一下就加，也能自己写；每条都能先试运行看效果 ──
+  // ── Hooks：Claude Code 专属，Antigravity CLI 没有（见 loadExtHooks）。下面这套旧界面留着没删，只是不再调用。
+  // 事件名（PreToolUse 等）与脚本路径都是 Claude 时代的；如将来 agy 出了等价机制再接回来 ──
   const HK = { data: null, scope: localStorage.getItem("cc.hookScope") || "user", edit: null, recipe: null };
   const HK_EV = {
-    PreToolUse: [tk("用工具之前"), tk("Claude 每次调用工具（改文件、跑命令、联网……）之前。退出码 2 会拦下这次调用，stderr 里写的原因会转告 Claude。")],
-    PostToolUse: [tk("用完工具之后"), tk("工具执行成功之后。适合格式化、记录、检查；动作已经做了，退出码 2 只会把 stderr 反馈给 Claude。")],
-    UserPromptSubmit: [tk("你发出消息时"), tk("你每发一条消息。命令打印的内容会作为补充说明一起交给 Claude；退出码 2 会拦下这条消息。")],
-    Stop: [tk("Claude 答完一轮时"), tk("Claude 这一轮回答结束。适合自动存档、提醒；退出码 2 会让它接着干（小心死循环）。")],
-    SessionStart: [tk("会话开始时"), tk("新开、继续、清空或压缩后的会话开始时。命令打印的内容会作为背景交给 Claude。")],
+    PreToolUse: [tk("用工具之前"), tk("Antigravity 每次调用工具（改文件、跑命令、联网……）之前。退出码 2 会拦下这次调用，stderr 里写的原因会转告 Antigravity。")],
+    PostToolUse: [tk("用完工具之后"), tk("工具执行成功之后。适合格式化、记录、检查；动作已经做了，退出码 2 只会把 stderr 反馈给 Antigravity。")],
+    UserPromptSubmit: [tk("你发出消息时"), tk("你每发一条消息。命令打印的内容会作为补充说明一起交给 Antigravity；退出码 2 会拦下这条消息。")],
+    Stop: [tk("Antigravity 答完一轮时"), tk("Antigravity 这一轮回答结束。适合自动存档、提醒；退出码 2 会让它接着干（小心死循环）。")],
+    SessionStart: [tk("会话开始时"), tk("新开、继续、清空或压缩后的会话开始时。命令打印的内容会作为背景交给 Antigravity。")],
     SessionEnd: [tk("会话结束时"), tk("会话结束时，适合收尾清理。")],
-    Notification: [tk("Claude 发提醒时"), tk("Claude 要你确认权限、或者闲着等你回复时。")],
+    Notification: [tk("Antigravity 发提醒时"), tk("Antigravity 要你确认权限、或者闲着等你回复时。")],
     PermissionRequest: [tk("要你确认权限时"), tk("弹出权限确认之前。进阶用法：输出 JSON 可以替你自动允许或拒绝。")],
     PostToolUseFailure: [tk("工具出错之后"), tk("工具执行失败之后。")],
     SubagentStart: [tk("子代理开始时"), ""],
@@ -761,27 +699,28 @@
   const lines = (s) => String(s || "").split("\n").map((x) => x.trim()).filter(Boolean);
   const hkScript = (name) => `node "$HOME/.claude/hooks/${name}"`;
   const HK_RECIPES = [
-    { id: "guard-files", title: tk("保护重要文件"), desc: tk("Claude 想改 .env、密钥、签名文件时直接拦下，并告诉它原因。"),
+    { id: "guard-files", title: tk("保护重要文件"), desc: tk("Antigravity 想改 .env、密钥、签名文件时直接拦下，并告诉它原因。"),
       event: "PreToolUse", matcher: "Edit|Write|MultiEdit|NotebookEdit", script: "cc-guard-files.mjs",
       label: tk("受保护的文件（一行一个；* 是通配符，带 / 就按路径比）"), param: ".env\n.env.*\n*.pem\n*.key\n*.keystore\n*.jks\nid_rsa*\nid_ed25519*",
       cmd: (p) => hkScript("cc-guard-files.mjs") + " " + lines(p).map(shq).join(" "), back: (a) => a.slice(2).join("\n") },
-    { id: "guard-bash", title: tk("拦下危险命令"), desc: tk("命令里出现强推、硬重置、删根目录这类内容就不让跑，并告诉 Claude 换个做法。"),
+    { id: "guard-bash", title: tk("拦下危险命令"), desc: tk("命令里出现强推、硬重置、删根目录这类内容就不让跑，并告诉 Antigravity 换个做法。"),
       event: "PreToolUse", matcher: "Bash", script: "cc-guard-bash.mjs",
       label: tk("禁止的内容（一行一个；写成 /…/ 就是正则）"),
       param: "git push --force\ngit push -f\n/git\\s+reset\\s+--hard/\n/\\brm\\s+-\\w*[rR]\\w*\\s+(\\/|~\\/?|\\$HOME\\/?)(\\s|$)/\nmkfs\n/\\bdd\\s+if=/",
       cmd: (p) => hkScript("cc-guard-bash.mjs") + " " + lines(p).map(shq).join(" "), back: (a) => a.slice(2).join("\n") },
-    { id: "autosave", title: tk("每轮自动存档（git）"), desc: tk("Claude 每答完一轮，项目里有改动就自动提交一次，随时能退回任意一步。只提交不推送；不是 git 仓库的项目什么也不做。"),
+    { id: "autosave", title: tk("每轮自动存档（git）"), desc: tk("Antigravity 每答完一轮，项目里有改动就自动提交一次，随时能退回任意一步。只提交不推送；不是 git 仓库的项目什么也不做。"),
       event: "Stop", matcher: "", script: "cc-autosave.mjs", single: true, label: tk("提交说明的开头"), param: tk("自动存档"),
       cmd: (p) => hkScript("cc-autosave.mjs") + " " + shq(String(p).trim() || t("自动存档")), back: (a) => a[2] || "" },
-    { id: "prompt-note", title: tk("每条消息附上固定要求"), desc: tk("你每发一条消息，自动把这段话一起交给 Claude，比如「回答用中文」「改之前先说思路」。"),
+    { id: "prompt-note", title: tk("每条消息附上固定要求"), desc: tk("你每发一条消息，自动把这段话一起交给 Antigravity，比如「回答用中文」「改之前先说思路」。"),
       event: "UserPromptSubmit", matcher: "", label: tk("要附上的话"), param: tk("回答用中文；动手改之前先简单说一下打算怎么做。"),
       cmd: (p) => "printf '%s\\n' " + shq(String(p).trim()), test: (c) => /^printf '%s\\n' /.test(c), back: (a) => a[2] || "" },
-    { id: "session-file", title: tk("开会话时读入进度文件"), desc: tk("每次开新会话（或压缩上下文后），把项目里的一个文件读给 Claude，比如进度、大纲、人物表。文件不存在就跳过。"),
+    { id: "session-file", title: tk("开会话时读入进度文件"), desc: tk("每次开新会话（或压缩上下文后），把项目里的一个文件读给 Antigravity，比如进度、大纲、人物表。文件不存在就跳过。"),
       event: "SessionStart", matcher: "", single: true, label: tk("文件（相对项目目录）"), param: tk("进度.md"),
       cmd: (p) => "cat " + shq(String(p).trim()) + " 2>/dev/null || true", test: (c) => /^cat '.*' 2>\/dev\/null \|\| true$/.test(c), back: (a) => a[1] || "" },
-    { id: "bash-log", title: tk("记下 Claude 跑过的命令"), desc: tk("每条命令连同时间、目录追加到 ~/.claude/bash-history.log，方便事后翻看。"),
+    { id: "bash-log", title: tk("记下 Antigravity 跑过的命令"), desc: tk("每条命令连同时间、目录追加到命令历史记录里，方便事后翻看。（待实测）"),
       event: "PostToolUse", matcher: "Bash", script: "cc-bash-log.mjs", cmd: () => hkScript("cc-bash-log.mjs") },
-    { id: "format", title: tk("改完代码自动格式化"), desc: tk("Claude 改完代码文件，用本机已装的工具（ruff / black、prettier、gofmt、clang-format……）整理格式；没装就不动。Markdown 和纯文本不碰。"),
+    // 注意：上面几条常用规则的命令与脚本路径（~/.claude/hooks/…）都是 Claude 时代的遗留，Hooks 本身已不支持，下面这套界面不再渲染。
+    { id: "format", title: tk("改完代码自动格式化"), desc: tk("Antigravity 改完代码文件，用本机已装的工具（ruff / black、prettier、gofmt、clang-format……）整理格式；没装就不动。Markdown 和纯文本不碰。"),
       event: "PostToolUse", matcher: "Edit|Write|MultiEdit", script: "cc-format.mjs", cmd: () => hkScript("cc-format.mjs") },
   ];
   const hkRecipeOf = (ev, h) => h && h.type === "command" && HK_RECIPES.find((r) => r.event === ev &&
@@ -802,12 +741,14 @@
   };
 
   async function loadExtHooks() {
-    let d;
-    try { d = await api("/api/ext/hooks"); } catch (e) { $("ext-hooks").innerHTML = `<div class="tiny">${esc(e.message)}</div>`; return; }
-    if (d && d.ok === false) { $("ext-hooks").innerHTML = `<div class="tiny err">${esc(d.message || "?")}</div>`; return; }
-    HK.data = d;
-    if (!d.scopes.some((s) => s.scope === HK.scope)) HK.scope = "user";
-    renderHooks();
+    // Hooks 是 Claude Code 专属（PreToolUse 等），Antigravity CLI 没有：网关的 /api/ext/hooks* 一律返回 400，这里直接写明不支持，不调接口。
+    // 作用域、规则列表、常用规则和表单入口一并藏起来。
+    $("ext-h-count").textContent = "—";
+    $("ext-hooks").innerHTML = `<div class="tiny">${esc(t("Hooks 是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。"))}</div>`;
+    $("hook-scope")?.classList.add("hidden");
+    $("hook-bar")?.classList.add("hidden");
+    $("hook-recipes-box")?.classList.add("hidden");
+    $("hook-form-box")?.classList.add("hidden");
   }
 
   function renderHooks() {
@@ -820,12 +761,12 @@
       `<button class="idx-chip${s.scope === HK.scope ? " on" : ""}" data-hscope="${esc(s.scope)}">${esc(SC[s.scope])}<span>${hkFlat(s).length}</span></button>`).join("");
     const sc = hkScopeData();
     const SCD = {
-      user: t("写在 ~/.claude/settings.json，所有项目都生效。"),
-      project: t("写在项目的 .claude/settings.json，只在这个项目生效；项目进了 git 的话会跟着仓库走。"),
-      local: t("写在项目的 .claude/settings.local.json，只在这个项目、这台设备上生效。"),
+      user: t("写在用户级设置里，所有项目都生效。"),
+      project: t("写在项目的设置里，只在这个项目生效；项目进了 git 的话会跟着仓库走。"),
+      local: t("写在项目的本地设置里，只在这个项目、这台设备上生效。"),
     };
     // 发行版不跑这里配的钩子（见 gw/edition.mjs、seal.mjs）：配置照样能看能改，只是不加载
-    $("hook-bar").innerHTML = (d.sealed ? `<div class="tiny warn">${esc(t("发行版不运行这里配置的 hooks：hooks 能执行任意命令、把任意内容放进对话，cccodroid 没法检查。规则留在文件里，不会被删。"))}</div>` : "") + `<div class="tiny">${esc(SCD[HK.scope])}
+    $("hook-bar").innerHTML = (d.sealed ? `<div class="tiny warn">${esc(t("发行版不运行这里配置的 hooks：hooks 能执行任意命令、把任意内容放进对话，agycodroid 没法检查。规则留在文件里，不会被删。"))}</div>` : "") + `<div class="tiny">${esc(SCD[HK.scope])}
         ${sc && sc.file && sc.exists ? `<a href="#" data-hk="open-file">${t("打开配置文件")}</a>` : ""}</div>
       <label class="tiny hk-pause"><input type="checkbox" data-hk="pause"${sc && sc.disableAll ? " checked" : ""}> ${t("暂停这一层的 hooks（规则留着，先不跑）")}</label>`;
     if (!sc || sc.error && !sc.badJson) { $("ext-hooks").innerHTML = `<div class="tiny warn">${esc((sc && sc.error) || "")}</div>`; return; }
@@ -930,9 +871,9 @@
     const ctxEv = ["UserPromptSubmit", "SessionStart"].includes(ev);
     let v, cls = "ok";
     if (res.timedOut) { v = t("超时了，命令没跑完就被停掉。"); cls = "warn"; }
-    else if (res.code === 0) v = ctxEv && res.stdout.trim() ? t("正常结束：打印的内容会作为补充说明交给 Claude。") : blockEv ? t("放行：Claude 照常继续。") : t("正常结束。");
-    else if (res.code === 2) { v = blockEv ? t("拦下（退出码 2）：Claude 这一步不会执行，stderr 里的话会转告它。") : ev === "Stop" || ev === "SubagentStop" ? t("退出码 2：Claude 会接着干，stderr 里的话会转告它。") : t("退出码 2：stderr 里的话会反馈给 Claude。"); cls = "warn"; }
-    else { v = t("出错了（退出码 {n}）：不会拦下，Claude 照常继续。", { n: res.code }); cls = "err"; }
+    else if (res.code === 0) v = ctxEv && res.stdout.trim() ? t("正常结束：打印的内容会作为补充说明交给 Antigravity。") : blockEv ? t("放行：Antigravity 照常继续。") : t("正常结束。");
+    else if (res.code === 2) { v = blockEv ? t("拦下（退出码 2）：Antigravity 这一步不会执行，stderr 里的话会转告它。") : ev === "Stop" || ev === "SubagentStop" ? t("退出码 2：Antigravity 会接着干，stderr 里的话会转告它。") : t("退出码 2：stderr 里的话会反馈给 Antigravity。"); cls = "warn"; }
+    else { v = t("出错了（退出码 {n}）：不会拦下，Antigravity 照常继续。", { n: res.code }); cls = "err"; }
     const pre = (label, s) => s.trim() ? `<div class="tiny">${label}</div><pre class="hk-pre">${esc(s.slice(0, 4000))}</pre>` : "";
     box.innerHTML = `<div class="hk-verdict ${cls}">${esc(v)} <span class="tiny">${res.ms} ms</span></div>
       ${pre(t("输出（stdout）"), res.stdout)}${pre(t("错误输出（stderr）"), res.stderr)}
@@ -1070,7 +1011,7 @@
       `<span class="mono">${esc(m.target)}</span>` + (m.hdr ? ` <span class="badge">${esc(t("请求头"))}: ${esc(m.hdr)}</span>` : ""),
       m.cloud ? "" : m.disabled ? `<button data-x="mcp-on" data-id="${esc(m.name)}" data-target="${esc(m.target)}">${t("启用")}</button><button data-x="mcp-edit" data-id="${esc(m.name)}">${t("编辑")}</button><button data-x="mcp-forget" data-id="${esc(m.name)}">${t("移除")}</button>`
         : (m.user ? `<button data-x="mcp-off" data-id="${esc(m.name)}">${t("停用")}</button><button data-x="mcp-edit" data-id="${esc(m.name)}">${t("编辑")}</button>` : "") + `<button data-x="mcp-rm" data-id="${esc(m.name)}">${t("移除")}</button>`,
-      m.disabled ? `<div class="tiny ext-st">${esc(t("已停用：Claude 不会连它，定义存着，点启用就加回来。"))}</div>` : `<div class="tiny ext-st ${m.ok ? "ok" : "warn"}">${esc(m.status)}</div>`,
+      m.disabled ? `<div class="tiny ext-st">${esc(t("已停用：Antigravity 不会连它，定义存着，点启用就加回来。"))}</div>` : `<div class="tiny ext-st ${m.ok ? "ok" : "warn"}">${esc(m.status)}</div>`,
       m.cloud ? ["cloud"] : m.disabled ? ["off"] : [m.ok ? "ok" : "bad", /^https?:/i.test(m.target || "") ? "remote" : "local"])).join("")
       || `<div class="tiny">${esc(r.err || t("还没有 MCP 服务器。"))}</div>`;
     // 长按编辑要知道按的是哪条：条目顺序和 items 一一对应，渲染完把名字挂上去，不塞进 innerHTML 省得再转义一遍
@@ -1078,22 +1019,16 @@
     renderIdx("mcp", [["ok", t("已连接")], ["bad", t("连不上")], ["off", t("已停用")], ["cloud", t("账户连接器")], ["local", t("本地")], ["remote", t("远程")]]);
   }
 
-  // ── 官方技能目录（anthropics/skills）：展开时才拉；装好后上面「技能」列表跟着刷新 ──
+  // ── 官方技能目录：技能不支持，不列官方仓库（见 loadExtSkills）──
   const KB = (n) => (n < 1048576 ? Math.max(1, Math.ceil((n || 0) / 1024)) + " KB" : MB(n));
   async function loadSkillCat(force) {
-    const box = $("ext-s-cat");
-    if (!box.children.length || force) box.innerHTML = `<div class="tiny">${t("正在拉取官方技能目录…")}</div>`;
-    const r = await api("/api/ext/catalog/skills" + (force ? "?refresh=1" : "")).catch((e) => ({ ok: false, message: e.message }));
-    if (!r.ok) { box.innerHTML = `<div class="tiny err">${esc(r.message || "")}</div><div class="it-acts"><button data-x="skillcat-retry">${t("重试")}</button></div>`; return; }
-    box.innerHTML = r.items.map((x) => extItem(esc(x.name),
-      `<span>${KB(x.bytes)}</span>${x.installed ? `<span>${t("已安装")}</span>` : ""}`,
-      x.installed ? "" : `<button data-x="skillcat-install" data-id="${esc(x.dir)}">${t("安装")}</button>`,
-      `<div class="tiny ext-desc">${esc(x.description)}</div><div class="tiny"><a class="weblink" href="https://github.com/${esc(r.repo)}/tree/main/skills/${esc(x.dir)}">${t("源码与许可证")}</a></div>`)).join("")
-      || `<div class="tiny">${t("官方目录是空的。")}</div>`;
+    // 见 loadExtSkills：技能不支持，官方技能目录也不列。
+    return;
   }
   $("ext-s-catbox").addEventListener("toggle", () => { if ($("ext-s-catbox").open) loadSkillCat(); });
 
-  // ── 官方 MCP 注册表：搜索 → 条目里展开小表单（名字、装法、环境变量 / 请求头）→ 交给 claude mcp add ──
+  // ── 官方 MCP 注册表：搜索 → 条目里展开小表单（名字、装法、环境变量 / 请求头）→ 交给 agy mcp add（待实测）。
+  // MCP 本身 agy 支持（mcp 动作与 agy mcp list 已确认），注册表对接方式待实测 ──
   const mcpCat = { q: "", next: "", npx: false, items: new Map(), seq: 0 };
   const mcpShort = (n) => (String(n).split("/").pop() || "mcp").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64);
   async function searchMcpCat(more) {
@@ -1112,7 +1047,7 @@
         m.options.map((o) => `<span>${o.kind === "remote" ? esc(t("远程") + " · " + o.transport) : "npm"}</span>`).join("") +
         (m.other.length ? `<span class="warn">${t("另有 {kinds} 装法，本机用不了", { kinds: esc(m.other.join(" / ")) })}</span>` : "");
       const acts = usable.length ? `<button data-x="mcpcat-add" data-id="${esc(m.name)}">${t("添加")}</button>`
-        : `<span class="tiny warn">${m.options.length ? t("要 npx（cccodroid 的工具包里有）") : t("本机装不了")}</span>`;
+        : `<span class="tiny warn">${m.options.length ? t("要 npx（agycodroid 的工具包里有）") : t("本机装不了")}</span>`;
       return extItem(esc(m.title || m.name), meta, acts,
         `<div class="tiny mono">${esc(m.name)}</div><div class="tiny ext-desc">${esc(m.description)}</div>` +
         (webUrl(m.homepage) ? `<div class="tiny"><a class="weblink" href="${esc(m.homepage)}">${esc(m.homepage)}</a></div>` : "") + `<div class="mcpcat-form hidden"></div>`);
@@ -1304,14 +1239,14 @@
     const extra = (raw.includes("\n") ? raw.split("\n") : raw.split(",")).map((x) => x.trim()).filter(Boolean);
     const envLike = extra.filter((x) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(x));
     const hdrLike = extra.filter((x) => x.includes(":") && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(x));
-    // 远程 MCP 只认请求头。旧代码把 Authorization=Bearer … 静默塞进 -e，claude
+    // 远程 MCP 只认请求头。旧代码把 Authorization=Bearer … 静默塞进 -e，agy
     // 收不到 --header → 服务器 401 → 按 MCP 规范转去 OAuth 动态客户端注册 →
     // 界面只报 "Dynamic Client Registration rejected (HTTP 404)"，用户看不出是令牌没带上。
     // 这里直接拦下并给出正确写法，不再生成一条注定连不上的配置。
     if (transport !== "stdio" && envLike.length) {
       return toast(t("远程 MCP 要填请求头：把 {bad} 改成冒号写法，例如 Authorization: Bearer 你的令牌", { bad: envLike[0] }), true);
     }
-    // claude 对 stdio 条目不存请求头：留着头的条目切成 stdio 会静默丢令牌（和 #225 同类），先问一句
+    // agy 对 stdio 条目不存请求头：留着头的条目切成 stdio 会静默丢令牌（和 #225 同类），先问一句
     if (transport === "stdio") {
       const keep = mcpEdit.fullHdr.filter((k) => !mcpEdit.dropHdr.has(k));
       if (keep.length && !confirm(t("stdio 不保存请求头：{names} 会被丢掉，继续吗？", { names: keep.join("、") }))) return;
@@ -1373,18 +1308,10 @@
       if (compRemoving.has(id)) return;
       if (c === "configure") {
         if (id !== "openai-bridge") return;
-        if (typeof window.CCBridgeConfig?.open !== "function") return toast(t("配置界面尚未就绪，请刷新后重试"), true);
-        cb.disabled = true;
-        try {
-          await window.CCBridgeConfig.open({ anchor: cb, saved: () => { loadProviders(); loadModels(); refreshSessModel(); }, useNew: async ({ provider, model }) => {
-            // 只有用户点「新建会话使用」才选接口；暂存在新会话，不改全局默认和旧会话。
-            newConversation(); closeDrawer();
-            await pickSessModel({ provider, model });
-          } });
-        }
-        catch (err) { toast(t("失败：{msg}", { msg: err.message || "" }), true); }
-        finally { cb.disabled = false; }
-        return;
+        // agy 只有 Google 登录和 Gemini API Key 两家，upsertProvider 拒掉 custom-N：
+        // 桥的「接进聊天」映射存不下来，配置面板打开也只能保存失败——直接说明不支持，别让用户走到那一步。
+        // 组件本身仍可安装/停用/卸载（给其它工具当本地 OpenAI 兼容服务用），只是不能当聊天接口。
+        return toast(t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), true);
       }
       const nm = (cb.closest(".item")?.querySelector(".it-title")?.textContent || id).trim();
       if (c === "install" && cb.dataset.unverified && !confirm(t("{name} 还没人在真机上验证过，可能装不上或用不了。仍然安装？", { name: nm }))) return;
@@ -1459,7 +1386,7 @@
     if (on && !bar) {
       bar = document.createElement("div");
       bar.id = "safe-bar"; bar.className = "safe-bar";
-      bar.innerHTML = `<span>${t("安全模式：自定义配置（CLAUDE.md、技能、插件、钩子、MCP）没有加载")}</span> <button class="btn sm ghost" id="safe-off">${t("退出安全模式")}</button>`;
+      bar.innerHTML = `<span>${t("安全模式：仅用 agy 默认配置启动，不加载额外设置")}</span> <button class="btn sm ghost" id="safe-off">${t("退出安全模式")}</button>`;
       $("chat").before(bar);
       $("safe-off").onclick = () => setSafe(false);
     } else if (!on && bar) bar.remove();
@@ -1474,7 +1401,7 @@
   $("upd-log").addEventListener("click", () => { closeSettings(); openPage("changelog"); });
   $("btn-share-logs").addEventListener("click", async () => {
     // 打包前给用户看清单：发出去的是什么、去掉了什么
-    if (!confirm(t("打一个诊断包，经系统分享发出去。\n\n包里有：\n· 版本与设备：cccodroid / Android 版本、机型、芯片、剩余空间\n· 开发工具包：装的是哪一版、更新与自检状态\n· 最近的日志：本应用的系统日志、网关日志的最后一段\n· 修复账本：安装、校验、修复做过哪些、成没成\n· 网络：开没开 VPN，应用连不连得上几个下载源（只记结果）\n\n已经去掉：\n· 密钥、令牌、登录凭据、邮箱\n· 你发给 Claude 的消息内容\n· 会话记录本身不在包里\n\n继续？"))) return;
+    if (!confirm(t("打一个诊断包，经系统分享发出去。\n\n包里有：\n· 版本与设备：agycodroid / Android 版本、机型、芯片、剩余空间\n· 开发工具包：装的是哪一版、更新与自检状态\n· 最近的日志：本应用的系统日志、网关日志的最后一段\n· 修复账本：安装、校验、修复做过哪些、成没成\n· 网络：开没开 VPN，应用连不连得上几个下载源（只记结果）\n\n已经去掉：\n· 密钥、令牌、登录凭据、邮箱\n· 你发给 Antigravity 的消息内容\n· 会话记录本身不在包里\n\n继续？"))) return;
     toast(t("正在打包日志…"));
     const r = await post("/api/app/share_logs").catch((e) => ({ ok: false, message: e.message }));
     if (!r.ok) toast(t("没分享成：{msg}", { msg: r.message || "" }), true);
@@ -1499,9 +1426,9 @@
     } finally { delete b.dataset.busy; b.disabled = false; }
   });
   // 状态对账：组件 / 模块 / 包清单 / 自定义组件的记录和磁盘对一遍（网关启动后自动核过一次，这里看结果或再核）
-  // 能自动修的条目带「修补」，顶部「全部修补」：网关按顺序重装组件 / 模块、等做完，工具包和 Claude Code 交给应用，最后自动再核（用户 11-09）
+  // 能自动修的条目带「修补」，顶部「全部修补」：网关按顺序重装组件 / 模块、等做完，工具包和 Antigravity CLI 交给应用，最后自动再核（用户 11-09）
   const fixWhat = (a) => ({ comp: t("重新安装这个组件（会重新下载）"), mod: t("重新安装这个工具包模块（会重新下载）"),
-    devkit: t("修复开发工具包：重新下载当前这一版并重装，装的时候暂停服务 1–2 分钟"), claude: t("重新安装 Claude Code") }[a] || "");
+    devkit: t("修复开发工具包：重新下载当前这一版并重装，装的时候暂停服务 1–2 分钟"), claude: t("重新安装 Antigravity CLI") }[a] || "");
   let fixTimer = 0;
   function paintReconcile(r, always) {
     const box = $("reconcile-box"), bad = (r.findings || []).filter((f) => f.level !== "info");
@@ -1630,7 +1557,7 @@
         ${c.description ? `<div class="tiny ext-desc">${esc(c.description)}</div>` : ""}
         <div class="it-snip">${esc(c.body.trim().slice(0, 240))}</div>
         <div class="it-acts"><button data-uc="use">${t("插入输入框")}</button>${c.editable ? `<button data-uc="edit">${t("修改")}</button>` : ""}<button data-uc="del">${t("删除")}</button></div></div>`).join("")
-      || `<div class="tiny">${UC.scope === "user" ? t("还没有常用指令。点「新建指令」存一条。") : t("这个项目还没有自己的指令。存在这里的指令写进项目的 .claude/commands，项目进了 git 会跟着仓库走。")}</div>`;
+      || `<div class="tiny">${UC.scope === "user" ? t("还没有常用指令。点「新建指令」存一条。") : t("这个项目还没有自己的指令。存在这里的指令保存在项目里，项目进了 git 会跟着仓库走。")}</div>`;
   }
   function ucForm(c) {
     UC.edit = c ? c.name : "";
@@ -1643,7 +1570,7 @@
       <input data-f="description" maxlength="200" autocomplete="off" placeholder="${esc(t("例如：按议题模板整理问题"))}">
       <label class="tiny">${t("参数提示（可不填）")}</label>
       <input data-f="hint" maxlength="80" autocomplete="off" placeholder="${esc(t("例如：<问题描述>"))}">
-      <label class="tiny">${t("指令内容（发给 Claude 的话；$ARGUMENTS 换成 /名字 后面跟的内容）")}</label>
+      <label class="tiny">${t("指令内容（发给 Antigravity 的话；$ARGUMENTS 换成 /名字 后面跟的内容）")}</label>
       <textarea data-f="body" rows="7" spellcheck="false" placeholder="${esc(t("例如：把下面的问题整理成 GitHub 议题：标题一句话，正文分「现象」「复现步骤」「期望」三段。\n\n$ARGUMENTS"))}"></textarea>
       <div class="row-actions"><button class="btn sm" data-uc="f-save">${c ? t("保存修改") : t("添加")}</button>
         <button class="btn sm ghost" data-uc="f-cancel">${t("取消")}</button></div>`;
@@ -1662,7 +1589,7 @@
     const b = e.target.closest("[data-uc]"); if (!b) return;
     const sc = ucScope(), it = b.closest(".uc-item"), c = it && sc ? sc.items[+it.dataset.i] : null;
     const act = b.dataset.uc;
-    // 发行版把指令经合成插件交给 Claude，实际名字是 /user:<名字>；插入裸名会展开不了（195-J.6）
+    // 发行版把指令经合成插件交给 Antigravity，实际名字是 /user:<名字>；插入裸名会展开不了（195-J.6）
     // 插到光标处，别把还没发的草稿整个盖掉（196 输入框域；insertAtCursor 是输入框统一入口）
     if (act === "use" && c) { closePage(); insertAtCursor((UC.data.sealed ? "/user:" : "/") + c.name); inputEl.focus(); return; }
     if (act === "edit" && c) return ucForm(c);
