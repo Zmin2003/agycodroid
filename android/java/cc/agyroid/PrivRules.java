@@ -20,7 +20,7 @@ final class PrivRules {
 
     /** 动到本应用（pkg）、Shizuku / Sui 自己的命令：开了免确认也照样问（别让一条命令把保护本身拆掉）。
      *  只是尽力而为：写法看不清的（变量、命令替换、通配、转义、编码解码、把输出再当命令跑的 xargs / sh）一律当成可能动到，回到确认框；
-     *  引号去掉前后都看（cc.codro"i"d、ba''se64 这种拆词，审查 0601 中-3、0601b）。脚本文件里写的看不见，拦不住 */
+     *  引号去掉前后都看（cc.agyro"i"d、ba''se64 这种拆词，审查 0601 中-3、0601b）。脚本文件里写的看不见，拦不住 */
     static boolean touchesSelf(String text, String pkg) {
         String x = text.toLowerCase(Locale.ROOT).replace("\"", "").replace("'", "");
         if (OPAQUE.matcher(text).find() || OPAQUE.matcher(x).find()) return true;

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// cc-seal.mjs —— 应用内终端里敲的 claude（bin/claude 包装）在发行版下的封口与回填，和网关起的一样（见 gw/edition.mjs、gw/seal.mjs）。
+// cc-seal.mjs —— 应用内终端里敲的 agy（bin/agy 包装）在发行版下的封口与回填，和网关起的一样（见 gw/edition.mjs、gw/seal.mjs）。
 // 用法：node cc-seal.mjs <工作目录> -- <包装给的参数…> -- <用户的参数…>
 // 成功：stdout 一行，按 sh 单引号转义好的完整参数，包装 eval "set -- …" 后 exec；退出码 0。
-// 拒绝：stderr 说明，退出码 3（命中破甲特征）、2（用了发行版不认的旗标）或 4（claude 程序没核过）。
+// 拒绝：stderr 说明，退出码 3（命中破甲特征）、2（用了发行版不认的旗标）或 4（agy 程序没核过）。
 // 包装给的参数（guard 钩子、密钥读取器的 --settings）可以带 --settings；用户自己带的那些能往上下文里塞东西的旗标一律不认。
 import fs from "node:fs";
 import path from "node:path";
@@ -24,16 +24,16 @@ const ours = argv.slice(i1 + 1, i2), user = argv.slice(i2 + 1);
 // 开发版：原样交回
 if (!sealed()) { process.stdout.write([...ours, ...user].map(q).join(" ") + "\n"); process.exit(0); }
 
-// claude 程序本身：和网关起的一样（gw/claudeseal.mjs），没有 Anthropic 签名清单、或和清单对不上就不起；管理子命令也一样，跑的是同一个程序。
-// 没清单的当场补核一次（install-claude.mjs --recheck，联网取官方清单），输出走 stderr，stdout 只放结果
+// agy 程序本身：和网关起的一样（gw/agyseal.mjs），没有官方签名清单、或和清单对不上就不起；管理子命令也一样，跑的是同一个程序。
+// 没清单的当场补核一次（install-agy.mjs --recheck，联网取官方清单），输出走 stderr，stdout 只放结果
 {
-  const { claudeSeal } = await import("../gw/claudeseal.mjs");
-  // 和 bin/claude 最后 exec 的是同一条路径：都按 $HOME 算（AGAPP_HOME 终端里能随便改，不能让核的和跑的是两份）
+  const { agySeal } = await import("../gw/agyseal.mjs");
+  // 和 bin/agy 最后 exec 的是同一条路径：都按 $HOME 算（AGAPP_HOME 终端里能随便改，不能让核的和跑的是两份）
   const home = process.env.HOME || "/nonexistent";
-  const BIN = path.join(home, ".local", "share", "agycodroid", "claude", "current", "claude");
-  const check = () => claudeSeal(BIN, { home }).catch((e) => ({ ok: false, why: e.message }));
+  const BIN = path.join(home, ".local", "share", "agycodroid", "agy", "current", "agy");
+  const check = () => agySeal(BIN, { home }).catch((e) => ({ ok: false, why: e.message }));
   let cs = await check();
-  const inst = path.join(HERE, "scripts", "install-claude.mjs");
+  const inst = path.join(HERE, "scripts", "install-agy.mjs");
   // 只是打个版本（自检就这么问）：不为它联网补核、一等十分钟；没核过照样不起，当场报（0.6.9 审计 195-M.4 guard 半，v4pro 复核）
   const versionOnly = user.length === 1 && (user[0] === "--version" || user[0] === "-v");
   if (cs.pending && !versionOnly && fs.existsSync(inst)) {
