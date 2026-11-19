@@ -5,7 +5,6 @@ import { execFile } from "node:child_process";
 import crypto from "node:crypto";
 import { CFG, GLIBC_PRELOAD, PATHS, PREFIX, glibcEnv, loadPgp, log, tz } from "./config.mjs";
 import { SETTINGS } from "./settings-store.mjs";
-import { enosysRun } from "./claude.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { termEnv } from "./terminal.mjs";
 import { sha256File } from "./components.mjs";
@@ -16,14 +15,14 @@ import { pathBlocked } from "./files.mjs";
 import { loadState, writeAtomic } from "./statefile.mjs";
 
 // ── 自定义组件：用户自己导入的 Linux arm64 程序（不经市场，来源由用户负责） ─────────────────
-// 放在 ~/.cccodroid/custom/<id>/（app/ 原样解开的程序，deps/ 自动补的 glibc 库），不进 $PREFIX：换工具包不会被冲掉。
-// 入口包装在 ~/.cccodroid/bin（claudeEnv 的 PATH 里，排在工具包 bin 之后，所以不许和工具包的命令重名）；
-// 技能在 ~/.claude/skills/custom-<id>/，Claude 由此知道有这个程序、怎么跑起来的。
+// 放在 ~/.agycodroid/custom/<id>/（app/ 原样解开的程序，deps/ 自动补的 glibc 库），不进 $PREFIX：换工具包不会被冲掉。
+// 入口包装在 ~/.agycodroid/bin（agyEnv 的 PATH 里，排在工具包 bin 之后，所以不许和工具包的命令重名）；
+// 技能在 ~/.claude/skills/custom-<id>/，Antigravity 由此知道有这个程序、怎么跑起来的。
 // 适配按 ELF 的解释器分：glibc（经本应用的 ld-linux + seccomp 垫片）、bionic（安卓原生，设库路径）、
 // 静态（套 seccomp 监督器）；x86 / 32 位 / musl 跑不了，分析时如实说。缺的 glibc 库从 Termux 的 glibc 仓库补。
-const CUSTOM_DIR = PREFIX ? path.join(CFG.home, ".cccodroid", "custom") : "";
-const CUSTOM_BIN = PREFIX ? path.join(CFG.home, ".cccodroid", "bin") : "";
-const CUSTOM_REC = "cccodroid-custom.json";
+const CUSTOM_DIR = PREFIX ? path.join(CFG.home, ".agycodroid", "custom") : "";
+const CUSTOM_BIN = PREFIX ? path.join(CFG.home, ".agycodroid", "bin") : "";
+const CUSTOM_REC = "agycodroid-custom.json";
 const CUSTOM_STAGES = new Map();          // 分析过、还没装的：stage → { dir, root, report, at }
 const GLIBC_REPO = "https://packages-cf.termux.dev/apt/termux-glibc/";
 const GLIBC_REPO_LIB = "data/data/com.termux/files/usr/glibc/lib/";
@@ -139,15 +138,15 @@ const CMD_RESERVED = new Map();
 /** 命令名能不能用：工具包里已有（PATH 里排在前面，会被盖住）、别的自定义组件正占着 / 已经占了，都不行 */
 function customCmdClash(cmd, selfId) {
   if (fs.existsSync(path.join(PREFIX, "bin", cmd))) return "toolkit";
-  // PATH 里排在自定义组件后面的：cccodroid 自带的（priv…）和安卓系统的（am、settings…）。同名会把它们盖住，
+  // PATH 里排在自定义组件后面的：agycodroid 自带的（priv…）和安卓系统的（am、settings…）。同名会把它们盖住，
   // 应用自己按名字调的 priv 也会被劫持（11-03 审查 L-9）
-  const bin = process.env.CCAPP_BIN;
+  const bin = process.env.AGAPP_BIN;
   for (const d of [bin && path.join(bin, "..", "pre"), bin, "/system/bin", "/system/xbin"]) if (d && fs.existsSync(path.join(d, cmd))) return "system";
   const rsv = CMD_RESERVED.get(cmd);
   if (rsv && rsv !== selfId) return "busy";
   const w = path.join(CUSTOM_BIN, cmd);
   // 用 headOf：lstat + O_NOFOLLOW|O_NONBLOCK，FIFO/设备文件不会把网关事件循环卡死（审查 11-05）
-  if (fs.existsSync(w)) { const m = /cccodroid-custom-id: ([a-z0-9-]+)/.exec(headOf(w, 400)); if (!m || m[1] !== selfId) return "custom"; }
+  if (fs.existsSync(w)) { const m = /agycodroid-custom-id: ([a-z0-9-]+)/.exec(headOf(w, 400)); if (!m || m[1] !== selfId) return "custom"; }
   return "";
 }
 
@@ -216,7 +215,7 @@ async function unpackedSize(sp, zip) {
 
 /** 分析：解开（压缩包）或拷进（单个文件）暂存区，逐个看 ELF，列出程序、缺的库、能补的库 */
 async function customAnalyze(src, displayName) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   let sp = String(src || "").trim();
   if (!sp) return { ok: false, message: tz("没给文件") };
   if (!path.isAbsolute(sp)) sp = path.join(CFG.workspace, sp);
@@ -438,10 +437,11 @@ const shq = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
 /** 一个入口的包装脚本：按程序类型套上能让它在这里跑起来的那层 */
 function customWrapper(id, p, appDir, libs, opts) {
   const prog = path.join(appDir, p.rel), sh = path.join(PREFIX, "bin", "sh");
-  const er = SETTINGS.staticCompat !== false ? enosysRun() : "";
+  // 以前这里套 seccomp 监督器 enosys-run（staticCompat）：agy 没有这套东西，入口直接跑（静态二进制撞 seccomp 会按系统默认处理）。
+  const er = "";
   // 注释行里的名字来自用户导入的归档：换行抹掉，免得多出一行被当命令执行（审查 10-29 L3）
   const one = (s) => String(s).replace(/[\r\n]/g, " ");
-  const head = `#!${sh}\n# cccodroid-custom-id: ${one(id)}\n# 自定义组件「${one(id)}」的入口：${one(p.rel)}（${p.kind}）。由扩展页生成，卸载组件时一起删掉。\n`;
+  const head = `#!${sh}\n# agycodroid-custom-id: ${one(id)}\n# 自定义组件「${one(id)}」的入口：${one(p.rel)}（${p.kind}）。由扩展页生成，卸载组件时一起删掉。\n`;
   const erLine = `ER=${shq(er)}; [ -n "$ER" ] && [ -x "$ER" ] || ER=\n`;
   if (p.kind === "glibc") {
     if (opts.gpu) { const own = libs.filter((l) => l !== PATHS.glibcLib); return head + `exec ${shq(path.join(PREFIX, "bin", "lgpu-run"))}${own.length ? " -L " + shq(own.join(":")) : ""} -- ${shq(prog)} "$@"\n`; }
@@ -467,18 +467,18 @@ function customSkill(rec) {
   const lines = rec.entries.map((e) => `- \`${e.cmd}\` → \`${path.join(rec.dir, "app", e.rel)}\`：${kindZh[e.kind] || e.kind}${e.gpu ? "，经 gpu-driver-glibc 的 lgpu-run 用 GPU（Vulkan / Turnip）" : ""}${e.patchelf ? "，已用 patchelf 改了解释器和 RUNPATH" : ""}`);
   return `---
 name: custom-${rec.id}
-description: ${JSON.stringify(`用户自己导入的程序「${name}」${desc ? "：" + desc : ""}（cccodroid 自定义组件）。命令：${rec.entries.map((e) => e.cmd).join("、")}。用户提到它或要用这些命令时使用。`)}
+description: ${JSON.stringify(`用户自己导入的程序「${name}」${desc ? "：" + desc : ""}（agycodroid 自定义组件）。命令：${rec.entries.map((e) => e.cmd).join("、")}。用户提到它或要用这些命令时使用。`)}
 ---
 
 # ${name}（自定义组件）
 
-用户在扩展页「自定义组件」里自己导入的 Linux arm64 程序（来源：\`${source}\`）。**没经过 cccodroid 验证**，能不能用以实际运行为准。
+用户在扩展页「自定义组件」里自己导入的 Linux arm64 程序（来源：\`${source}\`）。**没经过 agycodroid 验证**，能不能用以实际运行为准。
 ${desc ? "\n用户的说明：" + desc + "\n" : ""}
 ## 运行链路
 
 ${lines.join("\n")}
 
-- 入口是 \`~/.cccodroid/bin/<命令>\` 的包装脚本（在 PATH 里），程序文件在 \`${rec.dir}/app/\`${rec.readme ? "，自带说明 `" + path.join(rec.dir, "app", rec.readme) + "`" : ""}。
+- 入口是 \`~/.agycodroid/bin/<命令>\` 的包装脚本（在 PATH 里），程序文件在 \`${rec.dir}/app/\`${rec.readme ? "，自带说明 `" + path.join(rec.dir, "app", rec.readme) + "`" : ""}。
 - glibc 程序的库按这个顺序找：${rec.libs.map((l) => "`" + l + "`").join(" → ")}。${rec.deps.length ? "\n- 从 Termux glibc 仓库补进来的库（在 deps/）：" + rec.deps.map((d) => `${d.soname}（${d.pkg} ${d.version}）`).join("、") + "。" : ""}
 - 包装脚本会摘掉 termux-exec 的 LD_PRELOAD，并套上 seccomp 垫片（安卓会拦一些系统调用，垫片把它们改成返回 ENOSYS）。
 
@@ -488,12 +488,12 @@ ${lines.join("\n")}
 - \`Bad system call\` 或直接被杀：撞了安卓的 seccomp。确认设置里「静态程序兼容」开着。
 - 程序找不到自己的数据文件：有的程序按 /proc/self/exe 找自己的位置，经加载器启动时那会指向加载器。可以在扩展页对这个组件改用 patchelf 方式重装。
 - 程序要图形界面（X11 / Wayland）：这里没有桌面，跑不了界面，只能用它的命令行功能。
-- 不要改 \`${rec.dir}\` 里的文件，也不要往 \`~/.cccodroid/bin\` 里手写脚本；要改就让用户在扩展页重新导入。
+- 不要改 \`${rec.dir}\` 里的文件，也不要往 \`~/.agycodroid/bin\` 里手写脚本；要改就让用户在扩展页重新导入。
 `;
 }
 
 async function customInstall(b) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   let s = CUSTOM_STAGES.get(String(b.stage || ""));
   if (!s) {
     // 网关重启后内存里的暂存表没了，但分析结果和暂存目录还在盘上：读回来接着装（195-J.4）
@@ -524,7 +524,7 @@ async function customInstall(b) {
     if (!CMD_RE.test(cmd)) return { ok: false, message: tz("命令名不合法：{c}", { c: cmd }) };
     if (seen.has(cmd)) return { ok: false, message: tz("命令名重复：{c}", { c: cmd }) };
     const clash = customCmdClash(cmd, id);
-    if (clash) return { ok: false, message: clash === "toolkit" ? tz("命令 {c} 工具包里已经有了，换个名字", { c: cmd }) : clash === "system" ? tz("命令 {c} 是系统或 cccodroid 自带的，换个名字", { c: cmd }) : clash === "busy" ? tz("命令 {c} 正在被另一个组件安装，稍后再试或换个名字", { c: cmd }) : tz("命令 {c} 被别的自定义组件占了", { c: cmd }) };
+    if (clash) return { ok: false, message: clash === "toolkit" ? tz("命令 {c} 工具包里已经有了，换个名字", { c: cmd }) : clash === "system" ? tz("命令 {c} 是系统或 agycodroid 自带的，换个名字", { c: cmd }) : clash === "busy" ? tz("命令 {c} 正在被另一个组件安装，稍后再试或换个名字", { c: cmd }) : tz("命令 {c} 被别的自定义组件占了", { c: cmd }) };
     seen.add(cmd);
     entries.push({ rel: p.rel, cmd, kind: p.kind, gpu: !!e.gpu && p.kind === "glibc" && s.report.gpu, patchelf: !!e.patchelf && p.kind === "glibc" && !e.gpu });
   }
@@ -644,7 +644,7 @@ function customSkillOurs(sk, id) {
     const f = path.join(sk, "SKILL.md"), st = fs.lstatSync(f);
     if (!st.isFile() || st.size > (1 << 20)) return false;
     const t = fs.readFileSync(f, "utf8");
-    return t.startsWith(`---\nname: custom-${id}\n`) && t.includes("（cccodroid 自定义组件）");
+    return t.startsWith(`---\nname: custom-${id}\n`) && t.includes("（agycodroid 自定义组件）");
   } catch { return false; }
 }
 /** 普通文件（不跟软链）的开头 n 字节；别的类型返回空串 */
@@ -660,7 +660,7 @@ function customRemove(id, quiet) {
   const dir = path.join(CUSTOM_DIR, id);
   if (!fs.existsSync(dir)) return { ok: false, message: "not installed" };
   // 只看普通文件的开头：命令目录里要是混进一个 FIFO，整读会把网关卡死（11-04 报告 六-9）
-  try { for (const f of fs.readdirSync(CUSTOM_BIN)) { const w = path.join(CUSTOM_BIN, f); if (headOf(w, 400).includes("cccodroid-custom-id: " + id + "\n")) fs.rmSync(w, { force: true }); } } catch {}
+  try { for (const f of fs.readdirSync(CUSTOM_BIN)) { const w = path.join(CUSTOM_BIN, f); if (headOf(w, 400).includes("agycodroid-custom-id: " + id + "\n")) fs.rmSync(w, { force: true }); } } catch {}
   rmTree(dir);
   const sk = path.join(SKILLS_DIR, "custom-" + id);
   if (customSkillOurs(sk, id)) { const ucb = ucAppBegin(); fs.rmSync(sk, { recursive: true, force: true }); ucAppWrote([sk], ucb); }
@@ -689,7 +689,7 @@ async function handleCustom(req, res, p, u) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "method" });
   if (p === "/api/custom/upload") {
     // 程序可能很大（几百 MB）：流式落盘到暂存目录，不走 /api/upload 的 64 MB 内存缓冲
-    if (!PREFIX) return sendJson(res, 200, { ok: false, message: "only available in cccodroid" });
+    if (!PREFIX) return sendJson(res, 200, { ok: false, message: "only available in agycodroid" });
     // 落盘名只用 ASCII；显示名保留用户原来的（中文文件名别变成下划线，195-J.3）
     const shown = path.basename(String(u.searchParams.get("name") || "program")).slice(0, 120) || "program";
     const name = shown.replace(/[^\w.+-]/g, "_").slice(0, 120) || "program";

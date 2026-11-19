@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-//  app.js —— Claude CLI 图形化入口
+//  app.js —— Antigravity CLI 图形化入口
 //  原生 JS，无依赖。把 CLI 的能力（会话 / 斜杠命令 / 工具 / 设置）搬进界面。
 //
 //  源码按功能拆在 web/app/ 下（01-core … 19-boot），网关下发 /app.js 时按文件名顺序原样拼成一个文件，
@@ -32,7 +32,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   };
   window.addEventListener("error", (e) => {
     // 光秃秃的「Script error.」没有文件和行号：是从外壳 evaluateJavascript 注入的代码里冒出去的错，WebView 把细节抹了。
-    // 写在顶栏上谁也看不懂，只进控制台；外壳注入的每段代码自己 try 住交给 __ccErr，页面这边的入口也用 guardHook 包着
+    // 写在顶栏上谁也看不懂，只进控制台；外壳注入的每段代码自己 try 住交给 __agyErr，页面这边的入口也用 guardHook 包着
     if (!e.filename && /^Script error\.?$/.test(e.message || "")) { console.warn("[cc] 外壳注入的脚本出错（细节被 WebView 隐去）"); return; }
     // 带上出错位置（app.js 是拼起来的一整份，行号用 scripts/appjs.mjs 对回分段）
     const at = e.filename ? `[${e.filename.split("/").pop().split("?")[0]}:${e.lineno}:${e.colno}] ` : "";   // 放前头：顶栏截断时位置还在
@@ -40,10 +40,10 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   });
   // 外壳（MainActivity）直接调用的入口：在页面自己的代码里接住错误，按原文报，不让它变成「Script error.」
   // 外壳注入的代码接住错误后交到这里（MainActivity.guarded / caught）：name 是哪个入口
-  window.__ccErr = (name, err) => { console.error("[cc] " + name, err); showErr(name + "：" + (err && err.message || err)); };
+  window.__agyErr = (name, err) => { console.error("[cc] " + name, err); showErr(name + "：" + (err && err.message || err)); };
   const guardHook = (name, fn) => function () {
     try { return fn.apply(this, arguments); }
-    catch (err) { window.__ccErr(name, err); return false; }
+    catch (err) { window.__agyErr(name, err); return false; }
   };
   window.addEventListener("unhandledrejection", (e) => {
     const el = document.getElementById("sub-title");
@@ -55,7 +55,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   // 再试 Clipboard API，最后退回 execCommand。不抛错，结果是 true / false
   async function copyText(text) {
     text = String(text ?? "");
-    try { if (window.CCApp && window.CCApp.copyText && window.CCApp.copyText(text)) return true; } catch {}
+    try { if (window.AGApp && window.AGApp.copyText && window.AGApp.copyText(text)) return true; } catch {}
     try { await navigator.clipboard.writeText(text); return true; } catch {}
     try {
       const ta = document.createElement("textarea");
@@ -404,7 +404,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   // 点了一下输入框、或用户手势里它刚拿到焦点：请外壳确认主 WebView 有视图焦点、重建输入连接并弹键盘。
   // 视图焦点丢了、或输入法手里还是空连接时，只靠 focus() 只有边框变色，既没光标也没键盘（0.7.3 的新对话实测）。
   // click 还要管「DOM 焦点本来就在输入框、只是连接坏了」再点一次的情况；程序化自动聚焦（没有用户手势）不弹键盘。
-  const ccFocusInput = () => { try { if (window.CCApp && CCApp.inputFocus) CCApp.inputFocus(); } catch {} };
+  const ccFocusInput = () => { try { if (window.AGApp && AGApp.inputFocus) AGApp.inputFocus(); } catch {} };
   inputEl.addEventListener("click", ccFocusInput);
   inputEl.addEventListener("focus", () => {
     if (!window.navigator.userActivation || navigator.userActivation.isActive) ccFocusInput();
@@ -417,7 +417,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   const fileInput = $("file-input"), filesEl = $("files"), lightboxEl = $("lightbox");
 
   /// 待发队列条：忙碌时排队的消息显示在这里（在附件条上方，composer 内）
-  // 待发队列照 Claude Desktop 的样子：排队的消息直接出现在对话末尾（标「排队中」），
+  // 待发队列照 Antigravity Desktop 的样子：排队的消息直接出现在对话末尾（标「排队中」），
   // 底下有「立即发送」—— 递进正在跑的这一轮；停止键只管停止，挂起的不会自动发
   const queueStrip = document.createElement("div");
   queueStrip.id = "queued";
@@ -488,12 +488,12 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => MO.hide(toastEl, "mo-out-fade", 150), 7000);
   }
-  // ── 保存到（A4）：外壳有 CCApp.saveAs 时，下载 / 导出一律走系统「保存到」面板 ──
-  //  不要存储权限，也不会把文件落进用户打不开的私有目录。结果由外壳回调 __ccSaved
-  const canSaveAs = () => !!(window.CCApp && window.CCApp.saveAs);
-  const canShare = () => !!(state.serverStatus && state.serverStatus.product === "cccodroid");
-  function saveAs(path, mime) { window.CCApp.saveAs(path, path.split("/").pop(), mime || ""); }
-  window.__ccSaved = guardHook("__ccSaved", (ok, msg) => {
+  // ── 保存到（A4）：外壳有 AGApp.saveAs 时，下载 / 导出一律走系统「保存到」面板 ──
+  //  不要存储权限，也不会把文件落进用户打不开的私有目录。结果由外壳回调 __agySaved
+  const canSaveAs = () => !!(window.AGApp && window.AGApp.saveAs);
+  const canShare = () => !!(state.serverStatus && state.serverStatus.product === "agycodroid");
+  function saveAs(path, mime) { window.AGApp.saveAs(path, path.split("/").pop(), mime || ""); }
+  window.__agySaved = guardHook("__agySaved", (ok, msg) => {
     if (ok) return toast(t("已保存：{name}", { name: msg }));
     if (msg === "cancel") return;
     toast(t("保存失败：{msg}", { msg: msg === "missing" ? t("文件不存在") : msg === "nopicker" ? t("系统里没有可用的文件面板") : msg === "forbidden" ? t("这个文件不能导出") : msg === "lost" ? t("选位置时应用被系统关掉了，找不回要保存的文件，再保存一次就好") : msg === "busy" ? t("上一个文件还没选好保存位置") : msg }), true);
@@ -510,7 +510,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   }, true);
 
   // 查看器 / 图片灯箱里的「分享」：文件本来就在本机，再存一份没意义，交给系统分享面板发到别的应用。
-  // 不在 cccodroid 里（开发端、浏览器）时退回下载
+  // 不在 agycodroid 里（开发端、浏览器）时退回下载
   async function shareFile(p) {
     if (!canShare()) { location.href = fileUrl(p, true); return; }
     try {
@@ -525,7 +525,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   // ── 跨刷新要记住的东西 ────────────────────────────────────────────
   //  界面代码一变网关就会让前端自动 reload（uiTag 机制）。要是会话号只存在内存里，
   //  一刷新就悄悄开新会话了 —— 上下文全丢，而且毫无提示。必须落盘。
-  const LS_SID = "ccapp.sessionId", LS_CTX = "ccapp.ctxUsed";
+  const LS_SID = "agyapp.sessionId", LS_CTX = "agyapp.ctxUsed";
   function saveUiState() {
     try {
       // 有会话号就记；没有就删掉，让它回到「未定」——
@@ -644,7 +644,7 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
       throw e;
     } finally { if (timer) clearTimeout(timer); }
   }
-  // ── 界面定制的统一存储（0.4.20）：网关 home/ccapp-ui.json 为准（gw/uistore.mjs），本地 cc.ui 是镜像 ──
+  // ── 界面定制的统一存储（0.4.20）：网关 home/agyapp-ui.json 为准（gw/uistore.mjs），本地 cc.ui 是镜像 ──
   //   uiGet(键, 旧的 localStorage 键)：新位置没有就读旧位置（cc.navPins 这类以前存在本地的），写只写新位置。
   //   启动时 uiSync() 拉一次网关的：和镜像不一样就以网关为准，再通知各处重画（cc:ui 事件）
   const UIS = { d: (() => { try { const j = JSON.parse(localStorage.getItem("cc.ui")); return j && typeof j === "object" ? j : {}; } catch { return {}; } })() };
@@ -1107,28 +1107,28 @@ if (/[?&](t|k)=/.test(location.search) || /[#&]k=/.test(location.hash)) history.
   chatEl.addEventListener("click", onPathLink);
   $("vw-body").addEventListener("click", onPathLink);
 
-  // 网页链接：有应用内浏览器就在里面开（cccodroid / 开发端外壳提供），否则照常新窗口
-  const hasBrowser = () => !!(window.CCApp && window.CCApp.openBrowser);
+  // 网页链接：有应用内浏览器就在里面开（agycodroid / 开发端外壳提供），否则照常新窗口
+  const hasBrowser = () => !!(window.AGApp && window.AGApp.openBrowser);
   // 宽屏（两栏起）且外壳支持嵌入：浏览器开在右侧工作区，和文件 / 终端并列；窄屏照旧全屏窗口。
   // 已经开着窗格时，窄屏下的新链接也送进窗格，别再叠一个全屏窗口
   const browserEl = $("browser");
-  const hasPane = () => !!(window.CCApp && window.CCApp.hasPane && window.CCLayout);
+  const hasPane = () => !!(window.AGApp && window.AGApp.hasPane && window.CCLayout);
   function openWeb(url) {
     if (hasPane() && (CCLayout.tier() >= 2 || !browserEl.classList.contains("hidden"))) {
       browserEl.classList.remove("hidden");
       CCLayout.raise("browser");
-      window.CCApp.paneOpen(url || "");
+      window.AGApp.paneOpen(url || "");
       return;
     }
-    if (hasBrowser()) return window.CCApp.openBrowser(url || "");
+    if (hasBrowser()) return window.AGApp.openBrowser(url || "");
     if (url) window.open(url, "_blank", "noopener");
   }
   function closeBrowser() {
-    if (window.CCApp && CCApp.paneCanBack && CCApp.paneCanBack()) return CCApp.paneGoBack();   // 返回手势先在网页里后退
+    if (window.AGApp && AGApp.paneCanBack && AGApp.paneCanBack()) return AGApp.paneGoBack();   // 返回手势先在网页里后退
     browserEl.classList.add("hidden");
-    if (window.CCApp && CCApp.paneClose) CCApp.paneClose();
+    if (window.AGApp && AGApp.paneClose) AGApp.paneClose();
   }
-  window.__ccBrowserClosed = guardHook("__ccBrowserClosed", () => browserEl.classList.add("hidden"));    // 窗格自己的 ✕
+  window.__agyBrowserClosed = guardHook("__agyBrowserClosed", () => browserEl.classList.add("hidden"));    // 窗格自己的 ✕
   const onWebLink = (e) => {
     const a = e.target.closest("a.weblink");
     if (!a || !hasBrowser()) return;

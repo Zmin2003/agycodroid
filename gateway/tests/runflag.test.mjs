@@ -8,7 +8,7 @@ import { CFG } from "../gw/config.mjs";
 
 test("排着会自己发出去的消息也算有任务；挂起等 ⚡ 的不算", async () => {
   const { QUEUE, saveRunMark } = await import("../gw/queue.mjs");
-  const flag = path.join(CFG.home, ".run-active"), mark = path.join(CFG.home, "ccapp-run-mark.json");
+  const flag = path.join(CFG.home, ".run-active"), mark = path.join(CFG.home, "agyapp-run-mark.json");
   try {
     saveRunMark();
     assert.equal(fs.existsSync(flag), false);

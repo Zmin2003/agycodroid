@@ -10,7 +10,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { readSessionForward, readSessionPage } from "../gw/transcript.mjs";
 
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "stab2-g-null-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "stab2-g-null-"));
 const line = (o) => JSON.stringify(o) + "\n";
 const msg = (type, text, uuid = crypto.randomUUID()) => line({
   type, uuid, timestamp: new Date().toISOString(),

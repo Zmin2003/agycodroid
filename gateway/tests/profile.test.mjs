@@ -1,5 +1,6 @@
 // 脉络阶段 3 · 剖面（gw/profile.mjs）：按章切轮、一轮里的工具与子代理、长出去的分叉挂在哪一轮
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
+import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -10,7 +11,7 @@ import { chapterProfile, routeProfile, saveExport, turnDetail } from "../gw/prof
 const id = () => crypto.randomUUID();
 const T0 = Date.parse("2026-10-21T00:00:00Z");
 const iso = (sec) => new Date(T0 + sec * 1000).toISOString();
-const dir = path.join(process.env.CCAPP_HOME, ".claude", "projects", "-profile");
+const dir = path.join(PATHS.projects, "-profile");
 const put = (f, lines) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, lines.map((l) => JSON.stringify(l)).join("\n") + "\n"); };
 const ask = (S, sec, q) => ({ type: "user", uuid: id(), sessionId: S, timestamp: iso(sec), message: { role: "user", content: q } });
 const call = (S, sec, tid, name, input) => ({ type: "assistant", uuid: id(), sessionId: S, timestamp: iso(sec), message: { role: "assistant", content: [{ type: "tool_use", id: tid, name, input }] } });
@@ -94,18 +95,18 @@ test("接口：会话号要合规，找不到给 404", async () => {
   assert.equal(r.body.turns.length, 2);
 });
 
-test("导出落盘：只认 cccodroid-lineage-*.svg/png/html，内容要对得上格式", () => {
-  const ok = saveExport("cccodroid-lineage-20261030-2300.svg", '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+test("导出落盘：只认 agycodroid-lineage-*.svg/png/html，内容要对得上格式", () => {
+  const ok = saveExport("agycodroid-lineage-20261030-2300.svg", '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
   assert.equal(ok.ok, true);
   assert.equal(fs.readFileSync(ok.file, "utf8").slice(0, 4), "<svg");
   assert.equal(saveExport("../x.svg", "<svg/>").error, "bad_name");
-  assert.equal(saveExport("cccodroid-lineage-a.svg", "<script>").error, "bad_svg");
-  assert.equal(saveExport("cccodroid-lineage-a.html", "<html>").error, "bad_html");
-  assert.equal(saveExport("cccodroid-lineage-a.png", Buffer.from("not a png at all, really not, padding padding padding padding padding padding padding padding padding").toString("base64")).error, "bad_png");
-  assert.equal(saveExport("cccodroid-lineage-a.html", "<!doctype html><p>x").ok, true);
+  assert.equal(saveExport("agycodroid-lineage-a.svg", "<script>").error, "bad_svg");
+  assert.equal(saveExport("agycodroid-lineage-a.html", "<html>").error, "bad_html");
+  assert.equal(saveExport("agycodroid-lineage-a.png", Buffer.from("not a png at all, really not, padding padding padding padding padding padding padding padding padding").toString("base64")).error, "bad_png");
+  assert.equal(saveExport("agycodroid-lineage-a.html", "<!doctype html><p>x").ok, true);
   // 导出目录里放一个同名软链接指向别处：不跟过去写
-  const victim = path.join(process.env.CCAPP_HOME, "victim.txt"); fs.writeFileSync(victim, "keep");
-  const link = path.join(path.dirname(ok.file), "cccodroid-lineage-link.svg"); fs.rmSync(link, { force: true }); fs.symlinkSync(victim, link);
-  assert.equal(saveExport("cccodroid-lineage-link.svg", "<svg/>").error, "bad_target");
+  const victim = path.join(process.env.AGAPP_HOME, "victim.txt"); fs.writeFileSync(victim, "keep");
+  const link = path.join(path.dirname(ok.file), "agycodroid-lineage-link.svg"); fs.rmSync(link, { force: true }); fs.symlinkSync(victim, link);
+  assert.equal(saveExport("agycodroid-lineage-link.svg", "<svg/>").error, "bad_target");
   assert.equal(fs.readFileSync(victim, "utf8"), "keep");
 });

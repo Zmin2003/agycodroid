@@ -8,7 +8,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
 const { PROJECTS } = await import("../gw/projects.mjs");
@@ -34,7 +34,7 @@ for (let i = 0; i < maxParallel(); i++) { const id = "b2-busy" + i; fake.push(id
 const allow0 = S.DB.allowLogin, budget0 = S.DB.dailyBudget, spent0 = { ...S.DB.spent };
 after(() => { S.DB.allowLogin = allow0; S.DB.dailyBudget = budget0; S.DB.spent = spent0; });
 // 共用临时 home：清掉本测试造的会话，别让后面的用量补算把它们算进来
-after(() => fs.rmSync(path.join(CFG.home, ".claude", "projects", "-b2-sched"), { recursive: true, force: true }));
+after(() => fs.rmSync(path.join(PATHS.projects, "-b2-sched"), { recursive: true, force: true }));
 const dayK = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const monthK = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
 let n = 0;
@@ -138,7 +138,7 @@ test("定时任务不覆盖用户手动改的会话名（195-A.4）", async () =
 
 test("saveSession=false 的失败轮次也进回收站（197-2.5）", async () => {
   S.DB.allowLogin = true;
-  const sid = crypto.randomUUID(), d = path.join(CFG.home, ".claude", "projects", "-b2-sched");
+  const sid = crypto.randomUUID(), d = path.join(PATHS.projects, "-b2-sched");
   fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(path.join(d, sid + ".jsonl"), JSON.stringify({ type: "user", sessionId: sid, uuid: crypto.randomUUID(), message: { role: "user", content: "hi" } }) + "\n");
   const t = mk({ saveSession: false, session: "new" });
@@ -199,7 +199,7 @@ test("月度统计由 addRun 累加，不被 RUNLOG 的 500 条上限截断（19
 });
 
 test("保存失败：POST /api/sched 回 500 write_failed，任务不留在内存里（195-N.1）", async () => {
-  const file = path.join(CFG.home, "ccapp-sched.json");
+  const file = path.join(CFG.home, "agyapp-sched.json");
   const old = fs.readFileSync(file);
   fs.rmSync(file); fs.mkdirSync(file);
   try {

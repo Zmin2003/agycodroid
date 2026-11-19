@@ -6,7 +6,7 @@
 
 When you use AI on a phone today and the model needs to actually *do* something (run code, edit files, install dependencies, build a package), the work is almost always shipped off to a cloud sandbox: a temporary container somewhere else runs it and sends the result back. The phone is just a screen.
 
-cccodroid sets out to show that **this step is not necessary.**
+agycodroid sets out to show that **this step is not necessary.**
 
 An Android phone already runs a Linux kernel, with a multi-core CPU, a dozen or more GB of RAM and hundreds of GB of storage. Once the tools run natively on that kernel, an AI agent can execute directly on your own device: your files, your toolchain, your network, with no third-party container in between. The cloud does model inference; execution comes home.
 
@@ -19,7 +19,7 @@ That means more than "you can code offline":
 
 ## The approach is not tied to one agent
 
-cccodroid runs the official Claude Code today, but the method underneath is general: a native toolchain, a system-call compatibility layer, a local gateway and a graphical shell. In principle, any AI agent delivered as a command-line program that runs on Linux arm64 can be brought to a phone the same way (Codex CLI or Kimi CLI, for example), and official mobile versions may well appear.
+agycodroid runs the official Antigravity CLI today, but the method underneath is general: a native toolchain, a system-call compatibility layer, a local gateway and a graphical shell. In principle, any AI agent delivered as a command-line program that runs on Linux arm64 can be brought to a phone the same way (Codex CLI or Kimi CLI, for example), and official mobile versions may well appear.
 
 We welcome that. This project is released under Apache-2.0, and both the methods and the pitfalls are documented in this repository. If it helps make on-device execution the norm, it has done its job.
 
@@ -30,15 +30,15 @@ We welcome that. This project is released under Apache-2.0, and both the methods
 Most of these were not decided up front. They were settled one at a time, each time something broke on a real device.
 
 ### 1. Run the original, unmodified
-Claude Code is downloaded from Anthropic's official channel, verified against the official sha256 manifest, and never modified by a single byte. The toolchain comes from the official Termux repositories. We only build the layer that makes it run: prefix relocation, system-call compatibility, passing keys through `apiKeyHelper`.
+Antigravity CLI is downloaded from Google's official manifest, verified against the manifest's sha512, and never modified by a single byte. The toolchain comes from the official Termux repositories. We only build the layer that makes it run: prefix relocation, system-call compatibility for the devkit runtime, and passing the Gemini API key through the `GEMINI_API_KEY` environment variable (the one exception to the no-keys-in-env rule — agy reads its API key only from the environment; see §7).
 
 Build on other people's work without tampering with it. That is engineering restraint, and it is respect for upstream terms and for users' trust.
 
 ### 2. Work with the platform's native capabilities
 No root, no custom ROM, no chroot / proot / virtual machine.
 
-- **Same-length prefix relocation.** Termux binaries have `/data/data/com.termux/` baked in at build time. This one was a happy accident: the product name `cccodroid` was picked on a whim and happens to be 9 characters; add a dot and `cc.codroid` is 10, exactly the length of `com.termux`. Once we noticed, we **deliberately made it the package name**, so a byte-for-byte replacement fixes every RUNPATH, shebang and config path — no `LD_LIBRARY_PATH`, wrapper scripts or binary patching.
-- **System-call compatibility.** Android installs a system-call allow-list on app processes and kills anything outside it with SIGSYS (Android 14 does not allow `epoll_pwait2`). cccodroid does not loosen that restriction — a blocked call is still blocked. It only turns "blocked means killed" into "returns ENOSYS", so the program takes the fallback path it already has. **The security boundary stays where it is; failures just become graceful.**
+- **Same-length prefix relocation.** Termux binaries have `/data/data/com.termux/` baked in at build time. This one was a happy accident: the product name `agycodroid` was picked on a whim and happens to be 9 characters; add a dot and `cc.agyroid` is 10, exactly the length of `com.termux`. Once we noticed, we **deliberately made it the package name**, so a byte-for-byte replacement fixes every RUNPATH, shebang and config path — no `LD_LIBRARY_PATH`, wrapper scripts or binary patching.
+- **System-call compatibility.** Android installs a system-call allow-list on app processes and kills anything outside it with SIGSYS (Android 14 does not allow `epoll_pwait2`). agycodroid does not loosen that restriction — a blocked call is still blocked. It only turns "blocked means killed" into "returns ENOSYS", so the program takes the fallback path it already has. **The security boundary stays where it is; failures just become graceful.** Antigravity CLI itself is an official bionic Android build and does not go through this layer — it runs directly on the system linker.
 - Elevated privileges come from [Shizuku](https://shizuku.rikka.app) (optional); background work relies on a foreground service.
 
 Find out what the system actually allows, then do as much as possible within that boundary.
@@ -67,8 +67,8 @@ Mistakes are allowed; getting stuck is not.
 
 ### 7. Secure by default
 - The gateway listens on 127.0.0.1 only. Every `/api/*` request must carry a 256-bit token from the app's private directory, and Host and Origin are checked. Other apps and web pages on the phone cannot drive it.
-- Account sign-in is done by Claude Code itself; cccodroid never reads, stores or relays claude.ai credentials.
-- Third-party API keys live only in the app's private directory and reach claude through `apiKeyHelper`, never through environment variables.
+- Account sign-in is done by Antigravity CLI itself; agycodroid never reads, stores or relays the Google account credentials used to sign in.
+- The Gemini API key lives only in the app's private directory and reaches Antigravity CLI through the `GEMINI_API_KEY` environment variable, set on the agy child process at spawn and nowhere else. This is the one exception to the no-keys-in-environment-variables rule: agy reads its API key only from the environment.
 - App and toolchain updates are verified by signature or checksum before they are installed.
 
 Turn the phone into a development machine without turning it into a door for someone else.

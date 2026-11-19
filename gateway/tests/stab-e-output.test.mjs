@@ -1,4 +1,6 @@
 // e 组 FIND-045（五小项）：工具结果截断无标记、终端 cwd 静默回落、stderr 尾部丢失、信号统一报 128、回放环溢出无提示。
+// 移植：工具结果截断和 stderr 尾部两条改成 agy 事件（step_update tool DONE / 真实 startRun + PATHS.agy），
+// 其余三条与 CLI 无关，原样保留。
 import { PATHS, CFG } from "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
@@ -8,21 +10,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const home = process.env.CCAPP_HOME;
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "stab-e-out-"));
-const providerFile = path.join(home, "ccapp-providers.json");
-const PID = "custom-stabeout";
-const hadProviders = fs.existsSync(providerFile) ? fs.readFileSync(providerFile) : null;
-fs.writeFileSync(providerFile, JSON.stringify({ active: PID, providers: {
-  [PID]: { label: "Fixture", baseUrl: "https://fixture.example.invalid", apiKey: "fixture-only", authStyle: "bearer", defaultModel: "fixture-model", fallbackModels: [{ id: "fixture-model" }] },
-} }));
+const home = process.env.AGAPP_HOME;
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "stab-e-out-"));
 const cli = path.join(root, "fake-cli.sh");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 const big = "A".repeat(30000);
 fs.writeFileSync(cli, `#!${sh}\nprintf '%s' '${big}' >&2\nprintf '\\nSTDERR-TAIL-MARKER-9137\\n' >&2\nexit 1\n`, { mode: 0o700 });
-const previousPaths = { claude: PATHS.claude, loader: PATHS.loader, claudeLoader: PATHS.claudeLoader };
-PATHS.claude = process.execPath;
-PATHS.loader = PATHS.claudeLoader = cli;
+const previousPaths = { agy: PATHS.agy };
+PATHS.agy = cli;
 process.env.ANTHROPIC_API_KEY = "fixture-only-do-not-forward";
 const { translate } = await import("../gw/stream.mjs");
 const { resolveTermCwd, _termForTest } = await import("../gw/terminal.mjs");
@@ -33,7 +28,6 @@ globalThis.fetch = async () => { throw new Error("fixture must not send a reques
 after(() => {
   globalThis.fetch = originalFetch;
   Object.assign(PATHS, previousPaths);
-  if (hadProviders) fs.writeFileSync(providerFile, hadProviders); else fs.rmSync(providerFile, { force: true });
   fs.rmSync(root, { recursive: true, force: true });
 });
 const until = async (f, ms = 15000) => { const t = Date.now(); while (!f()) { if (Date.now() - t > ms) throw new Error("等不到"); await new Promise((r) => setTimeout(r, 30)); } };
@@ -41,14 +35,15 @@ const until = async (f, ms = 15000) => { const t = Date.now(); while (!f()) { if
 test("FIND-045：工具结果超过 20000 字符时带截断标记", () => {
   const out = [];
   const bigTxt = "b".repeat(20001);
-  translate({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu-1", content: bigTxt }] } }, { sse: (e) => out.push(e) });
-  assert.equal(out.length, 1);
-  assert.equal(out[0].type, "tool_result");
-  assert.equal(out[0].text.includes(bigTxt), false);
-  assert.equal(out[0].text.endsWith("…（已截断）"), true, "截断没有标记：" + out[0].text.slice(-40));
+  const toolDone = (idx, output) => ({ event: "step_update", step_update: { step_index: idx, step_type: "tool", state: "DONE", tool_info: { name: "read_file", output } } });
+  translate(toolDone(0, bigTxt), { sse: (e) => out.push(e) });
+  const res = out.find((e) => e.type === "tool_result");
+  assert.ok(res, "没出 tool_result：" + JSON.stringify(out));
+  assert.equal(res.text.includes(bigTxt), false);
+  assert.equal(res.text.endsWith("…（已截断）"), true, "截断没有标记：" + res.text.slice(-40));
   const small = [];
-  translate({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu-2", content: "short" }] } }, { sse: (e) => small.push(e) });
-  assert.equal(small[0].text, "short", "没超长的不该加标记");
+  translate(toolDone(1, "short"), { sse: (e) => small.push(e) });
+  assert.equal(small.find((e) => e.type === "tool_result").text, "short", "没超长的不该加标记");
 });
 
 test("FIND-045：终端带来的目录不存在时回落到工作区，并给出提示用的原目录", () => {

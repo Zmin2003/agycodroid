@@ -1,11 +1,11 @@
-// 脉络 · 显式亲缘记录：home/ccapp-lineage.json。只记事实（谁从谁分出来、从哪条消息分），不记布局。
+// 脉络 · 显式亲缘记录：home/agyapp-lineage.json。只记事实（谁从谁分出来、从哪条消息分），不记布局。
 // 单独成一个小模块，是为了让 sessionops（分叉 / 回退）能直接写，不和 sessions / lineage 绕成循环引用。
 // 格式见规划 §3.3：{ v: 1, edges: { <子会话>: { primary: { id, at, kind }, extra: [ { id, at, how, note } ] } } }
 import path from "node:path";
 import { CFG, log } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-lineage.json");
+const FILE = path.join(CFG.home, "agyapp-lineage.json");
 let DB = null;
 
 // edges 必须是普通对象：数组也是 object，往数组上写会话号键 JSON.stringify 时全丢，文件永远还是 []（195-Z.7）

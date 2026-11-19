@@ -96,7 +96,7 @@
     c.fillStyle = glow; c.fillRect(0, 0, W, H);
     c.textBaseline = "alphabetic";
     let y = P + 34;
-    text("cccodroid · " + t("使用月报"), P, y, font(500, 30), FG2);
+    text("agycodroid · " + t("使用月报"), P, y, font(500, 30), FG2);
     // 导出才有：右上角 头像 + 昵称（和标题同一行）
     if (who) {
       const R0 = 34, cx = W - P - R0, cy = y - 11;
@@ -116,7 +116,7 @@
     text(t("次对话"), P + nw + 20, y - 12, font(600, 44), FG);
     const dp = st.prev.m ? Math.round(((st.tot.m - st.prev.m) / st.prev.m) * 100) : null;
     y += 62;
-    text(dp == null ? t("和 Claude 一起度过的这个月") : (st.partial ? t("比上月同期 {p}", { p: (dp >= 0 ? "+" : "") + dp + "%" }) : t("比上月 {p}", { p: (dp >= 0 ? "+" : "") + dp + "%" })), P, y, font(500, 32), dp == null ? FG2 : dp >= 0 ? K.UP : K.DOWN);
+    text(dp == null ? t("和 Antigravity 一起度过的这个月") : (st.partial ? t("比上月同期 {p}", { p: (dp >= 0 ? "+" : "") + dp + "%" }) : t("比上月 {p}", { p: (dp >= 0 ? "+" : "") + dp + "%" })), P, y, font(500, 32), dp == null ? FG2 : dp >= 0 ? K.UP : K.DOWN);
     // 六格数字
     y += 50;
     const tiles = [
@@ -125,7 +125,7 @@
       [t("最长连续"), t("{n} 天", { n: st.best })],
       [st.top ? t("最忙的一天 · {n} 次", { n: usNum(st.top.n) }) : t("最忙的一天"), st.top ? st.top.date.toLocaleDateString(I18N.lang, { month: "short", day: "numeric" }) : "—"],
       [t("工具调用"), t("{n} 次", { n: usCompact(st.tot.tl) })],
-      [t("Claude 写了"), usCompact(st.tot.o) + " token"],
+      [t("Antigravity 写了"), usCompact(st.tot.o) + " token"],
     ];
     const tw = (W - 2 * P - 2 * 24) / 3;
     tiles.forEach(([k, v], i) => {
@@ -170,7 +170,7 @@
       const sum = st.models.reduce((a, [, v]) => a + v, 0);
       st.models.slice(0, 4).forEach(([name, v], i) => {
         const ry = y + 50 + i * 64, pct = v / sum;
-        text(name.replace(/^claude-/, "").replace(/-\d{8}$/, ""), P, ry + 30, font(500, 28), FG2);
+        text(name.replace(/-\d{8}$/, ""), P, ry + 30, font(500, 28), FG2);
         c.fillStyle = K.fg(0.07); rr(P + 420, ry + 8, W - 2 * P - 420 - 110, 26, 13); c.fill();
         c.fillStyle = i ? K.acc(0.55) : ACC; rr(P + 420, ry + 8, Math.max(26, (W - 2 * P - 420 - 110) * pct), 26, 13); c.fill();
         text(pct < 0.01 ? "<1%" : Math.round(pct * 100) + "%", W - P, ry + 32, font(600, 28), FG, "right");
@@ -237,18 +237,12 @@
   function usPaint() {
     const now = new Date(), d0 = usDay0(now), m0 = usMonth0(now.getFullYear(), now.getMonth());
     const today = us.raw ? usSum(d0, usAddDays(d0, 1)) : usEmpty(), month = us.raw ? usSum(m0, usAddDays(d0, 1)) : usEmpty();
-    // 数字一排：额度（官方账户才有）、今天、本月、缓存命中
-    const q = usDash.quota, kpi = [];
+    // 数字一排：本轮用量（agy usage：input / output / thinking / cache_read / total tokens）、今天、本月、缓存命中
+    const q = usDash.quota;
     if (q) {
-      // 网关给的已经是百分数，超额度时会大于 100：数字如实显示，只把条子画满（197-5.7）
-      const pct = Math.round(Math.max(0, +q.used || 0)), barPct = Math.min(100, pct);
-      const left = q.resetsAt ? q.resetsAt * 1000 - Date.now() : 0, gone = 1 - Math.max(0, Math.min(1, left / (7 * 86400e3)));
-      // 重置时间已经过了、额度还没刷新：别拿旧数算「够用」，说清楚等下一轮（195-O.6）
-      const pace = !q.resetsAt ? "" : left <= 0 ? t("已过重置时间，下一轮对话后刷新") : pct <= gone * 100 + 5 ? t("按现在的速度够用") : t("照这个速度会提前用完");
-      const at = q.resetsAt ? new Date(q.resetsAt * 1000) : null;
-      const reset = at ? t("{time} 重置", { time: at.toLocaleDateString(I18N.lang, { weekday: "short" }) + " " + at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : "";
-      kpi.push(`<div class="tile big${pct >= 90 ? " hot" : pct >= 70 ? " warm" : ""}"><span class="k">${esc(t("本周额度 · 官方账户"))}</span><span class="n num">${pct}%</span>
-        <div class="bar-mini"><i style="width:${barPct}%"></i></div><span class="k">${esc([reset, pace].filter(Boolean).join(" · "))}</span></div>`);
+      const num = (v) => Number.isFinite(+v) ? usTok(+v) : "—";
+      kpi.push(`<div class="tile"><span class="k">${esc(t("本轮用量"))}</span><span class="n num">${num(q.total)}</span>
+        <span class="k">${esc(t("输入 {i} · 输出 {o} · 思考 {th} · 缓存读取 {c}", { i: num(q.input), o: num(q.output), th: num(q.thinking), c: num(q.cache_read) }))}</span></div>`);
     }
     // 没读成过：说读取失败、给重试，别把 0 当成真数字（审查 F-006）
     if (!us.raw && us.err) kpi.push(`<div class="tile big"><span class="k">${esc(t("用量读取失败：{msg}", { msg: us.err }))}</span><button class="btn sm ghost" id="us-retry">${esc(t("重试"))}</button></div>`);
@@ -262,7 +256,7 @@
     $("us-kpis").innerHTML = kpi.join("");
     $("us-csv").disabled = !us.raw;
     const rt = $("us-retry"); if (rt) rt.onclick = () => { rt.disabled = true; loadUsage(); };
-    setPageSub("usage", q ? t("本周额度 {p}%", { p: Math.round(q.used) }) : !us.raw && us.err ? t("读取失败") : t("今天 {n} tokens", { n: usTok(today.i + today.o) }));
+    setPageSub("usage", !us.raw && us.err ? t("读取失败") : t("今天 {n} tokens", { n: usTok(today.i + today.o) }));
     // 每天用量：最近 14 天，单序列（不要图例），今天那根用强调色
     const days = Array.from({ length: 14 }, (_, i) => { const d = usAddDays(d0, i - 13), x = us.days.get(usDayKey(d)); return { d, v: x ? x.i + x.o : 0, t: x ? x.t : 0 }; });
     const box = $("us-daily");
@@ -300,7 +294,7 @@
     const k = (v, l) => `<div><span class="num">${v}</span><small>${esc(l)}</small></div>`;
     $("en-kpis").innerHTML = e ? (e.native ? k(b && b.d != null ? (Math.round(b.d * 10) / 10) + "%" : "—", t("电量")) + k(b && b.s ? fmtDur(b.s * 1000) : "—", t("亮屏")) : "")
       + k(b && b.c ? fmtDur(b.c * 1000) : "—", t("本应用 CPU")) : "";
-    $("en-kpi-note").textContent = e ? (e.native ? t("电量是整机今天掉了多少；CPU 是本应用（含 Claude 和它跑的命令）实际干活的时间。") : t("这个版本没有原生层，只记 CPU 时间（电量、亮屏要 cccodroid）。")) : "";
+    $("en-kpi-note").textContent = e ? (e.native ? t("电量是整机今天掉了多少；CPU 是本应用（含 Antigravity 和它跑的命令）实际干活的时间。") : t("这个版本没有原生层，只记 CPU 时间（电量、亮屏要 agycodroid）。")) : "";
   }
   $("us-view").addEventListener("click", (e) => {
     const b = e.target.closest("[data-v]"); if (!b) return;
@@ -332,7 +326,7 @@
     const rows = [[t("日期"), t("消息"), t("回复轮数"), t("工具调用"), t("输入 tokens"), t("输出 tokens"), t("读缓存 tokens")].join(",")]
       .concat(keys.map((k) => { const x = us.days.get(k); return [k, x.m, x.t, x.tl, x.i, x.o, x.c].join(","); }));
     try {
-      const r = await post("/api/usage/csv", { name: "cccodroid-usage-" + usDayKey(new Date()) + ".csv", text: rows.join("\n") });
+      const r = await post("/api/usage/csv", { name: "agycodroid-usage-" + usDayKey(new Date()) + ".csv", text: rows.join("\n") });
       if (canSaveAs()) saveAs(r.file, "text/csv"); else toast(t("已保存：{name}", { name: r.file }));
     } catch (e) { toast(e.message, true); }
   });
@@ -405,7 +399,7 @@
   });
   // 月报图片：先交给网关落成文件，再走「保存到」/ 系统分享；都没有就让浏览器自己下载
   async function usCardFile() {
-    const [y, m] = us.month, name = `cccodroid-usage-${y}-${String(m + 1).padStart(2, "0")}.png`;
+    const [y, m] = us.month, name = `agycodroid-usage-${y}-${String(m + 1).padStart(2, "0")}.png`;
     // 导出的图另画一张：多了右上角的头像与昵称
     const p = profile(), cv = document.createElement("canvas");
     let img = null;
@@ -498,7 +492,7 @@
         <option value="bearer" ${v.authStyle !== "x-api-key" ? "selected" : ""}>${t("认证：Authorization: Bearer（多数第三方）")}</option>
         <option value="x-api-key" ${v.authStyle === "x-api-key" ? "selected" : ""}>${t("认证：x-api-key（Anthropic 风格）")}</option>
       </select>
-      <input id="cc-model" placeholder="${t("默认模型名（必填，claude 不认识第三方模型）")}" value="${esc(v.defaultModel || "")}">
+      <input id="cc-model" placeholder="${t("默认模型名（必填）")}" value="${esc(v.defaultModel || "")}">
       <input id="cc-fast" placeholder="${t("快模型名（选填，子代理用；留空同上）")}" value="${esc(v.fastModel || "")}">
       <input id="cc-models" placeholder="${t("模型清单地址（选填；不填会按接口地址自动查找 /models）")}" value="${esc(v.modelsUrl || "")}">
       <input id="cc-ctx" inputmode="numeric" placeholder="${t("上下文窗口（选填，token 数，1k=1024；不填按 200k 算）")}" value="${v.contextWindow ? esc(String(v.contextWindow)) : ""}">
@@ -515,8 +509,8 @@
       </div>
 ${p && p.plainHttp ? `<div class="tiny warn">${esc(t("这个地址是明文 http，密钥和对话内容会不加密地发到对方机器上；能用 https 就换成 https。"))}</div>` : ""}
       <div class="prov-state" id="pc-result"></div>
-            <div class="tiny">${t("要求对端讲 <b>Anthropic Messages</b> 协议（各家文档里写“Claude Code 接入”的那个地址）。")}
-        ${t("地址末尾不要带 <code>/v1</code>，claude 会自己补 <code>/v1/messages</code>。")}
+            <div class="tiny">${t("要求对端讲 <b>Anthropic Messages</b> 协议（各家文档里写“Antigravity CLI 接入”的那个地址）。")}
+        ${t("地址末尾不要带 <code>/v1</code>，agy 会自己补 <code>/v1/messages</code>。")}
         <br>${t("建议到厂商控制台设个单日消费上限和余额提醒；怀疑 Key 泄漏了，就在那里作废、换个新的。")}</div>
       <details class="cc-tpl"><summary>${t("示例模板（不是真实服务，换成服务商给你的）")}</summary>
         <pre style="white-space:pre-wrap;word-break:break-all;margin:6px 0;font-size:12px;line-height:1.5">Base URL: https://api.example.com/anthropic

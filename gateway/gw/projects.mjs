@@ -2,7 +2,7 @@
 // 一个项目 = 一个工作目录 + 自己的指令（目录里的 CLAUDE.md）+ 默认型号 / 思考强度 / 权限模式。
 // 项目里开的对话 cwd 就是项目目录（claude 按 cwd 把会话记录放进 ~/.claude/projects/<目录名>/），
 // 所以「哪些对话属于这个项目」直接看会话的 cwd，不另记一份映射。
-// 清单存在 home/ccapp-projects.json；目录本身不归我们管，删项目默认只删清单里这一条。
+// 清单存在 home/agyapp-projects.json；目录本身不归我们管，删项目默认只删清单里这一条。
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -11,7 +11,7 @@ import { dec, fileKind, NEXT, readBody, sendJson } from "./http.mjs";
 import { PEEK_CACHE, findSessionFile, listSessions, peekSession } from "./sessions.mjs";
 import { trashSession } from "./sessionops.mjs";
 import { termEnv } from "./terminal.mjs";
-import { killTree } from "./claude.mjs";
+import { killTree } from "./agy.mjs";
 import { runOfSession } from "./runs.mjs";
 import { checkSession, resealAfterEdit } from "./integrity.mjs";
 import { rewriteLines } from "./bigfile.mjs";
@@ -21,7 +21,7 @@ import { holdsPrivate, isPrivate } from "./pathguard.mjs";
 import { loadState, saveState } from "./statefile.mjs";
 import { syncGitSafe } from "./gitsafe.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-projects.json");
+const FILE = path.join(CFG.home, "agyapp-projects.json");
 // 项目颜色：和界面强调色同一套饱和度，按顺序分配（用户可改）
 export const PROJ_COLORS = ["#c96442", "#2f6aa8", "#3d7a2a", "#8a5cb8", "#b08a2e", "#2f8a8a", "#b0506e", "#6b7280"];
 const SAME = ["", "follow"];   // 「跟随全局」存成空串
@@ -87,7 +87,7 @@ function listProjects() {
     };
   });
 }
-/** Claude 自己记在这个项目里的记忆：~/.claude/projects/<目录名>/memory/*.md */
+/** Antigravity 自己记在这个项目里的记忆：~/.claude/projects/<目录名>/memory/*.md */
 function memoryFiles(p) {
   const dir = path.join(PATHS.projects, projectSlug(real(p.path)), "memory");
   try { return fs.readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").map((f) => path.join(dir, f)); } catch { return []; }

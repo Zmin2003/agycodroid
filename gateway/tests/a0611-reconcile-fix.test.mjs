@@ -13,7 +13,7 @@ import { PREFIX } from "../gw/config.mjs";
 const { fixPlan, reconcileNow, reconcileRun, routeReconcile } = await import("../gw/reconcile.mjs");
 
 const f = (key, act, level = "error") => ({ key, level, k: key, v: null, fix: "", act });
-test("排步骤：先模块、再组件，Claude Code 和工具包最后；同一个组件并成一步；info 和不能修的不排", () => {
+test("排步骤：先模块、再组件，Antigravity CLI 和工具包最后；同一个组件并成一步；info 和不能修的不排", () => {
   const F = [
     f("devkit", { t: "devkit" }), f("claude", { t: "claude" }),
     f("comp-files:a", { t: "comp", id: "a" }), f("comp-bin:a", { t: "comp", id: "a" }),

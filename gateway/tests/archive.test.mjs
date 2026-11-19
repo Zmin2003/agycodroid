@@ -1,5 +1,6 @@
 // 建档（gw/archive-core.mjs + archive.mjs + archive/cc-archive.mjs）：题名校验、章节、交档、提醒、命令行
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
+import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -59,8 +60,8 @@ test("章节一览：起止、锚点、字节位置、档号；「同一件事�
 });
 
 // ── 网关一侧：假 home 里放会话，交档、提醒、会话列表、命令行 ──
-const home = process.env.CCAPP_HOME;
-const proj = path.join(home, ".claude", "projects", "-arch");
+const home = process.env.AGAPP_HOME;
+const proj = path.join(PATHS.projects, "-arch");
 fs.mkdirSync(proj, { recursive: true });
 function session(turns, compacts) {
   const sid = crypto.randomUUID(), L = [];
@@ -93,7 +94,7 @@ test("网关：压缩过、刚结束的章没题名 → 系统提示要求先建
   await fileChapter(sid, { title: "我自己起的名字", chapter: 2, by: "user" });
   const again = await fileChapter(sid, { title: "又一个题名", chapter: 2 });
   assert.equal(again.ok, false);
-  const db = JSON.parse(fs.readFileSync(path.join(home, "ccapp-archive.json"), "utf8"));
+  const db = JSON.parse(fs.readFileSync(path.join(home, "agyapp-archive.json"), "utf8"));
   assert.equal(db.sessions[sid].chapters[2].hist[0].title, "接手网关修复并验证", "改动留痕");
 });
 
@@ -126,7 +127,7 @@ test("命令行 cc-archive：带本轮编号交档，网关认出会话；不合
   await new Promise((r) => srv.listen(0, "127.0.0.1", r));
   const port = srv.address().port;
   const cli = path.join(HERE, "..", "archive", "cc-archive.mjs");
-  const env = { ...process.env, CCAPP_RUN_ID: "run-arch-1", CCAPP_GW_PORT: String(port) };
+  const env = { ...process.env, AGAPP_RUN_ID: "run-arch-1", AGAPP_GW_PORT: String(port) };
   // 服务器和命令行在同一个测试进程里答，子进程必须异步起（spawnSync 会卡住事件循环）
   const run = (...a) => new Promise((r) => { const c = spawn(process.execPath, [cli, ...a], { env }); let o = ""; c.stdout.on("data", (d) => (o += d)); c.stderr.on("data", (d) => (o += d)); c.on("close", (code) => r({ code, o })); });
   const r1 = await run("--title", "修了一些 bug。");
@@ -142,7 +143,7 @@ test("命令行 cc-archive：带本轮编号交档，网关认出会话；不合
   let leaked = false;
   const fake = http.createServer((req, res) => { if (req.headers["x-cc-token"]) leaked = true; res.writeHead(200); res.end("x y"); });
   await new Promise((r) => fake.listen(0, "127.0.0.1", r));
-  const r3 = await new Promise((r) => { const c = spawn(process.execPath, [cli, "--title", "审 GPU 驱动组件"], { env: { ...env, CCAPP_GW_PORT: String(fake.address().port) } }); let o = ""; c.stderr.on("data", (d) => (o += d)); c.on("close", (code) => r({ code, o })); });
+  const r3 = await new Promise((r) => { const c = spawn(process.execPath, [cli, "--title", "审 GPU 驱动组件"], { env: { ...env, AGAPP_GW_PORT: String(fake.address().port) } }); let o = ""; c.stderr.on("data", (d) => (o += d)); c.on("close", (code) => r({ code, o })); });
   fake.close();
   assert.equal(r3.code, 2, r3.o);
   assert.equal(leaked, false, "令牌发给了冒牌网关");
@@ -151,7 +152,7 @@ test("命令行 cc-archive：带本轮编号交档，网关认出会话；不合
     const bad = http.createServer((req, res) => { if (req.headers["x-cc-token"]) leaked = true; if (mode === "flood") { res.writeHead(200); res.write("x".repeat(8192)); } });
     await new Promise((r) => bad.listen(0, "127.0.0.1", r));
     const t0 = Date.now();
-    const r4 = await new Promise((r) => { const c = spawn(process.execPath, [cli, "--title", "审 GPU 驱动组件"], { env: { ...env, CCAPP_GW_PORT: String(bad.address().port) } }); let o = ""; c.stderr.on("data", (d) => (o += d)); c.on("close", (code) => r({ code, o })); });
+    const r4 = await new Promise((r) => { const c = spawn(process.execPath, [cli, "--title", "审 GPU 驱动组件"], { env: { ...env, AGAPP_GW_PORT: String(bad.address().port) } }); let o = ""; c.stderr.on("data", (d) => (o += d)); c.on("close", (code) => r({ code, o })); });
     bad.closeAllConnections(); bad.close();
     assert.equal(r4.code, 2, mode + " " + r4.o);
     assert.ok(Date.now() - t0 < 20000, mode + " 等太久");

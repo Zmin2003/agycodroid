@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#1f1e1d">
-<title>cccodroid</title>
+<title>agycodroid</title>
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="stylesheet" href="/style.css">
 <script src="/theme.js"></script>
@@ -17,7 +17,7 @@
     <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
   </button>
   <div id="title-block">
-    <div id="app-title">cccodroid</div>
+    <div id="app-title">agycodroid</div>
         <div id="sub-title" data-i18n>连接中…</div>
   </div>
   <!-- 工具键横向折叠：常态只露「⋯」，点开从它左边依次滑出，再点收回（状态记在 localStorage cc.tbOpen）。
@@ -47,7 +47,7 @@
 </header>
 
 <!-- ── 上下文用量条 ── -->
-<div id="ctxbar" class="hidden" role="button" aria-label="额度与余额" data-i18n-attr="aria-label">
+<div id="ctxbar" class="hidden" role="button" aria-label="用量" data-i18n-attr="aria-label">
   <div id="ctxfill"></div>
   <span id="ctxtxt"><span id="ctxctx"></span><span id="ctxq"></span></span>
 </div>
@@ -104,7 +104,7 @@
     <!-- 侧栏（0.3.13 改版）：新对话 / 去哪（常驻项 + 「更多」原地展开，常驻项可自定）/ 最近的对话 / 底部账户行进设置。
          导航由 app.js renderSideNav 画；设置、能力、扩展、用量、帮助是主区域的整页（#pages），不再挤在侧栏里 -->
     <div class="side-head">
-      <div class="side-brand"><span id="side-title">cccodroid</span></div>
+      <div class="side-brand"><span id="side-title">agycodroid</span></div>
       <button id="btn-close-drawer" class="icon-btn" aria-label="收起侧栏" title="收起侧栏" data-i18n-attr="aria-label,title">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg>
       </button>
@@ -171,15 +171,15 @@
     <section id="tab-sched" class="tab-pane hidden"></section>
     <section id="tab-bookmarks" class="tab-pane hidden"></section>
     <section id="tab-usage" class="tab-pane hidden">
-      <!-- 用量（照设计稿）：一排数字（额度、今天、本月、缓存命中）→ 每天用量柱状图（可切表格）→ 按型号占比 → 最费的对话 / 耗电 → 月报与数据管理。
-           数据：额度来自 /api/login/status；token 来自网关的使用统计（home/ccapp-usage.json）；耗电来自 /api/energy -->
-      <!-- 额度与消费：当前接口（账户额度 / 厂商余额与消费）+ 其他配过的接口 + 快用完时的提醒。顶栏细条的速览卡「查看用量」跳到这里 -->
+      <!-- 用量（照设计稿）：一排数字（今天、本月、缓存命中）→ 每天用量柱状图（可切表格）→ 按型号占比 → 最费的对话 / 耗电 → 月报与数据管理。
+           数据：用量来自 agy 的 usage 字段（input / output / thinking / cache_read / total tokens）与网关的使用统计（home/agyapp-usage.json）；耗电来自 /api/energy -->
+      <!-- 用量与消费：当前接口（用量 / 厂商余额与消费）+ 其他配过的接口 + 快用完时的提醒。顶栏细条的速览卡「查看用量」跳到这里 -->
       <div class="chart-card" id="us-acct">
-        <div class="cc-h"><b data-i18n>额度与消费</b><span class="muted" id="us-acct-name"></span><span class="grow"></span><button class="btn sm ghost" id="us-acct-ref" data-i18n>刷新</button></div>
+        <div class="cc-h"><b data-i18n>用量与消费</b><span class="muted" id="us-acct-name"></span><span class="grow"></span><button class="btn sm ghost" id="us-acct-ref" data-i18n>刷新</button></div>
         <div id="us-acct-cur"></div>
         <div id="us-acct-others"></div>
         <div class="qb-warn">
-          <label><input type="checkbox" class="sw" id="qb-warn-quota"><span data-i18n>额度用到 80% 和 95% 时提醒</span></label>
+          <label><input type="checkbox" class="sw" id="qb-warn-quota"><span data-i18n>用量用到 80% 和 95% 时提醒</span></label>
           <label><span data-i18n>余额低于这个数时提醒</span><span class="grow"></span><span id="qb-warn-cur"></span><input type="number" id="qb-warn-bal" min="0" step="any" inputmode="decimal" placeholder="—"></label>
         </div>
       </div>
@@ -247,15 +247,15 @@
           <div class="tiny" id="us-note"></div>
           <div class="prov-state" id="us-result"></div>
       </div>
-      <!-- 旧的额度块：数字已挪到上面那排，这里只留更新时间说明（JS 仍写它） -->
+      <!-- 旧的用量块：数字已挪到上面那排，这里只留更新时间说明（JS 仍写它） -->
       <div class="hidden" id="quota-field"><div id="quota-tiles"></div><div class="tiny" id="quota-note"></div></div>
       <div class="hidden" id="us-tiles"></div>
     </section>
 
-    <!-- 能力：这一轮 Claude 能用的全部东西（取自 init 报告）。顶上计数格点了跳到那一节；搜索框同时筛所有节 -->
+    <!-- 能力：这一轮 Antigravity 能用的全部东西（取自 init 报告）。顶上计数格点了跳到那一节；搜索框同时筛所有节 -->
     <section id="tab-caps" class="tab-pane hidden">
       <!-- 能力（照设计稿）：一句说明 → 计数格 → 搜索 → 各节（节头在外，列表是一张底板） -->
-      <div class="muted caps-lead" data-i18n>这一轮 Claude 能用的全部东西（取自启动时的 init 报告）。点斜杠命令插进输入框；工具的「允许 / 询问 / 拒绝」跟着权限模式和规则走。</div>
+      <div class="muted caps-lead" data-i18n>这一轮 Antigravity 能用的全部东西（取自启动时的 init 报告）。点斜杠命令插进输入框；工具的「允许 / 询问 / 拒绝」跟着权限模式和规则走。</div>
       <div class="tiles" id="cap-tiles"></div>
       <label class="searchbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="caps-q" type="search" placeholder="搜命令、工具、技能…" data-i18n-attr="placeholder" autocomplete="off"></label>
       <div class="ext-sec-plain" data-sec="cmd"><div class="sec-h"><span class="icobox"><svg class="ei" viewBox="0 0 24 24"><path d="M15 4 9 20"/></svg></span><div class="grow"><h3 data-i18n>斜杠命令</h3></div></div>
@@ -291,7 +291,7 @@
       <p id="cl-none" class="muted hidden" data-i18n>没有相关的版本</p>
     </section>
 
-    <!-- 扩展：插件 / 技能 / MCP 的安装与卸载（都转给 claude 自己的命令行） -->
+    <!-- 扩展：插件 / 技能 / MCP 的安装与卸载 -->
     <section id="tab-ext" class="tab-pane hidden">
       <nav class="subnav" id="ext-subnav"></nav>
       <div class="storage hidden" id="ext-storage"></div>
@@ -307,7 +307,7 @@
         <div id="comp-list" class="list"></div>
       </details>
       <details class="field ext-sec hidden" id="custom-field" data-sec="custom" data-short="自定义" open><summary><span class="sec-ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/></svg></span><span data-i18n>自定义组件</span> <span id="custom-count" class="pill"></span></summary>
-        <div class="tiny" data-i18n>市场里没有的，可以自己导入 Linux arm64 程序：单个程序，或 .tar.gz / .zip 压缩包。会自动补缺的库、生成命令，Claude 和终端里都能直接用。</div>
+        <div class="tiny" data-i18n>市场里没有的，可以自己导入 Linux arm64 程序：单个程序，或 .tar.gz / .zip 压缩包。会自动补缺的库、生成命令，Antigravity 和终端里都能直接用。</div>
         <div class="it-acts"><button class="btn sm" id="custom-pick" data-i18n>导入程序…</button><input type="file" id="custom-file" class="hidden"></div>
         <div class="cu-row"><input id="custom-path" data-i18n-attr="placeholder" placeholder="或者填本机路径，如 /sdcard/Download/foo.tar.gz" spellcheck="false" autocapitalize="off"><button class="btn ghost sm" id="custom-path-go" data-i18n>分析</button></div>
         <div id="custom-wiz"></div>
@@ -316,7 +316,7 @@
       <div class="field ext-sec-plain hidden" id="gh-field" data-sec="gh"><div class="sec-title"><span class="sec-ico"><svg viewBox="0 0 24 24"><path d="M9 19c-4 1.4-4-2-6-2.5M15 22v-3.5a3 3 0 0 0-.9-2.4c3-.3 6-1.5 6-6.6a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.6s-1.1-.3-3.6 1.4a12.4 12.4 0 0 0-6.5 0C6 1.9 4.9 2.2 4.9 2.2a4.8 4.8 0 0 0-.1 3.6A5.2 5.2 0 0 0 3.4 9.4c0 5.1 3 6.3 6 6.6a3 3 0 0 0-.9 2.4V22"/></svg></span><span>GitHub</span></div>
         <div id="gh-field-box" class="list"></div>
       </div>
-      <div class="tiny" data-i18n>改动在下一条消息生效。插件和 MCP 由 claude 自己的命令装卸，这里只是替你敲命令。</div>
+      <div class="tiny" data-i18n>改动在下一条消息生效。MCP 由 agy 的命令装卸，这里只是替你敲命令。插件、技能和 Hooks 是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。</div>
       <details class="field ext-sec" data-sec="plugin" open><summary><span class="sec-ico"><svg viewBox="0 0 24 24"><path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/></svg></span><span data-i18n>插件</span> <span id="ext-p-count" class="pill"></span></summary>
         <div class="ext-idx" id="plugin-idx"></div>
         <div id="ext-plugins" class="list"></div>
@@ -330,9 +330,9 @@
           </div>
         </details>
       </details>
-      <!-- 常用指令（0.4.20）：就是 Claude Code 的自定义命令文件（commands/*.md），逻辑在 app/08-extensions.js 的 UC 一节、网关 gw/commands.mjs -->
+      <!-- 常用指令（0.4.20）：就是 Antigravity CLI 的自定义命令文件（commands/*.md），逻辑在 app/08-extensions.js 的 UC 一节、网关 gw/commands.mjs -->
       <details class="field ext-sec" id="ext-cmd-sec" data-sec="ucmd" data-short="指令" open><summary><span class="sec-ico"><svg viewBox="0 0 24 24"><path d="M15 4 9 20"/></svg></span><span data-i18n>常用指令</span> <span id="ext-c-count" class="pill"></span></summary>
-        <div class="tiny" data-i18n>常发的长提示存成一条指令，输入框里打 / 就能选。/指令名 后面跟的话会填进正文里的 $ARGUMENTS。存的是 Claude Code 官方的命令文件，终端里的 claude 也能用。</div>
+        <div class="tiny" data-i18n>常发的长提示存成一条指令，输入框里打 / 就能选。/指令名 后面跟的话会填进正文里的 $ARGUMENTS。存的是命令文件，终端里的 agy 也能用。</div>
         <div class="ext-idx" id="cmd-scope"></div>
         <div id="ext-cmds" class="list"></div>
         <div class="row-actions"><button id="ext-c-new" class="btn sm ghost" data-i18n>新建指令</button></div>
@@ -345,8 +345,8 @@
           <button id="ext-s-import" class="btn sm ghost" data-i18n>从 zip 安装技能</button>
           <input id="ext-s-file" type="file" multiple hidden>
         </div>
-        <details class="ext-more" id="ext-s-catbox"><summary data-i18n>官方技能（anthropics/skills）</summary>
-          <div class="tiny" data-i18n>Anthropic 官方的技能仓库，装进 ~/.claude/skills；删除在上面的列表里。各个技能的许可证不同，装前可以点链接看一眼。</div>
+        <details class="ext-more" id="ext-s-catbox"><summary data-i18n>官方技能（待实测）</summary>
+          <div class="tiny" data-i18n>Antigravity CLI 的技能支持待实测：这里不列官方仓库。</div>
           <div id="ext-s-cat" class="list"></div>
         </details>
       </details>
@@ -354,7 +354,7 @@
         <div class="ext-idx" id="mcp-idx"></div>
         <div id="ext-mcp" class="list"><div class="tiny" data-i18n>查询中…（要逐个试连，稍等几秒）</div></div>
         <details class="ext-more" id="ext-mcp-catbox"><summary data-i18n>官方 MCP 注册表</summary>
-          <div class="tiny" data-i18n>registry.modelcontextprotocol.io：任何人都能发布，没有人审核。本机能装远程服务和 npm 包；npm 包会在本机运行，装之前看清命令和来源。</div>
+          <div class="tiny" data-i18n>registry.modelcontextprotocol.io：任何人都能发布，没有人审核。本机能装远程服务和 npm 包；npm 包会在本机运行，装之前看清命令和来源。MCP 本身 agy 支持，注册表对接方式待实测。</div>
           <label class="searchbox sb-go"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="ext-mcp-q" type="search" enterkeyhint="search" placeholder="搜索 MCP 服务器（名字或用途）" data-i18n-attr="placeholder" autocomplete="off"><button id="ext-mcp-search" type="button" class="sb-btn" data-i18n>搜索</button></label>
           <div id="ext-mcp-cat" class="list"></div>
         </details>
@@ -372,7 +372,7 @@
         </details>
       </details>
       <details class="field ext-sec" id="ext-hook-sec" data-sec="hook" data-short="Hooks" open><summary><span class="sec-ico"><svg viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11l-1 8.5L18.5 10H12z"/></svg></span><span data-i18n>Hooks（自动规则）</span> <span id="ext-h-count" class="pill"></span></summary>
-        <div class="tiny" data-i18n>hooks 就是「到了某个时刻，自动跑一条命令」：Claude 用工具之前或之后、你发消息时、它答完一轮时……命令可以拦下 Claude 的动作、给它补充说明，也可以顺手做些杂事（存档、记录、格式化）。</div>
+        <div class="tiny" data-i18n>Hooks 是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持。</div>
         <div class="ext-idx" id="hook-scope"></div>
         <div id="hook-bar" class="hk-bar"></div>
         <div id="ext-hooks" class="list"></div>
@@ -383,7 +383,7 @@
           <div id="hook-form" class="ext-form"></div>
         </details>
         <details class="ext-more"><summary data-i18n>hooks 是怎么工作的</summary>
-          <div class="tiny hk-help" data-i18n-html>命令在项目目录里用 bash 运行，Claude 会把这一刻的情况（哪个工具、什么参数、你说了什么……）以 JSON 从标准输入传给它。<br>退出码决定结果：<b>0</b> 正常放行；<b>2</b> 拦下这一步（「用工具之前」「你发出消息时」），stderr 里写的原因会转告 Claude；其他退出码算出错，不拦，Claude 照常继续。<br>「你发出消息时」和「会话开始时」的命令打印出来的内容，会作为补充说明交给 Claude。<br>改动在下一条消息生效。规则是普通的 shell 命令，能做的事和你在终端里一样多——别加来路不明的命令。</div>
+          <div class="tiny hk-help" data-i18n-html>命令在项目目录里用 bash 运行，Antigravity 会把这一刻的情况（哪个工具、什么参数、你说了什么……）以 JSON 从标准输入传给它。<br>退出码决定结果：<b>0</b> 正常放行；<b>2</b> 拦下这一步（「用工具之前」「你发出消息时」），stderr 里写的原因会转告 Antigravity；其他退出码算出错，不拦，Antigravity 照常继续。<br>「你发出消息时」和「会话开始时」的命令打印出来的内容，会作为补充说明交给 Antigravity。<br>改动在下一条消息生效。规则是普通的 shell 命令，能做的事和你在终端里一样多——别加来路不明的命令。</div>
         </details>
       </details>
     </section>
@@ -406,7 +406,7 @@
         <nav class="set-cats" id="set-cats">
           <button data-cat="general"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg><span data-i18n>通用</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
           <button data-cat="provider"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg><span data-i18n>接口与型号</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
-          <button data-cat="claude"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.6L20 9.3l-4.4 3.9 1.3 5.8L12 16l-4.9 3 1.3-5.8L4 9.3l5.8-.7z"/></svg><span data-i18n>Claude 行为</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button data-cat="agy"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.6L20 9.3l-4.4 3.9 1.3 5.8L12 16l-4.9 3 1.3-5.8L4 9.3l5.8-.7z"/></svg><span data-i18n>Antigravity 行为</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
           <button data-cat="run"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg><span data-i18n>后台与并行</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
           <button data-cat="storage"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span data-i18n>存储</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
           <button data-cat="device"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg><span data-i18n>设备与权限</span><svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg></button>
@@ -478,13 +478,13 @@
             <div class="sl"><b data-i18n>强调色</b><p data-i18n>按钮、链接、选中项的颜色。会按当前外观的底色自动调深浅，保证看得清</p></div>
             <div class="sc"><div class="ac-sw" id="ac-sw"></div></div>
           </div>
-          <!-- 消息下面的按钮（0.4.20）：只藏不排序，存 ccapp-ui.json 的 msgActs -->
+          <!-- 消息下面的按钮（0.4.20）：只藏不排序，存 agyapp-ui.json 的 msgActs -->
           <div class="srow ma-row">
             <div class="sl"><b data-i18n>消息下面的按钮</b><p data-i18n>点一下切换显示或隐藏，用不上的可以藏起来</p>
               <div id="ma-list" class="ma-list"></div></div>
             <div class="sc"><button type="button" id="ma-reset" class="btn sm ghost" data-i18n>恢复默认</button></div>
           </div>
-          <!-- 顶栏按钮（0.4.20）：常驻 / 收起 / 隐藏 + 拖动排序，存 ccapp-ui.json 的 topbar（app/09-settings.js 的 TB 一节） -->
+          <!-- 顶栏按钮（0.4.20）：常驻 / 收起 / 隐藏 + 拖动排序，存 agyapp-ui.json 的 topbar（app/09-settings.js 的 TB 一节） -->
           <div class="srow tb-row">
             <div class="sl"><b data-i18n>顶栏按钮</b><p data-i18n>每个按钮选「常驻」（一直露在顶栏）、「收进 ⋯」（点 ⋯ 才出来）或「隐藏」；按住左边的把手上下拖，换先后顺序</p>
               <div id="tb-list" class="tb-list"></div></div>
@@ -497,7 +497,7 @@
             <div class="sc"><span class="seg" id="seg-uifont"><button data-uf="cc" data-i18n>默认</button><button data-uf="system" data-i18n>跟随系统</button><button data-uf="pick" class="uf-pick"><span data-i18n>自选…</span><i class="uf-cur"></i></button></span></div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>回复字体</b><p data-i18n>Claude 回复正文的字体</p></div>
+            <div class="sl"><b data-i18n>回复字体</b><p data-i18n>Antigravity 回复正文的字体</p></div>
             <div class="sc"><span class="seg" id="seg-readfont"><button data-rf="serif" data-i18n>衬线</button><button data-rf="sans" data-i18n>无衬线</button><button data-rf="pick" class="uf-pick"><span data-i18n>自选…</span><i class="uf-cur"></i></button></span></div>
           </div>
           <div class="srow uf-row">
@@ -548,48 +548,43 @@
             <div class="sc"><input type="checkbox" class="sw" id="set-provshow"></div>
           </div>
           <div class="srow">
-            <div class="sl"><b><span data-i18n>模型</span> <span class="pill" id="model-count"></span></b><p id="model-info" class="clamp" data-i18n-html>从厂商的 <code>/models</code> 实时拉取；也可在输入框直接打 <code>/model &lt;id&gt;</code>。</p></div>
-            <div class="sc"><select id="set-model"></select></div>
+            <div class="sl"><b><span data-i18n>模型</span> <span class="pill" id="model-count"></span></b><p id="model-info" class="clamp" data-i18n>填模型 slug（例如 gemini-3.8-flash-medium）；未知模型不会静默回退，会直接报错。</p></div>
+            <div class="sc"><input id="set-model" autocomplete="off" spellcheck="false" placeholder="模型 slug，例如 gemini-3.8-flash-medium" data-i18n-attr="placeholder"></div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>思考强度（--effort）</b><p id="effort-info" class="clamp" data-i18n-html>档位随模型变化。也可在输入框打 <code>/effort &lt;level&gt;</code>。</p></div>
+            <div class="sl"><b data-i18n>思考强度（--effort）</b><p id="effort-info" class="clamp" data-i18n>档位随模型变化：low / medium / high / xhigh / max。</p></div>
             <div class="sc"><select id="set-effort"></select></div>
           </div>
           <div class="srow">
             <div class="sl"><b data-i18n>自动起名</b><p data-i18n>新对话第一轮答完，在后台起个标题</p><p class="clamp" data-i18n>用你的提问和第一轮回答起标题，几秒后自己换上，会多花一点 token；可以指定一个便宜快速的型号专门起名。关掉后，等你发第二条消息时由对话里的模型起名。</p></div>
             <div class="sc"><select id="set-titlemodel"></select></div>
           </div>
-          <!-- 压缩线：拖动设 autoCompactWindow（和「Claude 行为」里的数字框是同一项） -->
-          <div class="sblock ac-slide" id="ac-slide">
-            <div class="ac-head"><b data-i18n>上下文压缩线</b><span id="ac-val"></span><button class="btn sm ghost" id="ac-auto" data-i18n>交给 claude</button></div>
-            <div class="ac-track"><input type="range" id="ac-range" min="0" max="100" step="1"></div>
-            <div class="ac-scale"><span id="ac-min"></span><span id="ac-max"></span></div>
-            <!-- 厂商清单没报窗口时滑块没法按窗口换算：换成数字框，设过的值照原样改 -->
-            <div class="sinline hidden" id="ac-manual">
-              <input id="ac-num" type="number" inputmode="numeric" min="100000" max="1000000" step="1000" placeholder="留空 = 交给 claude 按窗口决定" data-i18n-attr="placeholder">
-            </div>
-            <p class="tiny" data-i18n>用量逼近这条线时自动摘要历史。线放低更省、记得更少；放高记得多，但每轮更贵、更慢。</p>
-          </div>
         </div>
   
-        <!-- ── Claude 行为 ── -->
-        <div class="set-cat hidden" data-cat="claude">
-          <h3 class="set-h" data-i18n>Claude 行为</h3>
+        <!-- ── Antigravity 行为 ── -->
+        <div class="set-cat hidden" data-cat="agy">
+          <h3 class="set-h" data-i18n>Antigravity 行为</h3>
           <div class="srow stack">
-            <div class="sl"><b data-i18n>权限模式</b><p data-i18n>新对话默认；输入栏下也能临时切</p><p class="clamp" data-i18n>默认逐项确认，和官方一致：改文件、跑命令前会在对话里问你。全部放行意味着 Claude 不问你就能删文件、跑任意命令。也可以点输入框下方的权限标签随时切换。</p></div>
+            <div class="sl"><b data-i18n>工具审批</b><p data-i18n>新对话默认；输入栏下也能临时切</p><p class="clamp" data-i18n>逐项确认：改文件、跑命令前会在对话里问你。始终继续意味着 agy 不问你就能改文件、跑命令。未预先放行的工具会被软拒绝：继续跑、退出码 0，提示写在 stderr 里。先在权限规则里放行，或用 --dangerously-skip-permissions（不要作为默认）。</p></div>
             <div class="sc">
-              <select id="set-perm">
-                <option value="default" data-i18n>default · 逐项确认（默认）</option>
-                <option value="acceptEdits" data-i18n>acceptEdits · 自动接受编辑</option>
-                <option value="plan" data-i18n>plan · 只出计划不执行</option>
-                <option value="auto" data-i18n>auto · 自动判断</option>
-                <option value="dontAsk" data-i18n>dontAsk · 不询问（要确认的一律拒绝）</option>
-                <option value="bypassPermissions" data-i18n>bypassPermissions · 全部放行</option>
+              <select id="set-toolperm">
+                <option value="request-review" data-i18n>request-review · 逐项确认（默认）</option>
+                <option value="proceed-in-sandbox" data-i18n>proceed-in-sandbox · 在沙箱中继续</option>
+                <option value="always-proceed" data-i18n>always-proceed · 始终继续</option>
+                <option value="strict" data-i18n>strict · 严格</option>
               </select>
             </div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>敏感操作再确认</b><p data-i18n>碰到密钥、读屏点按时，全部放行也会问你</p><p class="clamp" data-i18n>Claude 要读密钥和登录凭据（.env、SSH 钥匙、接口密钥、网关令牌等）、读屏或替你点按别的应用、读剪贴板、把文件分享出去时，单独弹一张确认卡片，全部放行也不例外；同一轮里同一类点过允许就不再问。它防的是 Claude 读到的网页或文件里藏了指令、把它带偏。只是兜底：故意绕开的写法认不出来。</p></div>
+            <div class="sl"><b data-i18n>代理模式</b><p data-i18n>新对话默认；输入栏下也能临时切</p></div>
+            <div class="sc">
+              <select id="set-agentmode">
+                <option value="" data-i18n>（默认）</option>
+                <option value="accept-edits" data-i18n>accept-edits · 自动接受编辑</option>
+                <option value="auto" data-i18n>auto · 自动</option>
+                <option value="plan" data-i18n>plan · 只出计划</option>
+              </select>
+            </div>
           </div>
           <div class="srow">
             <div class="sl"><b data-i18n>外链图片点一下才加载</b><p data-i18n>md 文件里引用的网络图片先显示成按钮，点了才去请求，对方服务器看不到你何时在读</p></div>
@@ -600,20 +595,12 @@
             <div class="sc"><select id="set-style"><option value="" data-i18n>（默认）</option></select></div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>自动压缩窗口（token）</b><p data-i18n>上下文到多少 token 时压缩</p><p id="ac-info" class="clamp" data-i18n-html>用量逼近这个值时自动摘要历史。留空即不干预；也可在输入框打 <code>/autocompact &lt;n&gt;k</code>。</p></div>
-            <div class="sc"><input id="set-autocompact" type="number" inputmode="numeric" min="100000" max="1000000" step="1000" placeholder="留空 = 交给 claude 按窗口决定" data-i18n-attr="placeholder"></div>
-          </div>
-          <div class="srow">
-            <div class="sl"><b data-i18n>空闲压缩</b><p data-i18n>长会话闲置快一小时时先压缩</p><p class="clamp" data-i18n>只对 Claude 账户和 Anthropic API Key 生效。上下文超过 20 万 token 的会话闲置约 54 分钟、1 小时提示缓存快过期时，先压缩一次；回来接着聊就不用把整段历史按全价重新处理，订阅账户少占额度，API Key 少花钱。电脑上的 Claude Code 也是这么做的。</p></div>
-            <div class="sc"><input type="checkbox" class="sw" id="set-idlecompact"></div>
-          </div>
-          <div class="srow">
-            <div class="sl"><b data-i18n>工作岛（ColorOS 灵动岛）</b><p data-i18n>把 Claude 的工作状态显示在 ColorOS 16 的流体云 / 灵动岛上</p><p class="clamp" data-i18n>需要另外安装「工作岛」应用。开启后，正在干活、等待确认、任务完成会出现在岛上的胶囊里；完成后 8 秒自动收起。目前仅在 ColorOS 16 / Android 16 上测试过。</p><div class="tiny warn hidden" id="wi-state"><span id="wi-state-txt"></span> <button class="btn sm ghost" id="wi-retry" data-i18n>重试</button></div></div>
+            <div class="sl"><b data-i18n>工作岛（ColorOS 灵动岛）</b><p data-i18n>把 Antigravity 的工作状态显示在 ColorOS 16 的流体云 / 灵动岛上</p><p class="clamp" data-i18n>需要另外安装「工作岛」应用。开启后，正在干活、等待确认、任务完成会出现在岛上的胶囊里；完成后 8 秒自动收起。目前仅在 ColorOS 16 / Android 16 上测试过。</p><div class="tiny warn hidden" id="wi-state"><span id="wi-state-txt"></span> <button class="btn sm ghost" id="wi-retry" data-i18n>重试</button></div></div>
             <div class="sc"><input type="checkbox" class="sw" id="set-workisland"></div>
           </div>
           <div class="sblock" id="dir-field">
             <div class="srow head">
-              <div class="sl"><b data-i18n>附加目录</b><p data-i18n>--add-dir，让 claude 能读写工作区之外的目录</p><p class="clamp" data-i18n>让 claude 能读写工作区之外的目录。这些目录同时会成为文件浏览器的快捷入口。</p></div>
+              <div class="sl"><b data-i18n>附加目录</b><p data-i18n>让 agy 能读写工作区之外的目录</p><p class="clamp" data-i18n>让 agy 能读写工作区之外的目录。这些目录同时会成为文件浏览器的快捷入口。</p></div>
               <div class="sc"><button class="btn sm ghost" id="dir-toggle"></button></div>
             </div>
             <div id="dir-list" class="list compact dir-more hidden"></div>
@@ -623,7 +610,7 @@
             </div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>安全模式</b><p data-i18n>不加载 CLAUDE.md、技能、插件、钩子、MCP</p><p class="clamp" data-i18n>安全模式：用 claude 自带的 --safe-mode 起，CLAUDE.md、技能、插件、钩子、MCP、自定义命令与输出风格一概不加载。登录、Key、会话、模型照旧，不改动任何文件，关掉即恢复</p></div>
+            <div class="sl"><b data-i18n>安全模式</b><p data-i18n>仅用 agy 默认配置启动，不加载额外设置</p><p class="clamp" data-i18n>安全模式：仅用 agy 的默认配置启动，不加载额外设置。登录、Key、会话、模型照旧，不改动任何文件，关掉即恢复</p></div>
             <div class="sc"><input type="checkbox" class="sw" id="safe-mode"></div>
           </div>
         </div>
@@ -646,7 +633,7 @@
             <div class="sc"><input id="set-parallel" class="narrow" type="number" inputmode="numeric" min="1" step="1"></div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>静态程序兼容</b><p data-i18n>罩住 claude 拉起的所有程序</p><p class="clamp" data-i18n>网上下载的静态程序（多是 Go 写的命令行工具和 MCP 服务器）会用到安卓禁止的新系统调用，直接被系统杀掉。开着它，这些调用会改成「不支持」，程序自己退回老办法接着跑。每次启动子程序多一点点开销；遇到怪问题可以关掉试试，下一条消息生效。</p></div>
+            <div class="sl"><b data-i18n>静态程序兼容</b><p data-i18n>罩住 agy 拉起的所有程序</p><p class="clamp" data-i18n>网上下载的静态程序（多是 Go 写的命令行工具和 MCP 服务器）会用到安卓禁止的新系统调用，直接被系统杀掉。开着它，这些调用会改成「不支持」，程序自己退回老办法接着跑。每次启动子程序多一点点开销；遇到怪问题可以关掉试试，下一条消息生效。</p></div>
             <div class="sc"><input type="checkbox" class="sw" id="set-static"></div>
           </div>
           <div class="srow">
@@ -681,11 +668,11 @@
             </div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>会话保留</b><p id="st-keep"></p><p class="clamp" data-i18n>Claude Code 默认把 30 天没动过的会话连同附属数据删掉，不进回收站。本应用把它改成永久保留：会话只有你在会话列表里删了才会进回收站。你自己在 ~/.claude/settings.json 里写了 cleanupPeriodDays 的，按你写的天数。</p></div>
+            <div class="sl"><b data-i18n>会话保留</b><p id="st-keep"></p><p class="clamp" data-i18n>本应用把会话永久保留：会话只有你在会话列表里删了才会进回收站。</p></div>
           </div>
           <div class="sblock">
             <div class="srow head">
-              <div class="sl"><b data-i18n>自动清理</b><p data-i18n>只清缓存、7 天没动过的临时文件、30 天前的 Claude Code 杂物；会话、你的文件、程序永不自动删</p><p class="tiny" id="st-auto-last"></p></div>
+              <div class="sl"><b data-i18n>自动清理</b><p data-i18n>只清缓存、7 天没动过的临时文件、30 天前的 Antigravity CLI 杂物；会话、你的文件、程序永不自动删</p><p class="tiny" id="st-auto-last"></p></div>
               <div class="sc"><select id="st-every"><option value="day" data-i18n>每天</option><option value="week" data-i18n>每周</option><option value="month" data-i18n>每月</option></select> <input type="checkbox" class="sw" id="st-auto"></div>
             </div>
           </div>
@@ -696,11 +683,11 @@
         <!-- ── 设备与权限 ── -->
         <div class="set-cat hidden" data-cat="device">
           <h3 class="set-h" data-i18n>设备与权限</h3>
-          <!-- Shizuku：调试提权。只有 cccodroid 带这项集成，旧版里整块隐藏 -->
+          <!-- Shizuku：调试提权。只有 agycodroid 带这项集成，旧版里整块隐藏 -->
           <div class="sblock hidden" id="priv-field">
             <div class="srow head">
               <div class="sl"><b data-i18n>Shizuku（调试提权）</b>
-                <p class="clamp" data-i18n-html>开启后，终端里可用 <code>priv '命令'</code> 以 shell 身份执行（pm / am / settings / dumpsys / logcat / screencap…），Claude 也会用它。
+                <p class="clamp" data-i18n-html>开启后，终端里可用 <code>priv '命令'</code> 以 shell 身份执行（pm / am / settings / dumpsys / logcat / screencap…），Antigravity 也会用它。
                   没有 Shizuku 时基础开发功能照常，只是这些调试能力用不了。</p>
                 <p class="clamp" data-i18n>荣耀 / 华为等系统会冻住后台的 Shizuku、拖慢激活：到系统应用管理 → Shizuku 里打开「忽略电池优化」防冻。</p></div>
             </div>
@@ -714,7 +701,7 @@
             <div class="row-actions" id="priv-actions"></div>
             <div class="priv-audit hidden" id="priv-audit"></div>
             <div class="srow sub hidden" id="priv-auto-row">
-              <div class="sl"><p data-i18n>重启手机后自动重新激活（需连着 Wi‑Fi；会在开机时启动 cccodroid 后台服务）</p></div>
+              <div class="sl"><p data-i18n>重启手机后自动重新激活（需连着 Wi‑Fi；会在开机时启动 agycodroid 后台服务）</p></div>
               <div class="sc"><input type="checkbox" class="sw" id="priv-auto"></div>
             </div>
             <div class="srow sub" id="priv-ka-row">
@@ -723,7 +710,7 @@
             </div>
             <div class="prov-state" id="priv-ka-result"></div>
             <div class="srow sub" id="priv-na-row">
-              <div class="sl"><p data-i18n>特权命令不再逐条确认（风险自负）：打开后特权命令直接执行，在后台也不会卡在等确认；涉及 cccodroid 自身和 Shizuku / Sui 的会尽量拦下来再问，但拦不住所有写法。只想放行一个会话，在确认框里勾「这个会话后面的都允许」即可</p></div>
+              <div class="sl"><p data-i18n>特权命令不再逐条确认（风险自负）：打开后特权命令直接执行，在后台也不会卡在等确认；涉及 agycodroid 自身和 Shizuku / Sui 的会尽量拦下来再问，但拦不住所有写法。只想放行一个会话，在确认框里勾「这个会话后面的都允许」即可</p></div>
               <div class="sc"><select id="priv-na-hours" aria-label="时长" data-i18n-attr="aria-label">
                 <option value="1" data-i18n>1 小时</option><option value="4" data-i18n>4 小时</option><option value="24" selected data-i18n>1 天</option>
                 <option value="72" data-i18n>3 天</option><option value="168" data-i18n>7 天</option></select>
@@ -731,7 +718,7 @@
             </div>
             <div class="prov-state" id="priv-na-result"></div>
           </div>
-          <!-- 通知：应用在后台时，跑完 / 等确认提醒一下。只有 cccodroid 带（GatewayService 发），开发端整块隐藏 -->
+          <!-- 通知：应用在后台时，跑完 / 等确认提醒一下。只有 agycodroid 带（GatewayService 发），开发端整块隐藏 -->
           <div class="sblock hidden" id="ntf-field">
             <div class="srow head"><div class="sl"><b data-i18n>通知</b></div></div>
             <div class="srow sub">
@@ -753,11 +740,11 @@
             <div class="prov-state warn" id="ntf-err"></div>
             <div class="row-actions"><button class="btn sm ghost" id="ntf-retry" data-i18n>重试</button></div>
           </div>
-          <!-- 设备工具：给 Claude 挂的 MCP（device-mcp.mjs → DeviceTools.java）。只有 cccodroid 有，开发端整块隐藏 -->
+          <!-- 设备工具：给 Antigravity 挂的 MCP（device-mcp.mjs → DeviceTools.java）。只有 agycodroid 有，开发端整块隐藏 -->
           <div class="sblock hidden" id="dev-field">
             <div class="srow head">
-              <div class="sl"><b data-i18n>设备工具</b><p data-i18n>让 Claude 使用设备工具（通知、剪贴板、打开链接 / 日历 / 闹钟、分享文件…）</p>
-                <p class="clamp" data-i18n>默认关。让 Claude 测你自己做的 App、或把它生成的文件发到别的应用时再打开；开着时每轮对话会多带一两千 token 的工具说明。</p>
+              <div class="sl"><b data-i18n>设备工具</b><p data-i18n>让 Antigravity 使用设备工具（通知、剪贴板、打开链接 / 日历 / 闹钟、分享文件…）</p>
+                <p class="clamp" data-i18n>默认关。让 Antigravity 测你自己做的 App、或把它生成的文件发到别的应用时再打开；开着时每轮对话会多带一两千 token 的工具说明。</p>
                 <p class="clamp" data-i18n>调用时和其他工具一样，按你选的权限模式确认。会打开别的应用的只是预填，保存、发送、拨出都由你在那个应用里点。</p></div>
               <div class="sc"><input type="checkbox" class="sw" id="dev-on"></div>
             </div>
@@ -793,7 +780,7 @@
         <!-- ── 更新 ── -->
         <div class="set-cat hidden" data-cat="update">
           <h3 class="set-h" data-i18n>更新</h3>
-          <!-- 更新：应用本体 / 开发工具包 / Claude Code。只有 cccodroid 带，旧版里整块隐藏 -->
+          <!-- 更新：应用本体 / 开发工具包 / Antigravity CLI。只有 agycodroid 带，旧版里整块隐藏 -->
           <div class="sblock hidden" id="upd-field">
             <div class="srow head">
               <div class="sl"><b data-i18n>版本</b></div>
@@ -801,12 +788,12 @@
             </div>
             <div id="upd-items"></div>
             <div class="srow sub">
-              <div class="sl"><b data-i18n>Claude Code 跟哪个通道</b></div>
+              <div class="sl"><b data-i18n>Antigravity CLI 跟哪个通道</b></div>
               <div class="sc">
                 <select id="upd-channel">
-                  <option value="stable" data-i18n>CLI：stable</option>
-                  <option value="latest" data-i18n>CLI：latest</option>
-                  <option value="pinned" data-i18n>CLI：固定版本…</option>
+                  <option value="stable" data-i18n>稳定通道</option>
+                  <option value="latest" data-i18n>最新</option>
+                  <option value="pinned" data-i18n>钉住已装版本…</option>
                 </select>
               </div>
             </div>
@@ -815,7 +802,7 @@
               <div class="sc"><select id="upd-flavor"><option value="auto" data-i18n>自动</option><option value="28">targetSdk 28</option><option value="36">targetSdk 36</option></select></div>
             </div>
             <div class="srow sub">
-              <div class="sl"><b data-i18n>自动更新</b><p class="clamp" data-i18n>自动更新（默认开）：Claude Code 静默更新；新版应用下载好后提醒安装（有 Shizuku 时空闲自动装）；开发工具包只在 Wi‑Fi 下预先下载，下次打开应用时装上</p></div>
+              <div class="sl"><b data-i18n>自动更新</b><p class="clamp" data-i18n>自动更新（默认开）：Antigravity CLI 静默更新；新版应用下载好后提醒安装（有 Shizuku 时空闲自动装）；开发工具包只在 Wi‑Fi 下预先下载，下次打开应用时装上</p></div>
               <div class="sc"><input type="checkbox" class="sw" id="upd-auto"></div>
             </div>
             <div id="upd-orphans" class="hidden"></div>
@@ -828,7 +815,7 @@
         <div class="set-cat hidden" data-cat="usage">
           <h3 class="set-h" data-i18n>用量与耗电</h3>
           <div class="srow hidden" id="set-us-quota-row">
-            <div class="sl"><b data-i18n>本周额度</b><p id="set-us-quota-sub"></p></div>
+            <div class="sl"><b data-i18n>本轮用量</b><p id="set-us-quota-sub"></p></div>
             <div class="sc"><span class="pill acc" id="set-us-quota"></span></div>
           </div>
           <div class="srow">
@@ -852,11 +839,11 @@
             <div class="sc"><button class="btn sm" id="btn-issue" data-i18n>到 GitHub 反馈</button></div>
           </div>
           <div class="srow">
-            <div class="sl"><b data-i18n>恢复初始设置</b><p class="clamp" data-i18n>改坏了配置、每轮都被拒或不出回答、自己救不回来时用：Claude Code 的用户级配置（CLAUDE.md、技能、插件、钩子、MCP、记忆）、cccodroid 设置和 shell 启动文件恢复成刚装好的样子，应用文件按安装包重铺。原来的都挪进 ~/.ccapp-reset 留底，不删；会话记录、工作区、工具包不动，密钥默认保留。会弹系统确认框。</p></div>
+            <div class="sl"><b data-i18n>恢复初始设置</b><p class="clamp" data-i18n>改坏了配置、每轮都被拒或不出回答、自己救不回来时用：Antigravity CLI 的用户级配置、agycodroid 设置和 shell 启动文件恢复成刚装好的样子，应用文件按安装包重铺。原来的都挪进 ~/.agyapp-reset 留底，不删；会话记录、工作区、工具包不动，密钥默认保留。会弹系统确认框。</p></div>
             <div class="sc"><button class="btn sm" id="btn-factory-reset" data-i18n>恢复初始设置</button></div>
           </div>
           <div class="srow hidden" id="envfacts-row">
-            <div class="sl"><b data-i18n>本机自检</b><p class="clamp" data-i18n>把工具包里的编译器、Python、Node、git 等逐项跑一遍，结果会告诉 Claude 这台设备上什么能用、什么不能用。工具包或应用更新后会自动重测；修好了什么、想马上让 Claude 知道，就点重新自检。</p><div class="tiny" id="envfacts-state"></div></div>
+            <div class="sl"><b data-i18n>本机自检</b><p class="clamp" data-i18n>把工具包里的编译器、Python、Node、git 等逐项跑一遍，结果会告诉 Antigravity 这台设备上什么能用、什么不能用。工具包或应用更新后会自动重测；修好了什么、想马上让 Antigravity 知道，就点重新自检。</p><div class="tiny" id="envfacts-state"></div></div>
             <div class="sc"><button class="btn sm ghost" id="btn-envfacts" data-i18n>重新自检</button></div>
           </div>
           <div class="sblock">
@@ -1009,7 +996,7 @@
 
 <!-- ── 快捷面板（＋ 按钮）── -->
 <div id="sheet" class="hidden">
-  <!-- ＋ 面板：上面四格是「给 Claude 东西」（附件已并进来，输入框里不再单独放回形针），下面是常用操作。
+  <!-- ＋ 面板：上面四格是「给 Antigravity 东西」（附件已并进来，输入框里不再单独放回形针），下面是常用操作。
        截屏格长按 = 5 秒后截屏（帮助里写了），不再单独占一格，腾给拍照。
        宽屏是浮在 ＋ 上方的小卡片（app.js 定位），窄屏是底部弹层 -->
   <div class="sheet-panel">
@@ -1023,9 +1010,6 @@
     <div class="sheet-list">
       <button class="sheet-item" data-act="model"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span data-i18n>模型与思考强度</span></button>
       <button class="sheet-item" data-act="new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-i18n>新建会话</span></button>
-      <button class="sheet-item" data-act="context"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/></svg><span data-i18n>上下文占用</span><code>/context</code></button>
-      <button class="sheet-item" data-act="compact"><svg viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M9 4l3 3 3-3M9 20l3-3 3 3"/></svg><span data-i18n>压缩上下文</span><code>/compact</code></button>
-      <button class="sheet-item" data-act="cost"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.4 4.5 3.3-2 3.2-4.5 3.2-4.5-1.4-4.5-3.2"/></svg><span data-i18n>花费</span><code>/cost</code></button>
       <button class="sheet-item" data-act="usage"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span data-i18n>用量</span><code>/usage</code></button>
       <button class="sheet-item" data-act="config"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span data-i18n>配置</span><code>/config</code></button>
       <button class="sheet-item" data-act="mcp"><svg viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg><span data-i18n>MCP 服务器</span><code>/mcp</code></button>
@@ -1035,7 +1019,7 @@
   </div>
 </div>
 
-<!-- ── 浏览器窗格（宽屏）：只是占位，真正的浏览器是外壳的原生视图，按这个框的位置摆上来（layout.js → CCApp.paneBounds）── -->
+<!-- ── 浏览器窗格（宽屏）：只是占位，真正的浏览器是外壳的原生视图，按这个框的位置摆上来（layout.js → AGApp.paneBounds）── -->
 <div id="browser" class="hidden"><div id="browser-slot"></div></div>
 
 <!-- ── 大屏：右侧工作区的标签与分隔条（layout.js 管）── -->
@@ -1054,9 +1038,9 @@
 <script src="/app.js"></script>
 <script>
   // app.js 自身没加载出来（网关正在重启、静态文件缺失、脚本早退）时，静态壳会一直停在「连接中…」。
-  // 5 秒后还没看到 app 挂出的 window.__cc，就把状态行改成可点的重试提示（#182 S-02 网页端半）
+  // 5 秒后还没看到 app 挂出的 window.__agy，就把状态行改成可点的重试提示（#182 S-02 网页端半）
   setTimeout(function () {
-    if (window.__cc) return;
+    if (window.__agy) return;
     var el = document.getElementById("sub-title");
     if (!el) return;
     var msg = "界面脚本没能加载，点这里重试";

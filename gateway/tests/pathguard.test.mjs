@@ -17,9 +17,9 @@ const haveAlias = !!m && fs.existsSync(alias(realTmp)) && fs.realpathSync(alias(
 
 /** 在 fn 运行期间把「应用数据目录」设成 dir */
 async function withDataDir(dir, fn) {
-  const old = process.env.CCAPP_DATA_DIR;
-  process.env.CCAPP_DATA_DIR = dir;
-  try { return await fn(); } finally { if (old == null) delete process.env.CCAPP_DATA_DIR; else process.env.CCAPP_DATA_DIR = old; }
+  const old = process.env.AGAPP_DATA_DIR;
+  process.env.AGAPP_DATA_DIR = dir;
+  try { return await fn(); } finally { if (old == null) delete process.env.AGAPP_DATA_DIR; else process.env.AGAPP_DATA_DIR = old; }
 }
 
 test("home 里（工作区外）是私有；工作区放行；外面是公共", () => {

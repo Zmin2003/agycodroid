@@ -74,9 +74,9 @@ test("导入期间事件循环能转：文件是 await 写的，不是一口气�
   assert.ok(ticks > 0, "导入过程中至少要经过一次事件循环（旧的全同步写不会让出）");
 });
 
-test("路由等导入完成再回包，写文件不再用同步 API", () => {
+test("路由不再接技能导入（agy）：/api/ext/skills/import 直接 400；importSkill 本身仍异步写文件", () => {
   const src = fs.readFileSync(new URL("../gw/extensions.mjs", import.meta.url), "utf8");
-  assert.match(src, /sendJson\(res, 200, await importSkill\(await readBodyBuf/);
+  assert.match(src, /p === "\/api\/ext\/skills\/import"\) return unsupported\("技能"\)/, "技能导入路由已不支持");
   assert.match(src, /await fs\.promises\.writeFile\(out, f\.data\)/);
   assert.ok(!/fs\.writeFileSync\(out, f\.data\)/.test(src), "不能再同步写技能文件");
 });

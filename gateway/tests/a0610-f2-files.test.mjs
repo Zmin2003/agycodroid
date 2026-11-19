@@ -81,7 +81,7 @@ test("C.5 目录超过 1000 项时带 truncated；搜索走网关过滤后不再
 test("196 大小写变体的密钥文件名也不列出来", async () => {
   const d = path.join(W, "secret-case");
   fs.mkdirSync(d, { recursive: true });
-  fs.writeFileSync(path.join(d, "CCAPP-PROVIDERS.JSON"), "{}");
+  fs.writeFileSync(path.join(d, "AGYAPP-PROVIDERS.JSON"), "{}");
   fs.writeFileSync(path.join(d, "normal.txt"), "");
   const j = await (await raw(`/api/files?path=${q(d)}`)).json();
   assert.deepEqual(j.entries.map((x) => x.name), ["normal.txt"]);

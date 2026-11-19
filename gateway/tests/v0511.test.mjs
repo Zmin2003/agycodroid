@@ -13,7 +13,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 
 // 自检脚本「状态对账」那段 node：先核身份再签名，不发令牌原文（高2）
 function selftestSnippet() {
-  const s = fs.readFileSync(path.join(ROOT, "android/assets/bin/cccodroid-selftest"), "utf8");
+  const s = fs.readFileSync(path.join(ROOT, "android/assets/bin/agycodroid-selftest"), "utf8");
   const m = /out=\$\(TF="\$TF" GP="\$GP" node -e '([\s\S]*?)' 2>&1\)/.exec(s);
   assert.ok(m, "自检脚本里找不到对账那段");
   return m[1];
@@ -22,7 +22,7 @@ function serve(handler) {
   return new Promise((ok) => { const srv = http.createServer(handler); srv.listen(0, "127.0.0.1", () => ok(srv)); });
 }
 function run(snippet, port) {
-  const tf = path.join(process.env.CCAPP_TMP, "tok");
+  const tf = path.join(process.env.AGAPP_TMP, "tok");
   fs.writeFileSync(tf, TOKEN + "\n");
   return new Promise((ok) => execFile(process.execPath, ["-e", snippet], { env: { ...process.env, TF: tf, GP: String(port) } }, (e, out, err) => ok({ code: e ? e.code : 0, out, err })));
 }
@@ -84,7 +84,7 @@ test("翻历史：派出了没结束、眼下不在跑的按已停止补；在�
 import crypto from "node:crypto";
 import { forEachLine, rewriteLines, zipEntries, zipExtract, zipToFile } from "../gw/bigfile.mjs";
 import { zipBuild, zipRead } from "../gw/sessionops.mjs";
-const T = (n) => path.join(process.env.CCAPP_TMP, n);
+const T = (n) => path.join(process.env.AGAPP_TMP, n);
 
 test("forEachLine 与 split 逐行一致（跨块的长行、结尾有无换行、中文）", () => {
   for (const tail of ["", "\n"]) {
@@ -200,22 +200,8 @@ test("日志脱敏：常见密钥格式只留前几位", () => {
   assert.equal(noCred("读 index.html 和 v0.5.13.tar"), "读 index.html 和 v0.5.13.tar");
 });
 
-// 模型清单地址带密钥前先核站点
-import { modelsUrlOk } from "../gw/providers.mjs";
-test("模型清单地址：同主机 / 同站点 + https 才带密钥去问", () => {
-  const ok = (b, m) => modelsUrlOk({ baseUrl: b, modelsUrl: m });
-  assert.equal(ok("https://api.deepseek.com/anthropic", "https://api.deepseek.com/models"), true);
-  assert.equal(ok("https://dashscope.aliyuncs.com/apps/anthropic", "https://x.aliyuncs.com/v1/models"), false);
-  assert.equal(ok("https://dashscope.aliyuncs.com/apps/anthropic", "https://dashscope.aliyuncs.com/compatible-mode/v1/models"), true);
-  assert.equal(ok("https://api.deepseek.com/anthropic", "https://evil.example/models"), false);
-  assert.equal(ok("https://api.deepseek.com/anthropic", "http://api.deepseek.com/models"), false);
-  assert.equal(ok("https://api.deepseek.com", "not a url"), false);
-  // 本机的 http 接口（llama-server / LiteLLM）：回环地址才放 http，主机仍要一致
-  assert.equal(ok("http://127.0.0.1:8080", "http://127.0.0.1:8080/v1/models"), true);
-  assert.equal(ok("http://localhost:4000/anthropic", "http://localhost:4000/v1/models"), true);
-  assert.equal(ok("http://127.0.0.1:8080", "http://192.168.1.2:8080/v1/models"), false);
-  assert.equal(ok("http://192.168.1.2:8080", "http://192.168.1.2:8080/v1/models"), false);
-});
+// 「模型清单地址」用例已删：modelsUrlOk 随第三方厂商一起没了——
+// agy 只认 google/gemini，模型清单是静态的，网关不再拿着密钥去问清单地址。
 
 test("工具证明（for=tool）：令牌派生、前缀和界面那条不同，互相顶替不了", () => {
   const n = "a".repeat(32);

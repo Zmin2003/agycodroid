@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { CFG, HERE, PREFIX, log } from "./config.mjs";
-import { ensureShell, killTree } from "./claude.mjs";
+import { ensureShell, killTree } from "./agy.mjs";
 import { RUNS } from "./runs.mjs";
 import { termEnv } from "./terminal.mjs";
 import { COMP_DIR, compRecord, devkitIdentity } from "./components.mjs";
@@ -14,9 +14,9 @@ import { guarded } from "./crashguard.mjs";
 import { extOff } from "./extoff.mjs";
 
 // ── 本机实况：TOOLS.md 是打包时在测试机上测的，这里补上「这台设备上实际怎样」 ──
-// 自检（cccodroid-selftest）在本机跑一遍，失败项和 INFO（比如有没有硬件编码器）接在 TOOLS.md 后面；
+// 自检（agycodroid-selftest）在本机跑一遍，失败项和 INFO（比如有没有硬件编码器）接在 TOOLS.md 后面；
 // 装了哪些组件、用 pkg 装了哪些包，每轮现读。自检只在工具包或应用版本变了之后、空闲时重跑（要一两分钟 CPU）
-export const ENV_FACTS = PREFIX ? path.join(CFG.home, ".cccodroid-env.json") : "";
+export const ENV_FACTS = PREFIX ? path.join(CFG.home, ".agycodroid-env.json") : "";
 /** 工具包版本：.devkit-ok 没有 tag 字段（0.6.9 审计 195-M.5），从 Release 的 base 地址里取，取不到再退回 tag */
 export function devkitVersion(dk = devkitIdentity()) {
   const m = /\/devkit-([^/]+)\/?$/.exec(String((dk && dk.base) || ""));
@@ -38,19 +38,19 @@ export function envFactsKey() {
   return `${dk.sha256 || dk.tag || "?"}|${tag}${mods ? "|" + mods : ""}${comps ? "|c:" + comps : ""}`;
 }
 let envFactsJob = null, envFactsStarted = 0, envFactsErr = "";   // 最近一次没跑出结果的原因：设置页「本机自检」要显示（195-M.1）
-const selftestPath = () => path.join(process.env.CCAPP_BIN || "", "cccodroid-selftest");
+const selftestPath = () => path.join(process.env.AGAPP_BIN || "", "agycodroid-selftest");
 function envFactsRun(why = "工具包或应用换了版本") {
   const st = selftestPath();
   if (!PREFIX || envFactsJob || !fs.existsSync(st)) return;
   const key = envFactsKey(), nice = path.join(PREFIX, "bin", "nice");
-  // 经 Claude 用的同一个 shell 包装起（挂着 termux-exec）：直接调 bash 的话 #!/usr/bin/env 一类脚本全报 bad interpreter，
-  // 自检就会把「这台设备上 shebang 不能用」这种假结论告诉 Claude
+  // 经 Antigravity 用的同一个 shell 包装起（挂着 termux-exec）：直接调 bash 的话 #!/usr/bin/env 一类脚本全报 bad interpreter，
+  // 自检就会把「这台设备上 shebang 不能用」这种假结论告诉 Antigravity
   const sh = ensureShell();
   const argv = fs.existsSync(nice) ? [nice, "-n", "10", sh, st] : [sh, st];
   let out = "";
   log(`[env] 本机自检开始（${why}）`);
   envFactsStarted = Date.now(); envFactsErr = "";
-  envFactsJob = spawn(argv[0], argv.slice(1), { env: { ...termEnv(), CCAPP_ENVFACTS: "1" }, cwd: CFG.home, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  envFactsJob = spawn(argv[0], argv.slice(1), { env: { ...termEnv(), AGAPP_ENVFACTS: "1" }, cwd: CFG.home, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   envFactsJob.stdout.setEncoding("utf8"); envFactsJob.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
   envFactsJob.stdout.on("data", guarded("envFacts stdout", (d) => { if (out.length < 1 << 20) out += d; }));
   envFactsJob.stderr.on("data", () => {});

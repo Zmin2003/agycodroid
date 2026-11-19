@@ -11,7 +11,7 @@ import { CFG, PATHS } from "../gw/config.mjs";
 import { NAMES } from "../gw/sessions.mjs";
 import { archiveImport, saveArchive } from "../gw/archive-store.mjs";
 
-const BM_FILE = path.join(CFG.home, "ccapp-bookmarks.json");
+const BM_FILE = path.join(CFG.home, "agyapp-bookmarks.json");
 const DIR = path.join(PATHS.projects, "-b3-bm");
 const RENAMED = crypto.randomUUID(), ARCHIVED = crypto.randomUUID(), PLAIN = crypto.randomUUID();
 
@@ -29,7 +29,7 @@ fs.writeFileSync(BM_FILE, JSON.stringify([RENAMED, ARCHIVED, PLAIN].map((sid, i)
   id: "b" + i, sid, uuid: crypto.randomUUID(), off: 0, para: 0, role: "user", excerpt: "", at: i,
 }))));
 
-process.env.CCAPP_TEST = "1";
+process.env.AGAPP_TEST = "1";
 const { routeBookmarks } = await import("../gw/bookmarks.mjs");
 
 after(() => fs.rmSync(DIR, { recursive: true, force: true }));

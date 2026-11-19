@@ -25,7 +25,7 @@ async function serve(...routes) {
   return call;
 }
 const gitGo = await serve(routeGit);
-{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
   if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
 
 function repo(name) {
@@ -139,7 +139,7 @@ test("M-8：组件运行数据清理只删索引里的组件，保留名一律�
   const { routeComponents } = await import("../gw/components.mjs");
   const call = await serve(routeComponents);
   for (const id of ["custom", "bin", "services", "agents", "not-in-index"]) {
-    const d = path.join(CFG.home, ".cccodroid", id);
+    const d = path.join(CFG.home, ".agycodroid", id);
     fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, "keep"), "1");
     const r = await call("/api/components/purge", { id });
     assert.equal(r.body.ok, false, id);

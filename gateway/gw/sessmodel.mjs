@@ -4,7 +4,7 @@
 // 还没会话号的新会话：前端把选的值随第一条消息带来（/api/chat 的 pin），拿到会话号时记上。
 // 接口（provider）也按会话：单独选过模型（含 "" = 接口默认）的会话钉在记下的那家，全局切了接口它也照旧用那家；
 // 只选过思考强度的（model 为 null）模型和接口都跟着全局默认。记下的那家被删了，这条就当没有。
-// 存储：home/ccapp-session-models.json  { 会话号: { model, effort, provider, at } }，留最近 3000 条。
+// 存储：home/agyapp-session-models.json  { 会话号: { model, effort, provider, at } }，留最近 3000 条。
 import path from "node:path";
 import { CFG, log, tz } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
@@ -16,7 +16,7 @@ import { projectById, projectDefaults, projectOfDir } from "./projects.mjs";
 import { findSessionFile, peekSession } from "./sessions.mjs";
 import { onShutdown } from "./crashguard.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-session-models.json");
+const FILE = path.join(CFG.home, "agyapp-session-models.json");
 // 文件是 [] 或原语时：数组写进去的键会被 JSON.stringify 丢掉（钉选全没）、原语上写属性直接抛 TypeError（195-Z.6 / 197-9.4）
 const sessShape = (j) => {
   if (!isObj(j)) return undefined;

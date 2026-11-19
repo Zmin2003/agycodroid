@@ -5,7 +5,7 @@ import { CFG, LIVE, HERE, PREFIX, log, tz } from "./config.mjs";
 import { SETTINGS, saveSettings } from "./settings-store.mjs";
 import { LLAMA_KEY_FILE, LLAMA_PORT } from "./providers.mjs";
 import { expireModelCache } from "./models.mjs";
-import { ensureShell, killTree } from "./claude.mjs";
+import { ensureShell, killTree } from "./agy.mjs";
 import { RUNS } from "./runs.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { termEnv } from "./terminal.mjs";
@@ -17,11 +17,11 @@ import { privCall } from "./usage.mjs";
 import { ucAppBegin, ucAppWrote } from "./userconf.mjs";
 
 // ── 端侧小模型：网关按需拉起 llama-server，空闲一阵自动停（模型常驻要占好几 GB 内存） ──
-// 模型放 /sdcard/cccodroid/models（和 llama-cpp 组件的 llama-run 同一个目录）或 home/models。
+// 模型放 /sdcard/agycodroid/models（和 llama-cpp 组件的 llama-run 同一个目录）或 home/models。
 // claude 以 --bare --tools "" 跑：内置只有聊天，提示只有七十 token 左右（完整模式两万 token，手机上光读提示就要好几分钟）。
 // 实测 1.5B/3B 都撑不起工具调用（命令写成文字、读目录、选错命令），所以干活不内置；
-// 想折腾的用户写 ~/.cccodroid/local-mode.json 开「自定义模式」，配法见随包装进去的 local-model-mode 技能。
-const LOCAL_MODEL_DIRS = PREFIX ? ["/sdcard/cccodroid/models", path.join(CFG.home, "models")] : [];
+// 想折腾的用户写 ~/.agycodroid/local-mode.json 开「自定义模式」，配法见随包装进去的 local-model-mode 技能。
+const LOCAL_MODEL_DIRS = PREFIX ? ["/sdcard/agycodroid/models", path.join(CFG.home, "models")] : [];
 const LLAMA_IDLE_MS = 10 * 60e3;
 const LLAMA_LOG = path.join(CFG.home, ".cache", "llama-server.log");
 // 运行标记：网关被 SIGKILL 时 detached 的 llama-server 会被 init 收养，新网关认不回来（0.6.9 审计 195-F.1/T.4）
@@ -49,7 +49,7 @@ export function localRunNote(key, text, emit = runEmit) {
   for (const r of runs) emit(r, { type: "note", key, text });
   return runs.length;
 }
-const LOCAL_MODE_FILE = path.join(CFG.home, ".cccodroid", "local-mode.json");
+const LOCAL_MODE_FILE = path.join(CFG.home, ".agycodroid", "local-mode.json");
 
 /** 自定义模式的配置：{ have, ok, cfg } 或 { have, ok:false, err }。每次现读，改完下一条消息就生效 */
 function localCustom() {
@@ -503,14 +503,14 @@ function modelRemove(id) {
   expireModelCache();
 }
 
-// 配自定义模式的技能：随包带着，启动时装进 ~/.claude/skills（云端 Claude 读它帮用户配）。
+// 配自定义模式的技能：随包带着，启动时装进 ~/.claude/skills（云端 Antigravity 读它帮用户配）。
 // 装过的文件里还留着托管标记才覆盖更新；用户删了标记就当是他自己的版本，不动
 const LOCAL_SKILL_FILE = path.join(CFG.home, ".claude", "skills", "local-model-mode", "SKILL.md");
 function installLocalSkill() {
   try {
     const src = fs.readFileSync(path.join(HERE, "web", "skills", "local-model-mode", "SKILL.md"), "utf8");
     let cur = null; try { cur = fs.readFileSync(LOCAL_SKILL_FILE, "utf8"); } catch {}
-    if (cur === src || (cur != null && !cur.includes("cccodroid:managed"))) return;
+    if (cur === src || (cur != null && !cur.includes("agycodroid:managed"))) return;
     const ucb = ucAppBegin();
     fs.mkdirSync(path.dirname(LOCAL_SKILL_FILE), { recursive: true });
     fs.writeFileSync(LOCAL_SKILL_FILE, src);
@@ -520,7 +520,7 @@ function installLocalSkill() {
 }
 if (PREFIX && LIVE) installLocalSkill();
 
-/** 把应用界面叫回前台。cccodroid 由 App 进程做（Shizuku 或通知）；开发端直接 priv am start */
+/** 把应用界面叫回前台。agycodroid 由 App 进程做（Shizuku 或通知）；开发端直接 priv am start */
 export function toFront(text) {
   if (PREFIX) return privCall({ op: "to_front", text }, 8000);
   return new Promise((ok) => execFile("priv", ["am start --activity-reorder-to-front -n li.dsh.claudecli/.MainActivity"],

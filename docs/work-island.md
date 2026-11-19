@@ -1,12 +1,12 @@
 # Work Island (optional integration)
 
-Mirror Claude's live work status in cccodroid onto the **ColorOS 16 fluid cloud / dynamic island**.
+Mirror Antigravity's live work status in agycodroid onto the **ColorOS 16 fluid cloud / dynamic island**.
 
 - Working: **Working** + the current action (running a command / thinking / waiting for approval…)
 - Done: **Done** + elapsed time
 - After 8 s: the capsule collapses; a quiet notification stays in the shade.
 
-This is an **optional third-party integration**: cccodroid only sends the status out; it does not
+This is an **optional third-party integration**: agycodroid only sends the status out; it does not
 include or take responsibility for the Work Island app itself.
 
 ---
@@ -39,7 +39,7 @@ The gateway side uses Node built-ins only — no npm dependency, no build step.
 1. Install the Work Island app ([releases](https://github.com/STUTTEFRFIX/WorkIsland-Android/releases))
    and open it once: notifications on / live updates allowed / battery unrestricted.
    - 1.1+ supports English done/idle text; earlier versions only have Chinese done/idle.
-2. cccodroid Settings → **工作岛（ColorOS 灵动岛）** → enable.
+2. agycodroid Settings → **工作岛（ColorOS 灵动岛）** → enable.
 3. The gateway log shows:
 
    ```
@@ -51,7 +51,7 @@ The gateway side uses Node built-ins only — no npm dependency, no build step.
 ## Disable
 
 - Turn the setting off: the gateway unsubscribes and sends one IDLE to collapse the island.
-- `CCAPP_WORK_ISLAND=0` forces it off; `=1` skips the install check and forces it on.
+- `AGAPP_WORK_ISLAND=0` forces it off; `=1` skips the install check and forces it on.
 - Use `WORK_ISLAND_PKG=your.package` for a different package name.
 
 ---
@@ -93,7 +93,7 @@ error redaction, English, 1.5 s throttling, IDLE on disable, and the list-progre
 
 ## Known limits
 
-- Force-stopping cccodroid skips the final IDLE; reopen cccodroid to recover.
+- Force-stopping agycodroid skips the final IDLE; reopen agycodroid to recover.
 - Other ColorOS versions and OEM dynamic-island implementations are untested.
 - The app's notification service is exported; another app can spoof the displayed state.
 - The system-island capsule is drawn by the OS; no OPPO UPK custom card. Work Island 1.5+

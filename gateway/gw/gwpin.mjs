@@ -1,5 +1,5 @@
 // 网关起 claude 用的 glibc（files/gw/glibc，安全 4 第 2 层）：每次起 claude 前按安装包钉的哈希再核一遍。
-// 应用（GwRuntime.java）起网关前核过、写好，钉子经 CCAPP_GW_GLIBC_PIN 交过来（文件名 → sha256）；
+// 应用（GwRuntime.java）起网关前核过、写好，钉子经 AGAPP_GW_GLIBC_PIN 交过来（文件名 → sha256）；
 // 网关跑着的这段时间里同 uid 的进程能改 files/gw/glibc，这里不核的话 claude 加载的就是改过的 libc。
 // 文件没动过（大小、修改时间、ctime、inode 都没变）就用上次的结论，32 个文件 lstat 一遍。
 // 对不上：这一轮不起，留痕，等空闲时重启网关，应用重拉前按钉子重新写好（appfiles.mjs 的 APP.restart）。
@@ -10,9 +10,9 @@ import { PATHS, log, tz } from "./config.mjs";
 import { APP } from "./appfiles.mjs";
 
 let PIN = null;
-try { const o = JSON.parse(process.env.CCAPP_GW_GLIBC_PIN || "null"); if (o && typeof o === "object" && Object.keys(o).length) PIN = o; } catch {}
-delete process.env.CCAPP_GW_GLIBC_PIN;
-const DIR = process.env.CCAPP_GW_GLIBC_LIB || "";
+try { const o = JSON.parse(process.env.AGAPP_GW_GLIBC_PIN || "null"); if (o && typeof o === "object" && Object.keys(o).length) PIN = o; } catch {}
+delete process.env.AGAPP_GW_GLIBC_PIN;
+const DIR = process.env.AGAPP_GW_GLIBC_LIB || "";
 const seen = new Map();          // 文件 → [指纹, sha256]
 
 function sha256(f) {
@@ -23,7 +23,7 @@ function sha256(f) {
 
 /** 对不上的文件名列表；没有钉子（开发布局、开发版退回 $PREFIX 时）返回 [] */
 export function gwGlibcBad({ pin = PIN, dir = DIR } = {}) {
-  if (!pin || !dir || PATHS.claudeLib !== dir) return [];
+  if (!pin || !dir || PATHS.gwGlibcLib !== dir) return [];
   const bad = [];
   for (const [name, want] of Object.entries(pin)) {
     const f = path.join(dir, name);
@@ -49,5 +49,5 @@ export function gwRuntimeBlocked() {
   if (!bad.length) return "";
   log(`⚠️ [网关运行库] files/gw/glibc 和安装包对不上：${bad.slice(0, 6).join(", ")}`);
   APP?.restart(`gw/glibc/${bad[0]}（网关运行库和安装包对不上）`);
-  return tz("网关自己的运行库被改过，这一轮没有启动 Claude Code。网关会在空闲时重启、按安装包还原，稍后再发送。");
+  return tz("网关自己的运行库被改过，这一轮没有启动 Antigravity CLI。网关会在空闲时重启、按安装包还原，稍后再发送。");
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { log } from "./config.mjs";
 import { readSmallFile } from "./saferead.mjs";
 
-// ── 网关自己的状态文件（home 下的 ccapp-*.json 这一类）：统一的读和写 ──
+// ── 网关自己的状态文件（home 下的 agyapp-*.json 这一类）：统一的读和写 ──
 // 0.6.9 审计的一大家族（R2 状态形状 / R5 写层）：各模块各写各的 JSON.parse，
 //   · 语法坏了 → 回落空表，下一次保存把整份覆盖掉（厂商 Key、账本、设置全丢，也不留底）；
 //   · 语法对、形状不对（该是数组的是对象、该是对象的是 null）→ 在定时器 / 回调里抛异常，网关崩了重启、重启再崩；

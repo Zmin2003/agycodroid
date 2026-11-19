@@ -1,6 +1,6 @@
 // 篡改留痕：应用自己的程序文件被改过，一律还原，但不悄悄还原 —— 记进日志、界面提示一次、下一轮告诉模型。
 // 三个来源：
-//   · app     应用（Java）起网关前逐文件核 files/app，对不上就按安装包重铺，清单经环境变量 CCAPP_TAMPERED 交过来（不落盘，模型删不掉）
+//   · app     应用（Java）起网关前逐文件核 files/app，对不上就按安装包重铺，清单经环境变量 AGAPP_TAMPERED 交过来（不落盘，模型删不掉）
 //   · runtime 网关跑着时 appfiles.mjs 把被改的小目录文件写回、多出来的删掉；界面文件对不上不发并等空闲重启
 //   · claude  claude 程序和版本目录里存的官方清单（Anthropic 签名）对不上，这一轮不起（见 claudeseal.mjs）
 // 只在内存里：网关重启后，应用那边再核一遍、再交一次。
@@ -33,7 +33,7 @@ export function tamperRecord(src, files) {
   const ev = { id: ++seq, at: Date.now(), src, files: list, told: false, acked: false };
   EVENTS.push(ev);
   if (EVENTS.length > MAX) EVENTS.shift();
-  log(`⚠️ [篡改留痕] ${src === "app" ? "应用起网关前" : src === "claude" ? "Claude Code 程序" : "网关运行中"}发现改动并已处理：${list.join(", ")}`);
+  log(`⚠️ [篡改留痕] ${src === "app" ? "应用起网关前" : src === "claude" ? "Antigravity CLI 程序" : "网关运行中"}发现改动并已处理：${list.join(", ")}`);
   try { notify?.(tamperPending()); } catch {}
   return ev;
 }
@@ -51,15 +51,15 @@ export function tamperNote(ids = null) {
   for (const e of fresh) { e.told = true; ids?.push(e.id); }
   const notes = fresh.map((e) => {
     const files = e.files.slice(0, 12).join(", ");
-    if (e.src === "claude") return `Refused to start a modified Claude Code binary (${files}).`;
+    if (e.src === "claude") return `Refused to start a modified Antigravity CLI binary (${files}).`;
     if (e.src === "app") return `App files were restored from the installed package (${files}); those changes have been undone.`;
-    const config = e.files.filter((f) => /^ccapp-(settings|providers)\.json$/.test(f));
+    const config = e.files.filter((f) => /^agyapp-(settings|providers)\.json$/.test(f));
     const program = e.files.filter((f) => !config.includes(f));
     return (config.length ? `Configuration files were written back using the app's current settings (${config.join(", ")}); external edits have been undone. ` : "") +
       (program.length ? `Runtime app-file protection was triggered (${program.slice(0, 12).join(", ")}); files may be restored from the startup snapshot or await an idle restart. ` : "") +
-      "To change provider configuration, use the app's provider settings or the authenticated POST /api/providers/save API; do not edit ccapp-providers.json directly.";
+      "To change provider configuration, use the app's provider settings or the authenticated POST /api/providers/save API; do not edit agyapp-providers.json directly.";
   });
-  return "App note: cccodroid detected changes outside its normal update/settings flow. " + notes.join(" ") +
+  return "App note: agycodroid detected changes outside its normal update/settings flow. " + notes.join(" ") +
     " Don't try to reapply them or work around these safeguards; if you made the change, tell the user plainly.";
 }
 
@@ -70,14 +70,14 @@ export function tamperRetell(ids) {
 
 // 应用交过来的：JSON 数组（文件名），起网关前那次核对的结果
 try {
-  const raw = process.env.CCAPP_TAMPERED;
+  const raw = process.env.AGAPP_TAMPERED;
   if (raw) { const a = JSON.parse(raw); if (Array.isArray(a) && a.length) tamperRecord("app", a); }
 } catch {}
-delete process.env.CCAPP_TAMPERED;   // 别再传给 claude、终端这些子进程
+delete process.env.AGAPP_TAMPERED;   // 别再传给 claude、终端这些子进程
 
 // 刚升级：应用起网关前按新安装包重铺了 files/app（版本差异，不是篡改）。只记一行，不进留痕、不提醒模型（更新链复盘 U-04）
 {
-  const raw = String(process.env.CCAPP_UPDATED || "").replace(/[^\w.\->?+]/g, "_").slice(0, 80);
+  const raw = String(process.env.AGAPP_UPDATED || "").replace(/[^\w.\->?+]/g, "_").slice(0, 80);
   if (raw) log(`[更新] 应用已升级（${raw}），界面与网关文件已按新安装包铺好`);
 }
-delete process.env.CCAPP_UPDATED;
+delete process.env.AGAPP_UPDATED;

@@ -1,12 +1,12 @@
 // 扩展的「停用」名单（F5）：不卸载，只是先不用。
 //   mcp：停用的用户级 MCP 服务器定义（从 ~/.claude.json 里摘出来存这，启用时用 claude mcp add-json 加回去）
-//   comp / mod：停用的组件、工具包模块 id —— 命令文件留在工具包里（挪走会让「核对记录」报缺），只是不再写进给 Claude 的系统提示
+//   comp / mod：停用的组件、工具包模块 id —— 命令文件留在工具包里（挪走会让「核对记录」报缺），只是不再写进给 Antigravity 的系统提示
 // 技能的停用不在这里：用 claude 自己认的 settings.json skillOverrides（发行版打包时据此跳过，见 seal.mjs）。
 import path from "node:path";
 import { CFG } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
 
-export const EXT_OFF_FILE = path.join(CFG.home, "ccapp-ext-off.json");
+export const EXT_OFF_FILE = path.join(CFG.home, "agyapp-ext-off.json");
 const ID = /^[A-Za-z0-9._-]{1,64}$/;
 
 function shape(j) {

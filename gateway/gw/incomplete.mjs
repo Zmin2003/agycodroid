@@ -5,12 +5,12 @@
 //   · 一轮开跑时记上（网关被系统结束时，标记已经落盘，不依赖运行标记能不能恢复）；
 //   · 收到这一轮的结果就清掉（答完 / 报错都算正常结束）；
 //   · 打开会话看历史时，若这一页读到了记录末尾且没有正在生成的那一轮，末尾挂一行提示。
-// 存储：home/ccapp-incomplete.json  { 会话号: { at, runId } }，留最近 1000 条。
+// 存储：home/agyapp-incomplete.json  { 会话号: { at, runId } }，留最近 1000 条。
 import path from "node:path";
 import { CFG, LAST_LANG, log, tr, tz } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-incomplete.json");
+const FILE = path.join(CFG.home, "agyapp-incomplete.json");
 const MAX = 1000;
 const shape = (j) => {
   if (!isObj(j)) return undefined;

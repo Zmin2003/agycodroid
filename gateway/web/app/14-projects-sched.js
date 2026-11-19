@@ -104,7 +104,7 @@
       <div class="pj-sec"><span class="grow">${esc(t("文件"))}</span><button class="btn sm ghost" data-a="files">${esc(t("在文件浏览器打开"))}</button></div>
       <div class="panel pj-files">${files.length ? files.slice(0, 12).map((f) => `<div class="row pj-row" data-file="${esc(f.name)}" data-dir="${f.dir ? 1 : ""}"><span class="mono grow">${esc(f.name)}${f.dir ? "/" : ""}</span></div>`).join("") + (files.length > 12 ? `<div class="row"><span class="muted">${esc(t("还有 {n} 项", { n: files.length - 12 }))}</span></div>` : "") : emptyRow(t("（空目录）"))}</div>
       <div class="pj-sec"><span class="grow">${esc(t("记忆"))}</span></div>
-      <div class="panel"><div class="row"><div class="grow"><b>${esc(t("{n} 条", { n: (d.memory || []).length }))}</b><div class="muted pj-sub">${esc(t("Claude 在这个项目里记下的事"))}</div></div>${(d.memory || []).length ? `<button class="btn sm ghost" data-a="memory">${esc(t("查看"))}</button>` : ""}</div></div>
+      <div class="panel"><div class="row"><div class="grow"><b>${esc(t("{n} 条", { n: (d.memory || []).length }))}</b><div class="muted pj-sub">${esc(t("Antigravity 在这个项目里记下的事"))}</div></div>${(d.memory || []).length ? `<button class="btn sm ghost" data-a="memory">${esc(t("查看"))}</button>` : ""}</div></div>
       <div class="pj-sec"><span class="grow">${esc(t("定时任务"))}</span><button class="btn sm ghost" data-a="newtask">${pi("plus")}${esc(t("新建"))}</button></div>
       <div class="panel">${tasks.length ? tasks.map((x) => `<div class="row pj-row" data-task="${esc(x.id)}"><div class="grow"><div class="t1">${pi("clock", "pj-ic")}${esc(x.name)}</div><div class="muted pj-sub">${esc(freqText(x.freq))}</div></div><span class="pill ${x.on ? "acc" : ""}">${esc(x.on ? t("开") : t("关"))}</span></div>`).join("") : emptyRow(t("没有"))}</div>`;
     const ta = box.querySelector(".pj-instr");
@@ -350,7 +350,7 @@
     const b = D.budget || {}, daily = b.daily || 0, today = b.today || 0, m = b.month || {};
     const pct = daily ? Math.min(100, today / daily * 100) : 0;
     box.innerHTML = pageHead(esc(t("定时任务")), `<button class="btn sm pj-primary" data-a="new">${pi("plus")}${esc(t("新建"))}</button>`) + missed + (SC.err ? staleRow(SC.err, "sc-retry") : "") +
-      `<div class="sc-note">${esc(t("到点在本机跑一次 Claude，在指定目录里；跑完按设置通知你，结果存成一个对话。没人在旁边：要问你的操作一律当拒绝。错过的不会偷偷补跑，按每个任务的设置来。"))}</div>` +
+      `<div class="sc-note">${esc(t("到点在本机跑一次 Antigravity，在指定目录里；跑完按设置通知你，结果存成一个对话。没人在旁边：要问你的操作一律当拒绝。错过的不会偷偷补跑，按每个任务的设置来。"))}</div>` +
       (tasks.length ? `<div class="seg-scroll">${segOf("flt", [["all", t("全部")], ["on", t("开着的")], ["off", t("关着的")]], SC.flt)}</div>` : "") +
       `<div class="panel">${list.length ? list.map(row).join("") : emptyRow(tasks.length ? t("没有") : t("还没有定时任务。比如每天早上让它看一眼 CI。"))}</div>
       <div class="pj-sec"><span class="grow">${esc(t("花费与额度"))}</span></div>
@@ -541,7 +541,7 @@
     const projOpts = [["", t("工作区")], ...PJ.list.map((p) => [p.id, t("项目：{n}", { n: p.name })])];
     if (v.projectId && !PJ.list.some((p) => p.id === v.projectId)) projOpts.push([v.projectId, t("已删除的项目（{id}）", { id: v.projectId })]);
     const body = frow(t("名称"), `<input class="pj-field" id="t-name" value="${esc(v.name)}" placeholder="${esc(t("比如：每天早上看 CI"))}" autocomplete="off">`) +
-      frow(t("要 Claude 做什么"), `<textarea class="pj-field" id="t-prompt" placeholder="${esc(t("写清楚做什么、做完怎么交代。没人在旁边：它不能问你问题。"))}">${esc(v.prompt)}</textarea>`,
+      frow(t("要 Antigravity 做什么"), `<textarea class="pj-field" id="t-prompt" placeholder="${esc(t("写清楚做什么、做完怎么交代。没人在旁边：它不能问你问题。"))}">${esc(v.prompt)}</textarea>`,
         esc(t("想「没事就别吵我」：让它没发现时只回一句固定的话（比如「全绿」），下面的通知选「只在有发现时」。"))) +
       frow(t("在哪跑"), sel("t-proj", projOpts, v.projectId || "")) +
       frow(t("什么时候"), `<div class="seg-scroll">${segOf("kind", [["daily", t("每天")], ["weekly", t("每周")], ["monthly", t("每月")], ["every", t("每隔几小时")], ["once", t("仅一次")], ["cron", t("自定义")]], f.kind)}</div><div class="pj-sub-form" id="t-freq">${FREQ[f.kind]()}</div><div class="pj-hint" id="t-next"></div>`) +

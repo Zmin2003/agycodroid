@@ -114,7 +114,7 @@ export function projectRisks(cwd) {
 }
 
 // 认过的：{ 工作目录 realpath: { fp, at } }
-const TRUST_FILE = () => path.join(CFG.home, "ccapp-project-trust.json");
+const TRUST_FILE = () => path.join(CFG.home, "agyapp-project-trust.json");
 const trustShape = (j) => {
   if (!isObj(j)) return undefined;
   const out = {};

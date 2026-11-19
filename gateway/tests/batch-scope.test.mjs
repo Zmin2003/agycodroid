@@ -7,7 +7,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import vm from "node:vm";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
 const src = fs.readFileSync(new URL("../web/app/07-sessions.js", import.meta.url), "utf8");
@@ -35,7 +35,7 @@ test("杂项「全部移到回收站」只动这一组看得见的，不连带�
 
 test("批量回收：正在生成的进 busy，已经不在的只进 failed", async () => {
   const { routeSessions } = await import("../gw/sessions.mjs");
-  const proj = path.join(CFG.home, ".claude", "projects", "-i176");
+  const proj = path.join(PATHS.projects, "-i176");
   fs.mkdirSync(proj, { recursive: true });
   const sid = crypto.randomUUID();
   fs.writeFileSync(path.join(proj, sid + ".jsonl"), JSON.stringify({ type: "user", sessionId: sid, uuid: crypto.randomUUID(), message: { role: "user", content: "hi" } }) + "\n");

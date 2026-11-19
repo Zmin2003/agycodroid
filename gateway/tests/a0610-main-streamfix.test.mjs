@@ -57,7 +57,7 @@ test("195-U.4：说完后才来的 error 照旧补成说完，但报给发起的
       + ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "说完了" } }) + ev({ type: "content_block_stop", index: 0 })
       + ev({ type: "error", error: { type: "api_error", message: "upstream hiccup" } });
     route = (req, res) => { res.writeHead(200, { "content-type": "text/event-stream" }); res.end(body); };
-    const r = await fetch(base + "/v1/messages", { method: "POST", body: "{}", headers: { "X-Claude-Code-Session-Id": "sid-u4" } });
+    const r = await fetch(base + "/v1/messages", { method: "POST", body: "{}", headers: { "X-Antigravity-Code-Session-Id": "sid-u4" } });
     const out = await r.text();
     assert.match(out, /"stop_reason":"end_turn"/);
     assert.doesNotMatch(out, /upstream hiccup/);

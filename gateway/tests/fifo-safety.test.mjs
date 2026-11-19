@@ -9,7 +9,7 @@ import { CFG } from "../gw/config.mjs";
 
 const { _customForTest } = await import("../gw/custom.mjs");
 const { compRecord } = await import("../gw/components.mjs");
-const COMP_DIR = path.join(path.dirname(process.env.CCAPP_PREFIX), "components");
+const COMP_DIR = path.join(path.dirname(process.env.AGAPP_PREFIX), "components");
 
 test("headOf / compRecord 遇到 FIFO 立即返回空，不阻塞", () => {
   fs.mkdirSync(CFG.workspace, { recursive: true });

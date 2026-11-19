@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import { CFG, HERE, PREFIX, log, tz } from "./config.mjs";
-import { ensureShell, killTree } from "./claude.mjs";
+import { ensureShell, killTree } from "./agy.mjs";
 import { NEXT, rangeOf, readBody, sendJson } from "./http.mjs";
 import { safeFilePath } from "./files.mjs";
 import { termEnv } from "./terminal.mjs";
@@ -90,13 +90,13 @@ function officeConvert(file, key, out) {
     // 解析的是外来文档，LibreOffice 又是出过不少漏洞的解析器（审查 10-30 第九份 后端低6）：HOME / TMPDIR 指到这次的工作目录，
     // 不让它顺手碰到真 home 里的令牌和配置；指向密钥、令牌的环境变量一个不给。字体缓存放 office 自己的目录，免得每次重建
     const env = { ...termEnv(), FONTCONFIG_FILE: officeFonts(), SAL_USE_VCLPLUGIN: "svp", HOME: work, TMPDIR: work, XDG_CACHE_HOME: path.join(OFFICE_DIR, "cache"), XDG_CONFIG_HOME: path.join(work, ".config") };
-    // CCAPP_LD / CCAPP_SELF_EXE / CCAPP_GLIBC_* 是 exec 垫片要的（36 版靠它起程序），别整个前缀删
+    // AGAPP_LD / AGAPP_SELF_EXE / AGAPP_GLIBC_* 是 exec 垫片要的（36 版靠它起程序），别整个前缀删
     // 名字像凭据的都删：前缀按常见厂商 / 平台，后缀按 KEY、TOKEN、密码一类（以前漏了 *_PASSWORD、GITLAB_* 等，审查 v0513b 低-15）
     for (const k of Object.keys(env)) if (OFFICE_ENV_DENY.test(k)) delete env[k];
     const args = ["-env:UserInstallation=file://" + path.join(OFFICE_DIR, "profile"), "--headless", "--norestore", "--nologo",
       "--convert-to", "pdf", "--outdir", work, src];
     const nice = path.join(PREFIX, "bin", "nice");
-    // 经 Claude 用的那个 shell 包装起：soffice 是 #!$PREFIX/bin/sh 脚本，里面还会调别的脚本
+    // 经 Antigravity 用的那个 shell 包装起：soffice 是 #!$PREFIX/bin/sh 脚本，里面还会调别的脚本
     const argv = [ensureShell(), "-c", 'exec "$0" "$@"', ...(fs.existsSync(nice) ? [nice, "-n", "5"] : []), sofficePath(), ...args];
     const t0 = Date.now();
     const c = spawn(argv[0], argv.slice(1), { env, cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -146,7 +146,7 @@ function officePrune() {
 let officeInst = null;   // { running, line, rc, at }
 function officeInstall() {
   if (officeInst && officeInst.running) return officeInst;
-  const pkg = path.join(process.env.CCAPP_BIN || HERE, "pkg.mjs");
+  const pkg = path.join(process.env.AGAPP_BIN || HERE, "pkg.mjs");
   officeInst = { running: true, line: "", rc: null, at: Date.now() };
   const st = officeInst;
   const c = spawn(process.execPath, [pkg, "install", "libreoffice"], { env: termEnv(), cwd: CFG.home, detached: true, stdio: ["ignore", "pipe", "pipe"] });

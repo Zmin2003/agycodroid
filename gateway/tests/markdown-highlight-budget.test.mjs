@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const web = process.env.CCAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
+const web = process.env.AGAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
 const core = fs.readFileSync(path.join(web, "app/01-core.js"), "utf8");
 const source = core.slice(core.indexOf("  function codeHighlightable("), core.indexOf("\n  // ── 图片查看器"));
 

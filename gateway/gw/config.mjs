@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 // 测试绕过 scripts/test.mjs 直接跑（node --test / node xx.test.mjs）时环境里是真 home：
-// 一导入网关模块就会读写真的会话、运行标记、定时任务。没有 CCAPP_TEST 一律不让起（#49 P2-18）
-if ((process.env.NODE_TEST_CONTEXT || /\.test\.mjs$/.test(process.argv[1] || "")) && process.env.CCAPP_TEST !== "1")
+// 一导入网关模块就会读写真的会话、运行标记、定时任务。没有 AGAPP_TEST 一律不让起（#49 P2-18）
+if ((process.env.NODE_TEST_CONTEXT || /\.test\.mjs$/.test(process.argv[1] || "")) && process.env.AGAPP_TEST !== "1")
   throw new Error("测试请用 node scripts/test.mjs 跑（它会建临时 home 和工作区）；直接跑会动真数据");
 
 // 网关目录（gw/ 的上一级）：web/、bin/、TAG 等都相对它找
@@ -17,56 +17,58 @@ export async function loadPgp() {
 }
 // ── 路径与配置 ────────────────────────────────────────────────────────
 export const CFG = {
-  runtime: process.env.CCAPP_RUNTIME || path.join(HERE, "..", "runtime"),
-  home: process.env.CCAPP_HOME || process.env.HOME || HERE,
-  workspace: process.env.CCAPP_WORKSPACE || path.join(HERE, "..", "workspace"),
-  port: Number(process.argv[2] || process.env.CCAPP_PORT || 8790),
-  bridgePort: Number(process.env.CCAPP_BRIDGE_PORT || 8788),
-  upstream: process.env.CCAPP_UPSTREAM || "https://api.deepseek.com/anthropic",
-  model: process.env.CCAPP_MODEL || "deepseek-flash",
+  runtime: process.env.AGAPP_RUNTIME || path.join(HERE, "..", "runtime"),
+  home: process.env.AGAPP_HOME || process.env.HOME || HERE,
+  workspace: process.env.AGAPP_WORKSPACE || path.join(HERE, "..", "workspace"),
+  port: Number(process.argv[2] || process.env.AGAPP_PORT || 8790),
+  bridgePort: Number(process.env.AGAPP_BRIDGE_PORT || 8788),
+  // agy 直连 Google，不再经本地 DNS 桥转上游：这个字段只留作兼容，默认空。
+  upstream: process.env.AGAPP_UPSTREAM || "",
+  model: process.env.AGAPP_MODEL || "",
 };
 
-// 前缀布局（cccodroid）：工具链是原生 Termux 前缀，claude 是官方原版二进制，
+// 前缀布局（agycodroid）：工具链是原生 Termux 前缀，agy 是官方原版 bionic 二进制，
 // 由宿主 App 用环境变量告诉我们位置；没设就按旧布局（runtime/ 下）找。
-export const PREFIX = process.env.CCAPP_PREFIX || "";
-export const NO_BRIDGE = !!PREFIX || process.env.CCAPP_NO_BRIDGE === "1";
+export const PREFIX = process.env.AGAPP_PREFIX || "";
+export const NO_BRIDGE = true;   // agy 是 bionic 程序，自己解析 DNS，不需要本地桥
 export const PATHS = {
-  loader: process.env.CCAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
-  glibcLib: process.env.CCAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
-  // 网关起 claude 用自己那份 glibc（files/gw/glibc，安全 4 第 2 层，GwRuntime.java；起之前 gwpin.mjs 按钉子再核）。
-  // 只给起 claude 的地方用：写进持久脚本的路径（custom.mjs 等）仍用上面两个，那些脚本在终端里跑、要跟着工具包走
-  claudeLoader: process.env.CCAPP_GW_LOADER || process.env.CCAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
-  claudeLib: process.env.CCAPP_GW_GLIBC_LIB || process.env.CCAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
-  claude: process.env.CCAPP_CLAUDE || path.join(CFG.runtime, "claude"),
-  // cccodroid：给 claude 预加载的小库，把被安卓 seccomp 拦下的调用改成返回 ENOSYS
-  // （Android 14 拦 epoll_pwait2，claude 不挂它一启动就被 SIGSYS 打死）
-  preload: process.env.CCAPP_CLAUDE_PRELOAD || "",
+  loader: process.env.AGAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
+  glibcLib: process.env.AGAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
+  // 网关自己的 glibc（files/gw/glibc，安全 4 第 2 层，GwRuntime.java；起之前 gwpin.mjs 按钉子再核）。
+  // 只给网关自己起 glibc 程序的地方用（devside / custom 的 --version 探针）：agy 是 bionic，不走这里。
+  gwLoader: process.env.AGAPP_GW_LOADER || process.env.AGAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
+  gwGlibcLib: process.env.AGAPP_GW_GLIBC_LIB || process.env.AGAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
+  agy: process.env.AGAPP_AGY || path.join(CFG.home, ".local", "share", "agycodroid", "agy", "current", "agy"),
+  // 给 glibc 程序预加载的小库（seccomp 垫片等）。agy 是 bionic，不用它；只留给 devside / custom 探针。
+  preload: process.env.AGAPP_AGY_PRELOAD || process.env.AGAPP_CLAUDE_PRELOAD || "",
   node: path.join(CFG.runtime, "node", "node"),
   nodeLib: path.join(CFG.runtime, "node", "lib"),
   web: path.join(HERE, "web"),
-  toolchain: process.env.CCAPP_TOOLCHAIN || path.join(CFG.home, "..", "toolchain"),
+  toolchain: process.env.AGAPP_TOOLCHAIN || path.join(CFG.home, "..", "toolchain"),
   bridge: path.join(HERE, "localbridge.mjs"),
-  config: path.join(CFG.home, "ccapp-config.json"),
-  settings: path.join(CFG.home, "ccapp-settings.json"),
-  names: path.join(CFG.home, "ccapp-session-names.json"),
-  windows: path.join(CFG.home, "ccapp-model-windows.json"),
-  projects: path.join(CFG.home, ".claude", "projects"),
+  config: path.join(CFG.home, "agyapp-config.json"),
+  settings: path.join(CFG.home, "agyapp-settings.json"),
+  names: path.join(CFG.home, "agyapp-session-names.json"),
+  windows: path.join(CFG.home, "agyapp-model-windows.json"),
+  // 会话记录：agy 不写自己的 transcript，网关自己写（见 sessions.mjs appendSessionRecord）。
+  // 不再是 ~/.claude/projects。
+  projects: path.join(CFG.home, "agyapp-sessions"),
 };
 
 // 给 glibc 程序 --preload 的库（冒号分隔）。经加载器时 Env.java 给的是 seccomp-enosys.so + exec-shim.so
-export const GLIBC_PRELOAD = process.env.CCAPP_GLIBC_PRELOAD || (PATHS.preload && fs.existsSync(PATHS.preload) ? PATHS.preload : "");
+export const GLIBC_PRELOAD = process.env.AGAPP_GLIBC_PRELOAD || (PATHS.preload && fs.existsSync(PATHS.preload) ? PATHS.preload : "");
 /** glibc 进程的环境：摘掉 LD_PRELOAD —— 经加载器时网关环境里挂着 termux-exec（bionic 库），glibc 的 ld.so 读到直接报 invalid ELF header */
 export function glibcEnv(env = process.env) {
   const e = { ...env };
   delete e.LD_PRELOAD;
-  delete e.CCAPP_SELF_EXE;      // exec-shim 用它冒充 /proc/self/exe：网关直接拉的 glibc 程序不是它记的那个
+  delete e.AGAPP_SELF_EXE;      // exec-shim 用它冒充 /proc/self/exe：网关直接拉的 glibc 程序不是它记的那个
   return e;
 }
 
 // ── 测试模式 ──────────────────────────────────────────────────────────
-// CCAPP_TEST=1（tests/ 里的测试设的）：模块被导入时不做任何启动动作——不恢复中断记录、不装技能、不起定时器、
-// 不写 gateway.log。网关真跑起来时这个开关是关的，一切照旧。测试同时把 CCAPP_HOME 指到临时目录，双保险
-export const LIVE = process.env.CCAPP_TEST !== "1";
+// AGAPP_TEST=1（tests/ 里的测试设的）：模块被导入时不做任何启动动作——不恢复中断记录、不装技能、不起定时器、
+// 不写 gateway.log。网关真跑起来时这个开关是关的，一切照旧。测试同时把 AGAPP_HOME 指到临时目录，双保险
+export const LIVE = process.env.AGAPP_TEST !== "1";
 
 // ── 工具函数 ──────────────────────────────────────────────────────────
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -75,7 +77,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pad2 = (n) => String(n).padStart(2, "0");
 export const logTime = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
 // 默认落 home（私有目录），不落共享存储：脱离 App 单独跑网关时别让别的应用读到日志（审查 v0.5.4 B-L2）
-const LOG_FILE = process.env.CCAPP_LOG || path.join(CFG.home, "gateway.log");
+const LOG_FILE = process.env.AGAPP_LOG || path.join(CFG.home, "gateway.log");
 // 网址里的账号口令（http://user:pass@host）和查询串里的令牌（?key=…、&token=…）不进日志（后者审查 10-29 第六份 低3）
 export const noCred = (s) => s.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\/\s@]+@/gi, "$1***@")
   .replace(/([?&](?:key|api_?key|token|access_token|auth|sig|signature|password|secret)=)[^&\s"']+/gi, "$1***")
@@ -162,14 +164,8 @@ export function tr(lang, msg) {
   return msg;
 }
 
-/** claude 认的权限模式（2026-10 版二进制）。没有 manual */
-export const PERM_MODES = ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"];
-/** 比「自动接受编辑」宽的模式。前端 03-perm-status.js 的 WIDE_MODES 是同一张表，改一处要同步另一处 */
-export const WIDE_PERM_MODES = ["bypassPermissions", "auto", "dontAsk"];
-/** 回答权限请求时顺带的模式怎么处理："global" 改全局、"run" 只把这一轮切回原模式、"none" 不动。
- *  只有批准才切；最多到「自动接受编辑」可以改全局（计划卡上的明确选项）；宽模式只能原样保持本轮，放宽得走 /api/perm/mode 那条有确认的路 */
-export function permModeAction(behavior, mode, runPermMode) {
-  if (behavior !== "allow" || !mode || !PERM_MODES.includes(mode)) return "none";
-  if (!WIDE_PERM_MODES.includes(mode)) return "global";
-  return mode === runPermMode ? "run" : "none";
-}
+/** agy 的 toolPermission（settings.json 里的同名字段）。没有 default：默认逐项确认就是 request-review。
+ *  界面 03-perm-status.js 的 WIDE_MODES 是同一张表，改一处要同步另一处 */
+export const PERM_MODES = ["request-review", "proceed-in-sandbox", "always-proceed", "strict"];
+/** 比「沙箱里自动放行」宽的模式：只有 always-proceed 是自动全放行 */
+export const WIDE_PERM_MODES = ["always-proceed"];

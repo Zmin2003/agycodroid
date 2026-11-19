@@ -28,7 +28,7 @@ async function serve(...routes) {
 }
 
 test("第一次推送：远端名是 --receive-pack=… 这种就拒绝，不把它当参数交给 git", async () => {
-  { const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+  { const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
     if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
   const gitGo = await serve(routeGit);
   const d = path.join(CFG.workspace, "hv2b-push");
@@ -43,23 +43,24 @@ test("第一次推送：远端名是 --receive-pack=… 这种就拒绝，不把
   assert.ok(!fs.existsSync(mark));
 });
 
-test("自定义接口条目里自带 explicit:false / local / login / id：都不认，密钥不回落到别家那把", () => {
-  const home = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "hv2b-prov-"));
-  fs.writeFileSync(path.join(home, "ccapp-config.json"), JSON.stringify({ apiKey: "sk-deepseek-fixture" }));
-  fs.writeFileSync(path.join(home, "ccapp-providers.json"), JSON.stringify({ active: "custom-1", providers: {
+test("厂商文件里塞自定义接口条目（explicit:false / local / login / id）：都不认，不会把密钥送去别家", () => {
+  const home = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "hv2b-prov-"));
+  fs.writeFileSync(path.join(home, "agyapp-config.json"), JSON.stringify({ apiKey: "<redacted>" }));
+  fs.writeFileSync(path.join(home, "agyapp-providers.json"), JSON.stringify({ active: "custom-1", providers: {
     "custom-1": { label: "x", baseUrl: "https://evil.example.invalid", explicit: false, local: true, login: true, nativeModels: true, id: "deepseek" } } }));
-  fs.writeFileSync(path.join(home, "ccapp-settings.json"), "{}");
+  fs.writeFileSync(path.join(home, "agyapp-settings.json"), "{}");
   const gw = new URL("../gw/", import.meta.url).href;
   const src = `const p = await import(${JSON.stringify(gw + "providers.mjs")}); p.applyProvider();
     const P = p.PROVIDER; console.log(JSON.stringify({ id: P.id, explicit: P.explicit, local: !!P.local, login: !!P.login, native: !!P.nativeModels, key: p.API_KEY }));`;
   const out = execFileSync(process.execPath, ["--input-type=module", "-e", src], {
-    env: { ...process.env, CCAPP_HOME: home, HOME: home, CCAPP_TEST: "1", ANTHROPIC_API_KEY: "", ANTHROPIC_AUTH_TOKEN: "" }, encoding: "utf8" });
+    env: { ...process.env, AGAPP_HOME: home, HOME: home, AGAPP_TEST: "1", ANTHROPIC_API_KEY: "", ANTHROPIC_AUTH_TOKEN: "" }, encoding: "utf8" });
   const j = JSON.parse(out.trim().split("\n").pop());
-  assert.deepEqual(j, { id: "custom-1", explicit: true, local: false, login: false, native: false, key: null });
+  // 移植：agy 只有 google / gemini，文件里的 custom-1 整个被忽略，active 回落到 google（OAuth 登录，不带 Key）
+  assert.deepEqual(j, { id: "google", explicit: false, local: false, login: true, native: false, key: null });
 });
 
 test("端侧模型：端口被别人占着、对 /health 回 200，也不当成自己的服务起来了", async () => {
-  const pre = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "hv2b-llama-"));
+  const pre = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "hv2b-llama-"));
   const home = path.join(pre, "home");
   fs.mkdirSync(path.join(pre, "bin"), { recursive: true }); fs.mkdirSync(path.join(home, "models"), { recursive: true });
   fs.truncateSync((fs.writeFileSync(path.join(home, "models", "hv2b-fake.gguf"), ""), path.join(home, "models", "hv2b-fake.gguf")), 11e6);   // 小于 10 MB 不算模型；稀疏文件不占地方
@@ -76,7 +77,7 @@ test("端侧模型：端口被别人占着、对 /health 回 200，也不当成�
     process.exit(0);`;
   const run = (mode) => new Promise((ok) => {
     const c = spawn(process.execPath, ["--input-type=module", "-e", src], {
-      env: { ...process.env, CCAPP_HOME: home, HOME: home, CCAPP_PREFIX: pre, CCAPP_LLAMA_PORT: String(port), CCAPP_TEST: "1", HV2B_MODE: mode }, encoding: "utf8" });
+      env: { ...process.env, AGAPP_HOME: home, HOME: home, AGAPP_PREFIX: pre, AGAPP_LLAMA_PORT: String(port), AGAPP_TEST: "1", HV2B_MODE: mode }, encoding: "utf8" });
     let out = ""; c.stdout.on("data", (d) => (out += d)); c.stderr.on("data", (d) => (out += d));
     c.on("close", () => ok(out));
   });
@@ -113,7 +114,7 @@ test("pkg 落盘：目录经链接指到前缀外面就不往里放；指回前�
   const src = fs.readFileSync(new URL("../../android/assets/bin/pkg.mjs", import.meta.url), "utf8");
   const a = src.indexOf("let REAL_PREFIX = null;"), b = src.indexOf("function placeOne(");
   assert.ok(a > 0 && b > a);
-  const root = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "hv2b-pkg-"));
+  const root = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "hv2b-pkg-"));
   const PREFIX = path.join(root, "usr"), outside = path.join(root, "home");
   fs.mkdirSync(path.join(PREFIX, "lib"), { recursive: true }); fs.mkdirSync(outside);
   fs.symlinkSync(outside, path.join(PREFIX, "share"));
@@ -153,8 +154,8 @@ test("自定义组件：解压按实际写入量封顶、只读目录删得掉�
   const t1 = Date.now();
   assert.equal(C.headOf(fifo, 400), "");
   assert.ok(Date.now() - t1 < 2000);
-  fs.writeFileSync(path.join(base, "w"), "#!/bin/sh\n# cccodroid-custom-id: demo\n");
-  assert.match(C.headOf(path.join(base, "w"), 400), /cccodroid-custom-id: demo\n/);
+  fs.writeFileSync(path.join(base, "w"), "#!/bin/sh\n# agycodroid-custom-id: demo\n");
+  assert.match(C.headOf(path.join(base, "w"), 400), /agycodroid-custom-id: demo\n/);
   fs.symlinkSync(path.join(base, "w"), path.join(base, "lnk"));
   assert.equal(C.headOf(path.join(base, "lnk"), 400), "", "不跟软链");
   C.rmTree(base);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// 核对 cccodroid.net 上的镜像是否跟得上：最新正式版 APK 两条线都在且大小对、Claude Code 版本号三处一致、组件包在 dl.cccodroid.net 上都在且大小对。
+// 核对 cccodroid.net 上的镜像是否跟得上：最新正式版 APK 两条线都在且大小对、agy 官方 manifest 可取且字段齐全、组件包在 dl.cccodroid.net 上都在且大小对。
 // 只读，不验签（验签由客户端和生成器负责），用来发版前或出问题时快速看一眼。用法：node scripts/check-mirrors.mjs
+import { execFileSync } from "node:child_process";
 const get = async (url, method = "GET") => {
   const r = await fetch(url, { method, signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`${r.status} ${url}`);
@@ -21,17 +22,19 @@ try {
   }
 } catch (e) { bad++; console.log(`✗ APK：${e.message}`); }
 
-for (const ch of ["stable", "latest"]) {
-  const v = await Promise.all([
-    "https://downloads.claude.ai/claude-code-releases", "https://cccodroid.net/claude-code", "https://dl.cccodroid.net/claude-code",
-  ].map(b => get(`${b}/${ch}`).then(r => r.text()).then(t => t.trim(), e => "取不到(" + e.message + ")")));
-  const same = v.every(x => x === v[0]);
-  if (!same) bad++;
-  console.log(`${same ? "✓" : "✗"} Claude Code ${ch}：官方 ${v[0]} / cccodroid.net ${v[1]} / dl ${v[2]}`);
-  if (same) for (const b of ["https://cccodroid.net/claude-code", "https://dl.cccodroid.net/claude-code"])
-    for (const f of ["manifest.json", "manifest.json.sig"])
-      await get(`${b}/${v[0]}/${f}`, "HEAD").catch(e => { bad++; console.log("✗", e.message); });
-}
+// agy：官方 manifest 只有一个（android_arm64），读它的 version / url / sha512 字段；
+// 本机装了 agy 就把已装版本和清单版本比一比（没装只报一声，不算错；已装的比清单旧只说明有更新，也不算错）
+const AGY_MANIFEST = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json";
+try {
+  const m = await (await get(AGY_MANIFEST)).json();
+  const ver = String(m.version || "").trim();
+  if (!ver || typeof m.url !== "string" || !m.url || typeof m.sha512 !== "string" || !m.sha512) throw new Error(`manifest 字段不全：version=${ver || "(空)"} url=${typeof m.url} sha512=${typeof m.sha512}`);
+  let installed = "";
+  try { installed = execFileSync("agy", ["--version"], { encoding: "utf8", timeout: 15000 }).trim().split(/\s+/).pop(); } catch { installed = ""; }
+  if (!installed) console.log(`✓ agy manifest：${ver}（sha512 ${m.sha512.slice(0, 12)}…；本机没装 agy，跳过已装版本比较）`);
+  else if (installed === ver) console.log(`✓ agy manifest：${ver}，已装版本一致`);
+  else console.log(`✓ agy manifest：${ver}，已装 ${installed}（和清单不一致：装的比清单旧就是有更新，反之是清单还没跟上）`);
+} catch (e) { bad++; console.log(`✗ agy manifest：${e.message}`); }
 
 for (const name of ["official", "community"]) {
   let comps;

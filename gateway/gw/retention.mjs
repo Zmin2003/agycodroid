@@ -2,7 +2,7 @@
 // 超期的会话记录连同 tool-results、file-history、子代理记录一起删，不进回收站（2.1.311 实测：-p、接口连不上也照删）。
 // 会话是用户的资产，不删就一直留着：
 //   · 用户级 ~/.claude/settings.json 没写这个键，网关启动时补成 RETENTION_DAYS（extensions.mjs 的 ensureSessionRetention）——管住终端里直接敲的 claude；
-//   · 网关每次起 claude 都经 --settings 带上（claude.mjs 的 settingsArgs）——项目目录里的 settings.json 写个 1 天会压过用户级的，
+//   · 网关每次起 agy 都先写一遍托管的 settings.json（agy.mjs 的 writeAgySettings）——项目目录里的 settings.json 写个 1 天会压过用户级的，
 //     --settings 的优先级比项目设置高，压得住（实测）。终端的包装脚本（android/assets/bin/claude）同理。
 // 用户自己写过合法的值就照用户的。claude 只收 ≥1 的整数，3650 只管十年，36500 实测 9000 天前的也留着。
 import path from "node:path";

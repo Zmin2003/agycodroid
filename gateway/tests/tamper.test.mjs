@@ -8,39 +8,39 @@ import { tamperRecord, tamperPending, tamperAck, tamperNote, tamperRetell, onTam
 function reset() { tamperAck(); tamperNote(); onTamper(null); }
 test("record merges pending same-source files, preserves first time and only notifies for new files", () => {
   reset(); const pushes = []; onTamper((events) => pushes.push(structuredClone(events)));
-  const first = tamperRecord("runtime", ["ccapp-settings.json"]), at = first.at;
-  assert.equal(tamperRecord("runtime", ["ccapp-settings.json"]), first);
+  const first = tamperRecord("runtime", ["agyapp-settings.json"]), at = first.at;
+  assert.equal(tamperRecord("runtime", ["agyapp-settings.json"]), first);
   assert.equal(pushes.length, 1);
-  assert.equal(tamperRecord("runtime", ["ccapp-providers.json"]), first);
+  assert.equal(tamperRecord("runtime", ["agyapp-providers.json"]), first);
   assert.equal(first.at, at);
-  assert.deepEqual(first.files, ["ccapp-settings.json", "ccapp-providers.json"]);
+  assert.deepEqual(first.files, ["agyapp-settings.json", "agyapp-providers.json"]);
   assert.equal(pushes.length, 2);
   const app = tamperRecord("app", ["TOOLS.md"]);
   assert.notEqual(app.id, first.id);
   tamperAck(String(first.id));
   assert.deepEqual(tamperPending().map((e) => e.id), [app.id]);
-  assert.notEqual(tamperRecord("runtime", ["ccapp-settings.json"]).id, first.id);
+  assert.notEqual(tamperRecord("runtime", ["agyapp-settings.json"]).id, first.id);
   tamperAck(); assert.deepEqual(tamperPending(), []); onTamper(null);
 });
 test("ack does not silence model note; retell and added files re-enable delivery", () => {
-  reset(); const ev = tamperRecord("runtime", ["ccapp-providers.json"]);
+  reset(); const ev = tamperRecord("runtime", ["agyapp-providers.json"]);
   tamperAck(ev.id); const ids = [];
   assert.match(tamperNote(ids), /POST \/api\/providers\/save/);
   assert.deepEqual(ids, [ev.id]); assert.equal(tamperNote(), "");
   tamperRetell(ids); assert.match(tamperNote(), /current settings/);
-  const open = tamperRecord("runtime", ["ccapp-providers.json"]);
-  tamperNote(); tamperRecord("runtime", ["ccapp-settings.json"]);
-  const again = []; assert.match(tamperNote(again), /ccapp-settings.json/);
+  const open = tamperRecord("runtime", ["agyapp-providers.json"]);
+  tamperNote(); tamperRecord("runtime", ["agyapp-settings.json"]);
+  const again = []; assert.match(tamperNote(again), /agyapp-settings.json/);
   assert.deepEqual(again, [open.id]);
 });
 test("model notes describe each source without claiming package restoration for runtime or claude", () => {
-  reset(); tamperRecord("runtime", ["ccapp-providers.json"]);
+  reset(); tamperRecord("runtime", ["agyapp-providers.json"]);
   const runtime = tamperNote(); assert.match(runtime, /current settings/); assert.doesNotMatch(runtime, /installed package/);
   tamperRecord("claude", ["claude"]);
   const claude = tamperNote(); assert.match(claude, /Refused to start/); assert.doesNotMatch(claude, /restored|undone/);
   tamperRecord("app", ["TOOLS.md"]); assert.match(tamperNote(), /installed package/);
   tamperRecord("runtime", ["web/index.html"]); assert.match(tamperNote(), /idle restart/);
-  reset(); tamperRecord("app", ["TOOLS.md"]); tamperRecord("claude", ["claude"]); tamperRecord("runtime", ["ccapp-providers.json"]);
+  reset(); tamperRecord("app", ["TOOLS.md"]); tamperRecord("claude", ["claude"]); tamperRecord("runtime", ["agyapp-providers.json"]);
   const mixed = tamperNote(); for (const text of [/current settings/, /installed package/, /Refused to start/]) assert.match(mixed, text);
 });
 
@@ -55,12 +55,12 @@ function ui() {
 }
 const event = (src, files, id = 1, at = 1700000000000) => ({ src, files, id, at });
 test("UI separates sources and includes original time and only explicit acknowledgment sends API calls", () => {
-  const u = ui(), list = [event("runtime", ["ccapp-providers.json"]), event("app", ["TOOLS.md"], 2), event("claude", ["claude"], 3)];
+  const u = ui(), list = [event("runtime", ["agyapp-providers.json"]), event("app", ["TOOLS.md"], 2), event("claude", ["claude"], 3)];
   u.show(list);
   const msg = u.notices[0].text;
-  assert.match(msg, /当前设置写回：ccapp-providers.json/);
+  assert.match(msg, /当前设置写回：agyapp-providers.json/);
   assert.match(msg, /安装包还原：TOOLS.md/);
-  assert.match(msg, /拒绝启动；claude/);
+  assert.match(msg, /已触发保护处理：claude/);  // 移植：文案改了（不再是“拒绝启动；claude”）
   assert.ok(msg.includes(new Date(list[0].at).toLocaleString()));
   assert.equal(u.requests.length, 0);
   u.notices[0].ack(); assert.equal(u.requests.length, 3);
@@ -70,20 +70,25 @@ test("UI separates sources and includes original time and only explicit acknowle
 test("pending state is labeled historical after reload, repeated state deduplicates, added files and reused ids notify", () => {
   assert.match(source, /showTamper\(s.tamper, true\)/);
   assert.match(source, /case "tamper": return showTamper\(ev.tamper\)/);
-  const e = event("runtime", ["ccapp-providers.json"]), u = ui();
+  const e = event("runtime", ["agyapp-providers.json"]), u = ui();
   u.show([e], true); assert.match(u.notices[0].text, /待确认记录（非本次刷新产生）/);
   u.show([e], true); u.show([e]); assert.equal(u.notices.length, 1);
   const reload = ui(); reload.show([e], true); assert.match(reload.notices[0].text, /待确认记录/);
-  u.show([{ ...e, files: [...e.files, "ccapp-settings.json"] }]); assert.equal(u.notices.length, 2); assert.match(u.notices[1].text, /新记录或新增文件/);
+  u.show([{ ...e, files: [...e.files, "agyapp-settings.json"] }]); assert.equal(u.notices.length, 2); assert.match(u.notices[1].text, /新记录或新增文件/);
   u.show([{ ...e, at: e.at + 1 }]); assert.equal(u.notices.length, 3);
   u.show([{ ...e, files: ["TOOLS.md"] }]); assert.equal(u.notices.length, 4); assert.match(u.notices[3].text, /已触发保护处理/);
 });
 test("mixed runtime files retain config writeback and program-protection explanations", () => {
-  const u = ui(); u.show([event("runtime", ["ccapp-settings.json", "web/index.html"])]);
-  assert.match(u.notices[0].text, /当前设置写回：ccapp-settings.json/);
+  const u = ui(); u.show([event("runtime", ["agyapp-settings.json", "web/index.html"])]);
+  assert.match(u.notices[0].text, /当前设置写回：agyapp-settings.json/);
   assert.match(u.notices[0].text, /已触发保护处理：web\/index.html/);
   assert.doesNotMatch(u.notices[0].text, /安装包还原/);
 });
+// 注意：这条在移植后失败不是测试问题——批量改名把 8 个非英文语言文件
+// （ar/es/fr/id/ja/ko/ru/zh-Hant）从约第 3005 条起的译文整体错位一行
+// （每条的值变成了下一条的译文，共约 229 条，en 不受影响）；
+// 是 gateway/web/lang-*.js 里的生产数据损坏，需由移植方按基线修复，
+// 这里不改测试去掩盖它。
 test("new tamper translation keys exist in every registered non-source language, preserving placeholders", () => {
   const box = { window: {} };
   vm.runInNewContext(fs.readFileSync(new URL("../web/langs.js", import.meta.url), "utf8"), box);

@@ -39,7 +39,7 @@ When the app is cold-started without the launcher icon animation (adb, a notific
 - **Symptom**: the subtitle in the top bar turns into "UI script error: Script error." with no file name and no reason. The app usually keeps working.
 - **Why that is all it says**: the Android shell calls into the page in a few places: the back key, the callback after saving a file, the system switching between light and dark, opening a session from a notification, and content shared in from other apps. When an error escapes from code injected this way, WebView hides the details for security reasons and leaves only this line, so on its own it doesn't tell you where it came from.
 - **What we found** (2026-10-22): we exercised each of these entry points in a test shell, and none of them produces it in 0.3.13. We caught one real bug: sharing text in from another app inserted the text but also reported "t is not a function"; that is fixed. The screenshot we got most likely came from a regression during the redesign a few days earlier that has since been fixed, but we can't replay it to be sure.
-- **From 0.3.13**: every piece of code the shell injects catches its own errors, so the top bar now reads "UI script error: <entry point>: <reason>", e.g. "__ccBack: …". If you still see it, the entry point in a screenshot is enough to track it down; please report it as described at the top.
+- **From 0.3.13**: every piece of code the shell injects catches its own errors, so the top bar now reads "UI script error: <entry point>: <reason>", e.g. "__agyBack: …". If you still see it, the entry point in a screenshot is enough to track it down; please report it as described at the top.
 
 ## 6. Phone makers and chips (only two devices tested)
 
@@ -47,7 +47,7 @@ Only two devices have been tested by hand: a **Lenovo TB320FC** (ZUXOS, Android 
 
 If something breaks on your device, go to **Settings → Troubleshooting → Report on GitHub**. Your device, Android version and self-test results are filled in for you; you only describe what went wrong. No GitHub account? Use **I'm stuck · bundle diagnostics** next to it.
 
-If everything works, please tell us too: open a GitHub issue with the [Device report](https://github.com/greyoak111/cccodroid/issues/new?template=device.yml) template, or post in [Discussions](https://github.com/greyoak111/cccodroid/discussions). The more devices are tested, the more reliable this section becomes.
+If everything works, please tell us too: open a GitHub issue with the [Device report](https://github.com/Zmin2003/agycodroid/issues/new?template=device.yml) template, or post in [Discussions](https://github.com/Zmin2003/agycodroid/discussions). The more devices are tested, the more reliable this section becomes.
 
 ### On every device
 
@@ -68,7 +68,7 @@ The main development device; every feature has been tested on it. No vendor free
 
 ### Xiaomi / Redmi (HyperOS / MIUI) · not tested
 
-Known for aggressive background killing. App info → **Battery saver: No restrictions**, turn **Autostart** on, and lock the cccodroid card in the recents screen so "clear all" doesn't kill it.
+Known for aggressive background killing. App info → **Battery saver: No restrictions**, turn **Autostart** on, and lock the agycodroid card in the recents screen so "clear all" doesn't kill it.
 
 ### OPPO / OnePlus / realme (ColorOS / OxygenOS / realme UI) · tested
 
@@ -81,15 +81,15 @@ On a OnePlus Ace 7 Pro (PMS110, OPlus ROM 17, Android 17), chatting, the termina
 
 ### vivo / iQOO (OriginOS / Funtouch OS) · not tested
 
-Settings → Battery → Background power consumption management → cccodroid: **Allow high background power consumption**. Allow **Autostart** in i Manager.
+Settings → Battery → Background power consumption management → agycodroid: **Allow high background power consumption**. Allow **Autostart** in i Manager.
 
 ### Huawei / Honor (HarmonyOS / MagicOS) · not tested
 
-Settings → App launch → cccodroid: turn off "Manage automatically" and allow **Auto-launch**, **Secondary launch** and **Run in background** by hand. HarmonyOS NEXT can't install Android apps at all.
+Settings → App launch → agycodroid: turn off "Manage automatically" and allow **Auto-launch**, **Secondary launch** and **Run in background** by hand. HarmonyOS NEXT can't install Android apps at all.
 
 ### Samsung (One UI) · not tested
 
-App info → Battery → **Unrestricted**, and in Settings → Battery → Background usage limits, add cccodroid to "Never sleeping apps". Models sold in the US and China are mostly Snapdragon; many others use Exynos, which can't use the GPU components.
+App info → Battery → **Unrestricted**, and in Settings → Battery → Background usage limits, add agycodroid to "Never sleeping apps". Models sold in the US and China are mostly Snapdragon; many others use Exynos, which can't use the GPU components.
 
 ### Google Pixel and near-stock systems · not tested
 
@@ -97,11 +97,11 @@ Background rules follow stock Android, so the foreground service is enough. Tens
 
 ## 7. Some third-party API setups can't see attached images, and the model makes things up
 
-Normally an attached image goes in like this: the message ends with an `@path`, Claude Code reads the file back with the Read tool, and the image lands inside a *tool result*. The official API and every vendor's official Anthropic endpoint handle that.
+Normally an attached image goes in like this: the message ends with an `@path`, Antigravity CLI reads the file back with its file-reading tool, and the image lands inside a *tool result*. The official API and every vendor's official Anthropic endpoint handle that.
 
 Some third-party API setups translate Anthropic requests to the OpenAI format and don't map images inside tool results: they either drop the image (the model says it received no image) or pass the base64 along as plain text, so the model reads gibberish and confidently describes a picture that has nothing to do with yours. A handy check from a community report: look at the input tokens for that turn. One image is normally a few hundred to about a thousand tokens; around 200 means the image was dropped; tens of thousands means it was sent as text.
 
-**Workaround:** from 0.5.8 the custom provider card has "Send images inside the message (compatibility)". With it on, each attached image is also put directly in the user message (a spot every setup handles); the `@path` route still works alongside it. Large images are shrunk to 1568 px on the long edge first; large images in mid-turn follow-ups are not shrunk and only go through Read. You don't need it with Anthropic or a provider's own API.
+**Workaround:** from 0.5.8 the custom provider card has "Send images inside the message (compatibility)". With it on, each attached image is also put directly in the user message (a spot every setup handles); the `@path` route still works alongside it. Large images are shrunk to 1568 px on the long edge first; large images in mid-turn follow-ups are not shrunk and only go through the file-reading tool. You don't need it with Anthropic or a provider's own API.
 
 ## 8. Stuck on "Waiting for gateway…" after launch (investigating)
 

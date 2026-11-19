@@ -5,7 +5,7 @@
 // 没记过的 sdk-cli 会话不藏，自动归进「杂项」：侧栏不出现，「对话」页杂项组里看得到、能一键清；
 // 认错了用户点「移出杂项」，以用户为准（archive 的 miscBy=user），以后不再自动归。
 //
-// 存储：home/ccapp-managed-sessions.json  { since, ids: { 会话号: 记下的时刻 } }
+// 存储：home/agyapp-managed-sessions.json  { since, ids: { 会话号: 记下的时刻 } }
 // since：第一次运行到这一版时的时刻。比它早的会话一律当应用会话——升级不把历史会话藏起来；
 // 这之后才出现的、又没记过的会话，才是外部/无头会话。
 import path from "node:path";
@@ -13,7 +13,7 @@ import { CFG, log } from "./config.mjs";
 import { isObj, loadState, saveState } from "./statefile.mjs";
 import { onShutdown } from "./crashguard.mjs";
 
-const FILE = path.join(CFG.home, "ccapp-managed-sessions.json");
+const FILE = path.join(CFG.home, "agyapp-managed-sessions.json");
 const MAX_IDS = 5000;
 const SID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 

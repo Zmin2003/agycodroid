@@ -1,4 +1,4 @@
-// ccapp-sched-next 的落盘（0.6.9 审计 13-11）：写失败不能先记账，下一次保存要补写
+// agyapp-sched-next 的落盘（0.6.9 审计 13-11）：写失败不能先记账，下一次保存要补写
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs 就在这里拦下
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,8 +7,8 @@ import path from "node:path";
 import { CFG } from "../gw/config.mjs";
 import { _schedForTest } from "../gw/sched.mjs";
 
-const NEXT_FILE = path.join(CFG.home, "ccapp-sched-next");
-const SCHED_FILE = path.join(CFG.home, "ccapp-sched.json");
+const NEXT_FILE = path.join(CFG.home, "agyapp-sched-next");
+const SCHED_FILE = path.join(CFG.home, "agyapp-sched.json");
 
 test("写失败不记账，下一次 tick 的保存会补写", () => {
   const at = Date.now() + 3600000;

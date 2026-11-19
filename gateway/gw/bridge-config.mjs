@@ -272,10 +272,10 @@ function defaultConnection(model) {
   const home = HOME_ROOT(), target = path.join(home, ".local", "share", "ccr-bridge-kit");
   try {
     for (const dir of [home, path.join(home, ".local"), path.join(home, ".local", "share"), target,
-      path.join(home, ".cccodroid"), path.join(home, ".cccodroid", "services")]) {
+      path.join(home, ".agycodroid"), path.join(home, ".agycodroid", "services")]) {
       if (fs.realpathSync(dir) !== path.resolve(dir)) throw failure("RUNTIME_CONFLICT");
     }
-    const registration = regularJson(path.join(home, ".cccodroid", "services", ID + ".json"), 4096);
+    const registration = regularJson(path.join(home, ".agycodroid", "services", ID + ".json"), 4096);
     const connection = regularJson(path.join(target, "connection.json"), CONFIG_MAX_BYTES);
     if (!object(registration) || registration.schema !== 1 || registration.id !== ID || !samePlace(registration.runtimeDir, target) ||
         typeof registration.instanceId !== "string" || !/^[0-9a-f]{32}$/.test(registration.instanceId) ||
@@ -420,7 +420,7 @@ export async function handleBridgeModels(req, res, signal) {
   }
 }
 
-const providerStateFile = () => path.join(HOME_ROOT(), ".cccodroid", "services", "openai-bridge-app.json");
+const providerStateFile = () => path.join(HOME_ROOT(), ".agycodroid", "services", "openai-bridge-app.json");
 
 export function clearBridgeConfigMapping(id) {
   if (id !== ID) return false;
@@ -428,7 +428,7 @@ export function clearBridgeConfigMapping(id) {
   try {
     fd = fs.openSync(HOME_ROOT(), fs.constants.O_RDONLY | fs.constants.O_DIRECTORY);
     // 只解开本桥的非秘密映射；不跟随父目录链接，也不删除保留的 provider 或运行配置。
-    for (const name of [".cccodroid", "services"]) {
+    for (const name of [".agycodroid", "services"]) {
       const next = fs.openSync(`/proc/self/fd/${fd}/${name}`, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
       fs.closeSync(fd); fd = next;
     }
@@ -607,7 +607,7 @@ function repairFile(file, max) {
 function repairSnapshot() {
   const home = HOME_ROOT(), target = path.join(home, ".local/share/ccr-bridge-kit"), entry = componentEntry();
   const directories = [home, path.join(home, ".local"), path.join(home, ".local/share"), target,
-    path.join(home, ".cccodroid"), path.join(home, ".cccodroid/services"), path.join(target, "runtime-home"),
+    path.join(home, ".agycodroid"), path.join(home, ".agycodroid/services"), path.join(target, "runtime-home"),
     path.join(target, "runtime-home/.claude-code-router")];
   const identities = directories.map(dir => {
     const st = fs.lstatSync(dir, { bigint: true });
@@ -617,8 +617,8 @@ function repairSnapshot() {
   // 只绑定文件身份/哈希，不把路径、Key 或哈希投影到 HTTP；运行配置由固定组件自己只读校验。
   const files = [[path.join(target, ".ccr-bridge-kit.json"), 65536], [path.join(target, "connection.json"), CONFIG_MAX_BYTES],
     [path.join(target, "runtime-home/.claude-code-router/config.json"), CONFIG_MAX_BYTES],
-    [path.join(home, ".cccodroid/services/openai-bridge.json"), 4096], [providerStateFile(), 4096],
-    [path.join(home, "ccapp-providers.json"), 4 << 20]];
+    [path.join(home, ".agycodroid/services/openai-bridge.json"), 4096], [providerStateFile(), 4096],
+    [path.join(home, "agyapp-providers.json"), 4 << 20]];
   const protectedFiles = files.map(([file, max]) => repairFile(file, max));
   for (const file of [path.join(target, "disabled"), path.join(target, "runtime-home/.claude-code-router/recovery.failed")]) {
     try { fs.lstatSync(file); throw repairFailure(); } catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -636,7 +636,7 @@ async function repairCandidate() {
   if (!view.configured || view.localError || !view.localReady) throw repairFailure();
   assertGuiOwnership();
   const home = HOME_ROOT(), target = path.join(home, ".local/share/ccr-bridge-kit"), connection = defaultConnection(view.model);
-  const registration = regularJson(path.join(home, ".cccodroid/services/openai-bridge.json"), 4096);
+  const registration = regularJson(path.join(home, ".agycodroid/services/openai-bridge.json"), 4096);
   const manifest = regularJson(path.join(target, ".ccr-bridge-kit.json"), 65536);
   if (manifest.service?.schema !== 1 || !samePlace(manifest.service.home, home) || manifest.service.instanceId !== registration.instanceId ||
       !samePlace(manifest.componentEntry, componentEntry()) || !samePlace(manifest.settings, path.join(home, ".claude/settings.json"))) throw repairFailure();
@@ -650,7 +650,7 @@ async function repairCandidate() {
       provider.baseUrl !== connection.baseUrl || provider.apiKey !== connection.apiKey) throw repairFailure();
   const fingerprint = localFingerprint(connection);
   if (state.fingerprint !== fingerprint && state.pending?.fingerprint !== fingerprint) throw repairFailure();
-  const disk = regularJson(path.join(home, "ccapp-providers.json"), 4 << 20), raw = disk.providers?.[state.providerId];
+  const disk = regularJson(path.join(home, "agyapp-providers.json"), 4 << 20), raw = disk.providers?.[state.providerId];
   if (!providersDiskMatches(disk) || !object(raw) ||
       Object.entries(raw).some(([key, value]) => JSON.stringify(provider[key]) !== JSON.stringify(value))) throw repairFailure();
   if (repairBusy(state.providerId, connection.baseUrl)) throw repairFailure("BUSY");

@@ -1,10 +1,10 @@
-# Contributing to cccodroid
+# Contributing to agycodroid
 
 English | [中文](CONTRIBUTING.zh-CN.md)
 
-cccodroid is maintained by one person. Android devices vary wildly, and one person can't test them all or write everything, so help is very welcome. The ways to help are listed roughly from easiest to most involved; pick whatever suits you.
+agycodroid is maintained by one person. Android devices vary wildly, and one person can't test them all or write everything, so help is very welcome. The ways to help are listed roughly from easiest to most involved; pick whatever suits you.
 
-Feel free to say hello first in [GitHub Discussions](https://github.com/greyoak111/cccodroid/discussions) (English or Chinese), on [Discord](https://discord.gg/jE6KW8kwpe), or in the QQ group 1062538743 (mostly Chinese).
+Feel free to say hello first in [GitHub Discussions](https://github.com/Zmin2003/agycodroid/discussions) (English or Chinese), on [Discord](https://discord.gg/jE6KW8kwpe), or in the QQ group 1062538743 (mostly Chinese).
 
 ---
 
@@ -38,7 +38,7 @@ Every answered question is one less person who gives up.
 
 ## Recipes: optional components
 
-Optional components (Python, Blender, language runtimes…) live in the separate [cccodroid-components](https://github.com/greyoak111/cccodroid-components) repository. Each component is a recipe; CI builds, tests and signs it, so you don't need to fight with your own phone. It's the easiest place to start writing code.
+Optional components (Python, Blender, language runtimes…) live in the separate [cccodroid-components](https://github.com/greyoak111/cccodroid-components) repository (upstream — agycodroid uses the same signed component index). Each component is a recipe; CI builds, tests and signs it, so you don't need to fight with your own phone. It's the easiest place to start writing code.
 
 ---
 
@@ -49,9 +49,9 @@ Optional components (Python, Blender, language runtimes…) live in the separate
 | Where | What |
 |---|---|
 | `android/java/` | Android shell (Java): setup, updates, notifications, Shizuku, WebView |
-| `android/assets/bin/`, `android/assets/scripts/` | **Sources** of the terminal helpers and scripts (`pkg`, the Claude Code installer…) |
+| `android/assets/bin/`, `android/assets/scripts/` | **Sources** of the terminal helpers and scripts (`pkg`, the Antigravity CLI installer…) |
 | `android/native/` | A few small native programs (pseudo-terminal, seccomp fallback) |
-| `gateway/server.mjs`, `gateway/gw/` | The gateway, Node.js built-in modules only. `server.mjs` dispatches requests and starts up; each feature (sessions, files, git, components…) lives in its own module under `gw/` — the header of `server.mjs` lists them. It runs claude and serves sessions, files, settings and every other API |
+| `gateway/server.mjs`, `gateway/gw/` | The gateway, Node.js built-in modules only. `server.mjs` dispatches requests and starts up; each feature (sessions, files, git, components…) lives in its own module under `gw/` — the header of `server.mjs` lists them. It runs agy and serves sessions, files, settings and every other API |
 | `gateway/web/` | The UI: plain JS and CSS, **no build step** |
 | `i18n/` | Translations |
 | `devkit/` | Build script for the toolchain (assembled from the official Termux repositories) |
@@ -77,12 +77,12 @@ Pull-request builds are signed with a throwaway test key, not the release key. Y
 
 ### Compliance
 
-The project can only last if it follows Anthropic's terms (see [Terms and compliance in the README](README.md#terms-and-compliance)). These changes won't be accepted:
+The project can only last if it follows Google's terms for Antigravity CLI (see [Terms and compliance in the README](README.md#terms-and-compliance)). These changes won't be accepted:
 
-- modifying the Claude Code binary or reading its credentials file;
-- sharing, relaying or reselling Claude accounts or usage;
-- unattended or scheduled runs of Claude;
-- using Claude or Anthropic trademarks in names or icons.
+- modifying the Antigravity CLI binary or reading its credentials file;
+- sharing, relaying or reselling Antigravity accounts or usage;
+- unattended or scheduled runs of Antigravity;
+- using Antigravity or Google trademarks in names or icons.
 
 ### License
 

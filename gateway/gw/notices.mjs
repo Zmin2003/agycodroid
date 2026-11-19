@@ -4,7 +4,7 @@
 // 官网生成器验过签才镜像到 https://cccodroid.net/notices.json。这里先取官网、取不到取 GitHub，
 // 两边都只认签名对得上的那份 —— 官网被人改了也推不出假通知。
 // 内容只当纯文本显示；链接只认 https。按 App 版本范围（minVer / maxVer）和有效期（from / until）筛选，
-// 「知道了」记在 home/.config/cccodroid/notices-seen.json，同一条不再显示。
+// 「知道了」记在 home/.config/agycodroid/notices-seen.json，同一条不再显示。
 // 不发任何本机信息：就是一次普通的 GET，和检查更新一样。
 import fs from "node:fs";
 import path from "node:path";
@@ -13,10 +13,10 @@ import { CFG, LIVE, PREFIX, log } from "./config.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { privCall } from "./usage.mjs";
 
-const SOURCES = (process.env.CCAPP_NOTICES_URL ? [process.env.CCAPP_NOTICES_URL] : [])
+const SOURCES = (process.env.AGAPP_NOTICES_URL ? [process.env.AGAPP_NOTICES_URL] : [])
   .concat(["https://cccodroid.net/notices.json", "https://raw.githubusercontent.com/greyoak111/cccodroid/main/notices/notices.json"]);
-// 与组件索引同一把公钥（gw/components.mjs）；Claude Code 验证记录（gw/ccverified.mjs）也用它。测试（CCAPP_TEST=1）时可换成测试钥匙
-export const PUBKEY = crypto.createPublicKey(!LIVE && process.env.CCAPP_TEST_PUBKEY ? process.env.CCAPP_TEST_PUBKEY :
+// 与组件索引同一把公钥（gw/components.mjs）；Antigravity CLI 验证记录（gw/ccverified.mjs）也用它。测试（AGAPP_TEST=1）时可换成测试钥匙
+export const PUBKEY = crypto.createPublicKey(!LIVE && process.env.AGAPP_TEST_PUBKEY ? process.env.AGAPP_TEST_PUBKEY :
   "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=\n-----END PUBLIC KEY-----\n");
 const EVERY = 3 * 3600e3;
 /** 读回验过签才存的那份：正文原样字节 + 旁边的 .sig；签名对不上、缺 .sig（旧版存的）都当没有，等下次联网重取 */
@@ -33,8 +33,8 @@ export function saveSigned(file, body, sig) {
   fs.writeFileSync(file + ".sig.tmp", sig); fs.renameSync(file + ".sig.tmp", file + ".sig");
   fs.writeFileSync(file + ".tmp", body); fs.renameSync(file + ".tmp", file);
 }
-const CACHE = path.join(CFG.home, ".cache", "cccodroid", "notices.json");
-const SEEN = path.join(CFG.home, ".config", "cccodroid", "notices-seen.json");
+const CACHE = path.join(CFG.home, ".cache", "agycodroid", "notices.json");
+const SEEN = path.join(CFG.home, ".config", "agycodroid", "notices-seen.json");
 
 let data = null, fetchedAt = 0, lastError = "", appVer = "", busy = null;
 // 磁盘上那份连同签名一起存（CACHE.sig），读回来再验一遍：同 uid 的程序能写这个文件，没签名的不认（审查 11-05 安全 1）

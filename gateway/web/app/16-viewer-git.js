@@ -1,5 +1,5 @@
   // ── 文件查看 / 编辑器 ──────────────────────────────────────────────
-  // 文本 / 代码：直接改，保存时带上打开那一刻的 mtime —— Claude 在这期间改过就先问，别互相覆盖。
+  // 文本 / 代码：直接改，保存时带上打开那一刻的 mtime —— Antigravity 在这期间改过就先问，别互相覆盖。
   // Markdown：默认渲染，可切到编辑。图片：点一下在「适应屏幕」和「原始大小」之间切。
   // PDF：pdf.js（按需加载），页面进视野才画、离远了就释放，几百页的也不会把 WebView 撑爆。
   // ── git 面板：改动 / 历史 / 逐行对比 / 提交 / 撤销 ──────────────────────
@@ -91,7 +91,7 @@
   }
 
   // ── 同步栏：当前分支 → 上游，抓取 / 拉取 / 推送 ──
-  // 拉取只做快进；分叉了就停下说清楚，可以交给 Claude 合并。推送第一次会顺便建立上游关联
+  // 拉取只做快进；分叉了就停下说清楚，可以交给 Antigravity 合并。推送第一次会顺便建立上游关联
   // 在忙的同步按仓库记：A 的推送还在跑时打开 B，B 的按钮照常可用，A 的回执也只落在 A 上（#177-2）
   const GIT_BUSY = new Map();   // dir → fetch / pull / push
   function gitSyncBar() {
@@ -123,9 +123,9 @@
       toast(tag(r.message || t("完成")));
     } catch (err) {
       const m = tag(err.message || "");
-      // 分叉：交给 Claude 合并（它会先说明打算怎么做，冲突时会停下来问）。仓库用发起时的，不读当前面板
+      // 分叉：交给 Antigravity 合并（它会先说明打算怎么做，冲突时会停下来问）。仓库用发起时的，不读当前面板
       if (a === "pull" && err.body && err.body.code === "diverged") {
-        if (confirm(m + "\n\n" + t("让 Claude 帮你把远端的提交合并进来？"))) {
+        if (confirm(m + "\n\n" + t("让 Antigravity 帮你把远端的提交合并进来？"))) {
           GIT_BUSY.delete(dir);
           if (GIT.dir === dir) closeGit();
           send(t("{root} 的当前分支和远端分叉了。请先 git fetch，说明两边各有哪些提交，然后把远端的提交合并进来（能变基就变基，有冲突先停下来问我），最后告诉我结果，不要推送。", { root: root || dir }));
@@ -169,7 +169,7 @@
         <textarea id="git-msg" placeholder="${esc(t("提交说明：这次改了什么（必填）"))}"></textarea>
         <div id="git-id" class="hidden"></div>
         <div class="row-actions"><button class="btn sm" id="git-do" ${n ? "" : "disabled"}>${t("提交选中的 {n} 个文件", { n })}</button>
-          <button class="btn ghost sm" id="git-ask">${t("让 Claude 写说明并提交")}</button></div>
+          <button class="btn ghost sm" id="git-ask">${t("让 Antigravity 写说明并提交")}</button></div>
       </div>`;
     const msgEl = box.querySelector("#git-msg");
     msgEl.value = GIT.msg || ""; GIT.msgRoot = GIT.dir;
@@ -513,7 +513,7 @@
     if (a === "save") return vwSave(false);
     if (a === "md") { VW.text = vwText(); if (isMd(VW.path)) localStorage.setItem("cc.vw.mdmode", "md"); return vwRenderText("md"); }
     if (a === "edit" && VW.mode === "html") {
-      // 从预览切回源码：预览期间文件可能被 Claude 改过，重新读
+      // 从预览切回源码：预览期间文件可能被 Antigravity 改过，重新读
       localStorage.setItem("cc.vw.htmlmode", "edit");
       vwHtmlStop();
       return vwLoadText("edit");
@@ -1034,7 +1034,7 @@
     // allow-forms / allow-popups：本地网页的表单提交（form-action 'self' 已放行同源）和 target=_blank 以前在沙箱里
     // 一点反应都没有（195-C.9）。弹窗仍受预览 CSP 约束，不会变成逃出沙箱的新窗口
     $("vw-body").innerHTML = `<iframe class="vw-html" src="${esc(pvSrc())}" sandbox="allow-scripts allow-same-origin allow-modals allow-downloads allow-pointer-lock allow-forms allow-popups" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe>`;
-    // Claude 一边改、你一边看：每 1.5 秒看一眼修改时间，变了就重新载入
+    // Antigravity 一边改、你一边看：每 1.5 秒看一眼修改时间，变了就重新载入
     const h = VW.pvTimer = setInterval(async () => {
       if (n !== VW.pvSeq) return clearInterval(h);   // 已经不是当前这次预览：只停自己，别拆后来的
       if (viewerEl.classList.contains("hidden") || VW.mode !== "html" || VW.path !== p) return vwHtmlStop();
@@ -1074,7 +1074,7 @@
     toast(t("已放进输入框，接着写要怎么改"));
   }
   // 浏览器窗格（原生 WebView）里选中的：原生侧轮询取到后调这里，参数是 JSON 文本
-  window.__ccPickIn = (json) => {
+  window.__agyPickIn = (json) => {
     let d; try { d = JSON.parse(String(json)); } catch { return; }
     if (!d || typeof d !== "object" || d.cc !== "picked") return;
     pickInsert(String(d.url || "").slice(0, 300), d);
@@ -1092,7 +1092,7 @@
     pvNative();
   }
   // 不联网（默认）：预览页能读它所在文件夹里的文件，网关给它加了只许连本机的 CSP，壳也在原生层拦外网（审查 v0513b 中-5）
-  function pvNative() { try { window.CCApp && CCApp.previewNet && CCApp.previewNet(!!(VW.pv && !VW.pv.net)); } catch {} }
+  function pvNative() { try { window.AGApp && AGApp.previewNet && AGApp.previewNet(!!(VW.pv && !VW.pv.net)); } catch {} }
   async function pvBlockedCheck() {
     const pv = VW.pv;
     let s; try { s = await api("/api/preview/state?cap=" + encodeURIComponent(pv.cap)); } catch { return; }
@@ -1327,7 +1327,7 @@
         if (confirm(t("原文件已经不在了（被改名、移动或删除）。\n确定：按原来的名字另存一份\n取消：先不存，修改留在编辑器里"))) return vwSave(true);
         return;
       }
-      if (confirm(t("文件在你打开之后被改过了（可能是 Claude 改的）。\n确定：用你的版本覆盖\n取消：放弃你的修改，重新载入"))) return vwSave(true);
+      if (confirm(t("文件在你打开之后被改过了（可能是 Antigravity 改的）。\n确定：用你的版本覆盖\n取消：放弃你的修改，重新载入"))) return vwSave(true);
       VW.dirty = false;
       draftClear();
       return vwLoadText("edit");

@@ -10,9 +10,9 @@ const { gwGlibcBad, gwRuntimeBlocked } = await import("../gw/gwpin.mjs");
 const h = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
 test("gwpin：钉子里的文件都对上才放行；改过、少了、多出来的、换成软链的都算对不上", () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "gwglibc-"));
-  const prev = PATHS.claudeLib;
-  PATHS.claudeLib = dir;
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "gwglibc-"));
+  const prev = PATHS.gwGlibcLib;
+  PATHS.gwGlibcLib = dir;
   try {
     fs.writeFileSync(path.join(dir, "libc.so.6"), "libc v1");
     fs.writeFileSync(path.join(dir, "ld-linux-aarch64.so.1"), "ld v1");
@@ -39,9 +39,9 @@ test("gwpin：钉子里的文件都对上才放行；改过、少了、多出来
     fs.rmSync(elsewhere);
     // 网关没用自己那份（开发版退回 $PREFIX、开发布局）：不核
     assert.deepEqual(gwGlibcBad({ pin: null, dir }), []);
-    PATHS.claudeLib = "/elsewhere";
+    PATHS.gwGlibcLib = "/elsewhere";
     assert.deepEqual(gwGlibcBad({ pin, dir }), []);
-  } finally { PATHS.claudeLib = prev; fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { PATHS.gwGlibcLib = prev; fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("gwpin：测试环境没交钉子，起 claude 前的检查放行", () => {

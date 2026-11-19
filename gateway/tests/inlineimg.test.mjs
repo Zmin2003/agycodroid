@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const dir = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "img-"));
+const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "img-"));
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
 const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]);
 const put = (n, b) => { const p = path.join(dir, n); fs.writeFileSync(p, b); return p; };
@@ -65,17 +65,17 @@ test("历史：原话里已有 @图片路径就不再补一行 [图片]；没有
 });
 
 test("接口设置：inlineImages 存得上、关掉就删、界面视图带出来", async () => {
+  // 移植：自定义厂商已删，inlineImages 改存在 gemini 预置厂商上
   const http = await import("node:http");
   const { routeProviders } = await import("../gw/providers.mjs");
   const srv = http.createServer(async (req, res) => { const u = new URL(req.url, "http://x"); await routeProviders(req, res, u, u.pathname); });
   await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
   const post = async (p, body) => (await fetch(`http://127.0.0.1:${srv.address().port}${p}`, { method: "POST", body: JSON.stringify(body) })).json();
   try {
-    const r = await post("/api/providers/save", { label: "兼容测", baseUrl: "https://api.example.com", defaultModel: "m", inlineImages: true });
+    const r = await post("/api/providers/save", { id: "gemini", inlineImages: true });
     assert.equal(r.provider.inlineImages, true);
-    const r2 = await post("/api/providers/save", { id: r.id, inlineImages: false });
+    const r2 = await post("/api/providers/save", { id: "gemini", inlineImages: false });
     assert.equal(r2.provider.inlineImages, false);
-    await post("/api/providers/delete", { id: r.id });
   } finally { srv.close(); }
 });
 

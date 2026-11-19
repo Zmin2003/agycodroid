@@ -219,7 +219,7 @@
         b.textContent = img.classList.contains("hidden") ? t("二维码") : t("收起二维码");
       } else if (a) {
         e.preventDefault();
-        if (window.CCApp && CCApp.openUrl) CCApp.openUrl(a.href); else window.open(a.href, "_blank", "noopener");
+        if (window.AGApp && AGApp.openUrl) AGApp.openUrl(a.href); else window.open(a.href, "_blank", "noopener");
       }
     });
   }
@@ -437,7 +437,7 @@
     const u = a.getAttribute("href") || "";
     if (!/^https?:\/\//.test(u)) return;
     e.preventDefault();
-    if (window.CCApp && CCApp.openUrl) CCApp.openUrl(u); else window.open(u, "_blank", "noopener");
+    if (window.AGApp && AGApp.openUrl) AGApp.openUrl(u); else window.open(u, "_blank", "noopener");
   });
   $("cl-toc").addEventListener("click", (e) => {
     const b = e.target.closest("[data-sec]"); if (!b) return;

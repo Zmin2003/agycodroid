@@ -8,13 +8,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { _setSealed } from "../gw/edition.mjs";
 
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "f5-"));
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "f5-"));
 const cli = path.join(root, "fake-cli.sh"), argLog = path.join(root, "argv.log");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 let exitCode = 0;
 const writeCli = () => fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done > '${argLog}'\nprintf '\\n' >> '${argLog}'\nexit ${exitCode}\n`, { mode: 0o700 });
-const prev = { claude: PATHS.claude, loader: PATHS.loader, claudeLoader: PATHS.claudeLoader };
-PATHS.claude = process.execPath; PATHS.loader = PATHS.claudeLoader = cli;
+const prev = { agy: PATHS.agy };
+PATHS.agy = cli;
 const { _extForTest, SKILLS_DIR } = await import("../gw/extensions.mjs");
 const { sealPrepare, sealCleanup } = await import("../gw/seal.mjs");
 const { extOff, EXT_OFF_FILE } = await import("../gw/extoff.mjs");

@@ -9,7 +9,7 @@ import { APP } from "./appfiles.mjs";
 
 // ── HTML 预览 ─────────────────────────────────────────────────────────
 // 查看器里渲染 HTML：另起一个只读的小服务（随机端口，地址用 localhost），和界面（127.0.0.1:端口）不同站点——
-// 预览页里的脚本拿不到界面的 Cookie，也过不了 /api 的 Origin 校验，Claude 写的网页随便跑也碰不到网关。
+// 预览页里的脚本拿不到界面的 Cookie，也过不了 /api 的 Origin 校验，Antigravity 写的网页随便跑也碰不到网关。
 // 每次预览发一张随机凭证，只能读那个 HTML 所在目录里的东西；路径照样过 safeFilePath（密钥、私有目录照旧拦）。
 // 网址形如 http://localhost:<端口>/<凭证>/index.html，相对路径自然解析；"/assets/x.js" 这种站点绝对路径按 Referer 里的凭证找回来。
 // "../assets/x.css"（页面在子目录、资源在上级，生成的网站常这样）会被浏览器规整成 /assets/x.css，同样走 Referer；
@@ -28,7 +28,7 @@ const PREVIEW = { server: null, port: 0, starting: null, caps: new Map() };
 // 脚本照常跑（内联、eval 都许），资源只许从本机预览服务来；被拦的地址经 report-uri 报回来，查看器提示可以一键允许联网。
 // 页面把自己跳到外站这种 CSP 管不了，由壳在原生层拦（MainActivity.pvOffline）
 const PV_CSP = (cap) => "default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self'; form-action 'self'; base-uri 'self'; "
-  + `frame-src 'self' data: blob:; worker-src 'self' blob:; prefetch-src 'none'; report-uri /__cc/csp/${cap}`;
+  + `frame-src 'self' data: blob:; worker-src 'self' blob:; prefetch-src 'none'; report-uri /__agy/csp/${cap}`;
 const BLOCKED_MAX = 20;
 function previewStart() {
   if (PREVIEW.port) return Promise.resolve(PREVIEW.port);
@@ -97,7 +97,7 @@ function previewServe(req, res) {
   const host = String(req.headers.host || "").toLowerCase();
   if (host !== `localhost:${PREVIEW.port}` && host !== `127.0.0.1:${PREVIEW.port}`) return fail(421, "bad host");
   // CSP 违规报告：记下被拦的外网主机（只记主机名，最多 BLOCKED_MAX 个），查看器据此提示
-  const rep = req.method === "POST" && /^\/__cc\/csp\/([0-9a-f]{24})$/.exec(String(req.url || "").split("?")[0]);
+  const rep = req.method === "POST" && /^\/__agy\/csp\/([0-9a-f]{24})$/.exec(String(req.url || "").split("?")[0]);
   if (rep) {
     const g = PREVIEW.caps.get(rep[1]);
     let n = 0, body = "";
@@ -123,7 +123,7 @@ function previewServe(req, res) {
   try { const u = new URL(req.url, "http://localhost"); pathname = decodeURIComponent(u.pathname); query = u.searchParams; } catch { return fail(400, "bad path"); }
   // 开发者工具（Eruda，MIT，随包内置）：本体从包里吐，不走网络。
   // 路径里必须带这张预览的能力令牌：同机别的应用也能连 127.0.0.1 上的预览端口，不能让它们凭空取到这些脚本（200-3-06）
-  const ccFile = /^\/__cc\/([0-9a-f]{24})\/(eruda\.js|pick\.js)$/.exec(pathname);
+  const ccFile = /^\/__agy\/([0-9a-f]{24})\/(eruda\.js|pick\.js)$/.exec(pathname);
   if (ccFile) {
     const g0 = PREVIEW.caps.get(ccFile[1]);
     if (!g0 || g0.exp < Date.now()) return fail(404, "preview expired — reopen the file");
@@ -187,7 +187,7 @@ function previewServe(req, res) {
     } catch { return fail(404, "read failed"); }
     finally { if (fd0 != null) { try { fs.closeSync(fd0); } catch {} } }
     const theme = g.dt.dark ? "Dark" : "Light";
-    const tag = `<script src="/__cc/${cap}/pick.js"></script><script src="/__cc/${cap}/eruda.js"></script><script>try{eruda.init({defaults:{displaySize:50,transparency:.97,theme:"${theme}"}})}catch(e){}</script>`;
+    const tag = `<script src="/__agy/${cap}/pick.js"></script><script src="/__agy/${cap}/eruda.js"></script><script>try{eruda.init({defaults:{displaySize:50,transparency:.97,theme:"${theme}"}})}catch(e){}</script>`;
     const m = /<head\b[^>]*>/i.exec(src) || /<html\b[^>]*>/i.exec(src) || /<!doctype[^>]*>/i.exec(src);
     const at = m ? m.index + m[0].length : 0;
     const out = Buffer.from(src.slice(0, at) + tag + src.slice(at), "latin1");

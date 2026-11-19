@@ -1,5 +1,6 @@
 // 脉络阶段 2 · 汇合（gw/merge.mjs）：取交接材料、挑轮、新会话首条带 mergeFrom 时当场记来源、落款兜底
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
+import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -21,7 +22,7 @@ function chain(sid, turns, start = 0, ans = (i) => "答 " + i) {
   return out;
 }
 function put(sid, lines, proj = "-merge") {
-  const dir = path.join(process.env.CCAPP_HOME, ".claude", "projects", proj);
+  const dir = path.join(PATHS.projects, proj);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, sid + ".jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
 }
@@ -131,7 +132,7 @@ test("补记来源：手动连一条、撤掉；自己和不存在的会话不�
   const A = id(), B = id(); put(A, chain(A, 1, 100)); put(B, chain(B, 1, 110));
   const post = async (body) => { const res = fakeRes(); const { Readable } = await import("node:stream"); const req = Readable.from([Buffer.from(JSON.stringify(body))]); req.method = "POST"; req.headers = {}; await routeMerge(req, res, new URL("http://x/api/lineage/extra"), "/api/lineage/extra"); return res; };
   assert.equal((await post({ child: B, add: [A, B, id()] })).body.n, 1);
-  const db = () => JSON.parse(fs.readFileSync(path.join(process.env.CCAPP_HOME, "ccapp-lineage.json"), "utf8"));
+  const db = () => JSON.parse(fs.readFileSync(path.join(process.env.AGAPP_HOME, "agyapp-lineage.json"), "utf8"));
   assert.deepEqual(db().edges[B].extra.map((x) => [x.id, x.how]), [[A, "manual"]]);
   assert.equal((await post({ child: B, add: [B] })).code, 400);
   await post({ child: B, drop: A });
@@ -144,7 +145,7 @@ test("脉络卡片「从这里分叉」：latest 不指轮，整段抄过去并�
   const r = forkSession(A, "", 0, { latest: true });
   assert.equal(r.ok, true);
   assert.equal(r.kept, 3);
-  const db = JSON.parse(fs.readFileSync(path.join(process.env.CCAPP_HOME, "ccapp-lineage.json"), "utf8"));
+  const db = JSON.parse(fs.readFileSync(path.join(process.env.AGAPP_HOME, "agyapp-lineage.json"), "utf8"));
   assert.equal(db.edges[r.id].primary.id, A);
   const E = id(); put(E, [{ type: "assistant", uuid: id(), sessionId: E, timestamp: iso(1), message: { role: "assistant", content: [{ type: "text", text: "hi" }] } }]);
   assert.equal(forkSession(E, "", 0, { latest: true }).ok, false);
@@ -171,7 +172,7 @@ test("档号引用：附那一章的压缩摘要；进行中 / 超出 / 找不�
   assert.equal(await refNote(`材料\n\n（汇合自 ${k}·1）`, null), "");
   // 前缀不存在：挑一个不撞的
   let miss = "0000"; for (const h of ["0000", "ffff", "1234", "abcd"]) if (!A.startsWith(h)) { miss = h; break; }
-  if (!(await import("node:fs")).readdirSync(path.join(process.env.CCAPP_HOME, ".claude", "projects", "-merge")).some((f) => f.startsWith(miss)))
+  if (!(await import("node:fs")).readdirSync(path.join(PATHS.projects, "-merge")).some((f) => f.startsWith(miss)))
     assert.match(await refNote(`${miss}·2`, null), /找不到/);
 });
 

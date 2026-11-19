@@ -5,20 +5,25 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-fs.writeFileSync(path.join(CFG.home, "ccapp-providers.json"), JSON.stringify({ active: "deepseek", providers: {
-  deepseek: { apiKey: "fixture", defaultModel: 5, fastModel: ["x"] },
-  "custom-bad": { label: "Bad", baseUrl: "https://example.invalid", apiKey: "fixture", defaultModel: { id: "m" }, fastModel: "ok-model" },
+fs.writeFileSync(path.join(CFG.home, "agyapp-providers.json"), JSON.stringify({ active: "deepseek", providers: {
+  google: { apiKey: 123, defaultModel: 5 },
+  gemini: { apiKey: "fixture", defaultModel: { id: "m" } },
+  "custom-bad": { label: "Bad", baseUrl: "https://example.invalid", apiKey: "fixture", defaultModel: "ok-model" },
 } }));
 const { providerById } = await import("../gw/providers.mjs");
 
 test("内置条目：型号不是字符串 → 用目录里的；自定义条目：当没填，别的字段照常", () => {
-  const d = providerById("deepseek");
+  // 移植：只有 google / gemini 两个预置；cleanRaw 丢掉非字符串的 defaultModel / apiKey，
+  // 自定义条目根本不合成（providerById 回 null），active 里的 deepseek 也回落到 google。
+  const d = providerById("google");
   assert.equal(typeof d.defaultModel, "string");
-  assert.equal(typeof d.fastModel, "string");
-  const c = providerById("custom-bad");
-  assert.equal(c.defaultModel ?? null, null);
-  assert.equal(c.fastModel, "ok-model");
-  assert.equal(c.baseUrl, "https://example.invalid");
+  assert.equal(d.defaultModel, "");
+  assert.equal(d.apiKey, undefined); // 数字 apiKey 被丢掉；google 是登录模式，预置里根本没有 apiKey 字段
+  const g = providerById("gemini");
+  assert.equal(g.defaultModel, "");
+  assert.equal(g.apiKey, "fixture");
+  assert.equal(providerById("custom-bad"), null);
+  assert.equal(providerById("deepseek"), null);
 });
 
 test("195-E.11：汇率取不到 → 一分钟内不再去等；同时几个请求只发一次", async () => {

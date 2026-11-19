@@ -11,10 +11,10 @@ import { guardRegistryFlock, registryFlockFixture } from "./fixtures/registry-fl
 // 用确定的假值验证环境隔离；不读取或转发调用者的任何真实凭据。
 process.env.ANTHROPIC_API_KEY = "fixture-only-do-not-forward";
 process.env.ANTHROPIC_AUTH_TOKEN = "fixture-only-do-not-forward";
-process.env.CCAPP_RUN = "fixture-only-do-not-forward";
-const home = process.env.CCAPP_HOME, prefix = process.env.CCAPP_PREFIX;
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "managed-"));
-const reg = path.join(home, ".cccodroid/services/openai-bridge.json");
+process.env.AGAPP_RUN = "fixture-only-do-not-forward";
+const home = process.env.AGAPP_HOME, prefix = process.env.AGAPP_PREFIX;
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "managed-"));
+const reg = path.join(home, ".agycodroid/services/openai-bridge.json");
 const record = path.join(path.dirname(prefix), "components/openai-bridge.json");
 const component = path.join(prefix, "lib/openai-bridge/component.cjs");
 const lockFixture = registryFlockFixture();
@@ -36,7 +36,7 @@ async function within(work, ms, message) {
 }
 const fixtureSource = `const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
 const args=process.argv.slice(2),dir=args[args.indexOf('--dir')+1],endpoint=args[args.indexOf('--endpoint')+1],instanceId=args[args.indexOf('--instance')+1];
-fs.appendFileSync(path.join(dir,'calls'),JSON.stringify({command:args[0],apiInEnv:!!process.env.ANTHROPIC_API_KEY||!!process.env.ANTHROPIC_AUTH_TOKEN,ccappRun:!!process.env.CCAPP_RUN})+'\\n');
+fs.appendFileSync(path.join(dir,'calls'),JSON.stringify({command:args[0],apiInEnv:!!process.env.ANTHROPIC_API_KEY||!!process.env.ANTHROPIC_AUTH_TOKEN,agyappRun:!!process.env.AGAPP_RUN})+'\\n');
 const mode=fs.readFileSync(path.join(dir,'mode'),'utf8');
 if(args[0]==='ensure'){
   fs.writeFileSync(path.join(dir,'launcher.pid'),String(process.pid));
@@ -47,7 +47,7 @@ if(args[0]==='ensure'){
   setTimeout(()=>{if(mode==='fail')process.exitCode=1;else console.log(JSON.stringify({schema:1,id:'openai-bridge',ready:true,endpoint,instanceId:mode==='wrong'?'wrong':instanceId}));},mode==='hang'||mode==='resident-hang'?70000:100);
 }else if(args[0]==='uninstall'){
   setTimeout(()=>{
-    const registration=path.join(process.env.HOME,'.cccodroid/services/openai-bridge.json');
+    const registration=path.join(process.env.HOME,'.agycodroid/services/openai-bridge.json');
     if(mode==='fail'||mode==='uninstall-fail')process.exitCode=1;
     else if(mode==='replace-reg'){
       fs.rmSync(registration,{force:true});
@@ -109,7 +109,7 @@ test("冷态在包装前调用固定组件 ensure，等待 ready；支持大安�
   await delay(20);
   assert.equal(done, false);
   assert.equal(await result, true);
-  assert.deepEqual(f.calls(), [{ command: "ensure", apiInEnv: false, ccappRun: false }]);
+  assert.deepEqual(f.calls(), [{ command: "ensure", apiInEnv: false, agyappRun: false }]);
 });
 
 test("并发会话共用同一次就绪，不启动多套组件", async () => {
@@ -277,7 +277,7 @@ test("卸载清除 ready 缓存，原样恢复注册后仍须重新 ensure", asy
 test("合法 uninstall 删除自身后注册新实例：retire 成功且保留 replacement，不执行新目录", async () => {
   const f = fixture("replace-reg"), replacement = replacementFixture(f);
   assert.equal(await retireManagedBridge("openai-bridge"), true);
-  assert.deepEqual(f.calls(), [{ command: "uninstall", apiInEnv: false, ccappRun: false }]);
+  assert.deepEqual(f.calls(), [{ command: "uninstall", apiInEnv: false, agyappRun: false }]);
   preservedReplacement(f, replacement);
 });
 

@@ -51,7 +51,7 @@ The memory manager is off by default; turn it on in Settings. It does three thin
 No hard-coded package lists. It asks the system:
 
 1. **Android's own ranking.** `dumpsys activity lru` tags each process with an importance class. Foreground, visible, perceptible and persistent processes (the other half of a split screen, a proxy or music player with a foreground notification, the keyboard) are never touched. Only the "service" and "cached" classes are candidates.
-2. **Auto-detected roles:** current launcher, keyboard, accessibility services, VPN, WebView provider, Shizuku, cccodroid itself, core system components.
+2. **Auto-detected roles:** current launcher, keyboard, accessibility services, VPN, WebView provider, Shizuku, agycodroid itself, core system components.
 3. **The user's allowlist.**
 4. **Dependencies** (the easiest to miss; see below).
 
@@ -59,7 +59,7 @@ No hard-coded package lists. It asks the system:
 
 We found this the hard way. When Android stops a package, **it also kills every process that has that package loaded**:
 
-- Stopping the WebView package killed every app that renders with WebView, cccodroid included.
+- Stopping the WebView package killed every app that renders with WebView, agycodroid included.
 - Stopping Lenovo's calendar killed the system split-screen service, because it had loaded a calendar component.
 
 There is a second kind. If an app holds a stable ContentProvider connection to another app's data, killing the provider also kills the client.

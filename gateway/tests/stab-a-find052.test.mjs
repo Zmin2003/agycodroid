@@ -1,5 +1,7 @@
-// FIND-052：/api/settings 只回显认识的字段（旧版 / 手改 / 导入的设置文件里可能带类凭据字段）；
-// 删除接口后，claude 用的密钥缓存文件（ccapp-key*）要一并清掉。
+// FIND-052：/api/settings 只回显认识的字段（旧版 / 手改 / 导入的设置文件里可能带类凭据字段）。
+// 移植：后两条「删除接口清密钥缓存」是自定义厂商的（custom-1/custom-2），
+// agy 没有自定义厂商，已删除。permissionMode 的有效值是 request-review 等，
+// "default" 在 agy 会被归一成 request-review，夹具随之改。
 import "../gw/config.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -11,16 +13,16 @@ import { NEXT } from "../gw/http.mjs";
 
 fs.mkdirSync(path.dirname(PATHS.settings), { recursive: true });
 fs.writeFileSync(PATHS.settings, JSON.stringify({
-  model: "m1", permissionMode: "default", permMigrated: 1, guard: true,
+  model: "m1", permissionMode: "request-review", permMigrated: 1, guard: true,
   apiKey: "SHOULD-NOT-ECHO", someOldField: 42,
 }, null, 2));
 
 const cache = path.join(CFG.home, ".cache");
 fs.mkdirSync(cache, { recursive: true });
-const keyFiles = ["ccapp-key", "ccapp-key-custom-1", "ccapp-key-term-custom-1", "ccapp-key-custom-2", "ccapp-key-term-custom-2"];
+const keyFiles = ["agyapp-key", "agyapp-key-custom-1", "agyapp-key-term-custom-1", "agyapp-key-custom-2", "agyapp-key-term-custom-2"];
 for (const f of keyFiles) fs.writeFileSync(path.join(cache, f), "KEY-" + f);
 
-fs.writeFileSync(path.join(CFG.home, "ccapp-providers.json"), JSON.stringify({ active: "custom-1", providers: {
+fs.writeFileSync(path.join(CFG.home, "agyapp-providers.json"), JSON.stringify({ active: "custom-1", providers: {
   "custom-1": { label: "a", baseUrl: "https://a.example", apiKey: "K1" },
   "custom-2": { label: "b", baseUrl: "https://b.example", apiKey: "K2" },
 } }));
@@ -30,7 +32,7 @@ const { routeProviders, PROVIDER } = await import("../gw/providers.mjs");
 
 after(() => {
   try { fs.rmSync(PATHS.settings, { force: true }); } catch {}
-  try { fs.rmSync(path.join(CFG.home, "ccapp-providers.json"), { force: true }); } catch {}
+  try { fs.rmSync(path.join(CFG.home, "agyapp-providers.json"), { force: true }); } catch {}
   try { fs.rmSync(cache, { recursive: true, force: true }); } catch {}
 });
 
@@ -56,7 +58,7 @@ test("GET /api/settings 不回显未知字段（含类凭据字段）", async (t
   const r = await call("/api/settings");
   assert.equal(r.status, 200);
   assert.equal(r.body.model, "m1");
-  assert.equal(r.body.permissionMode, "default");
+  assert.equal(r.body.permissionMode, "request-review");
   assert.equal(r.body.apiKey, undefined, "设置接口不能把旧字段当设置回显");
   assert.equal(r.body.someOldField, undefined, "设置接口不能回显未知字段");
 });
@@ -68,26 +70,4 @@ test("POST /api/settings 的 settings 回执也不带未知字段", async (t) =>
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.settings.apiKey, undefined);
   assert.equal(r.body.settings.someOldField, undefined);
-});
-
-test("删除非当前接口：只清它自己的密钥缓存，当前那家的不动", async (t) => {
-  assert.equal(PROVIDER.id, "custom-1");
-  const { srv, call } = await serve(routeProviders);
-  t.after(() => srv.close());
-  const r = await call("/api/providers/delete", { id: "custom-2" });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.ok(!fs.existsSync(path.join(cache, "ccapp-key-custom-2")));
-  assert.ok(!fs.existsSync(path.join(cache, "ccapp-key-term-custom-2")));
-  assert.ok(fs.existsSync(path.join(cache, "ccapp-key")), "当前那家的密钥缓存不能被误删");
-  assert.ok(fs.existsSync(path.join(cache, "ccapp-key-custom-1")));
-});
-
-test("删除当前接口：当前密钥缓存与它自己那份都清掉", async (t) => {
-  const { srv, call } = await serve(routeProviders);
-  t.after(() => srv.close());
-  const r = await call("/api/providers/delete", { id: "custom-1" });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.ok(!fs.existsSync(path.join(cache, "ccapp-key")), "当前那家的密钥缓存要清掉");
-  assert.ok(!fs.existsSync(path.join(cache, "ccapp-key-custom-1")));
-  assert.ok(!fs.existsSync(path.join(cache, "ccapp-key-term-custom-1")));
 });

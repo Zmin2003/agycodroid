@@ -9,8 +9,8 @@ import { clearIncomplete, incompleteItem, incompleteOf, markIncomplete } from ".
 import * as Q from "../gw/queue.mjs";
 import { RUNS, TRASH_HOOKS } from "../gw/runs.mjs";
 
-const MARK = path.join(CFG.home, "ccapp-run-mark.json"), INTR = path.join(CFG.home, "ccapp-interrupted.json");
-const FILE = path.join(CFG.home, "ccapp-incomplete.json");
+const MARK = path.join(CFG.home, "agyapp-run-mark.json"), INTR = path.join(CFG.home, "agyapp-interrupted.json");
+const FILE = path.join(CFG.home, "agyapp-incomplete.json");
 const reset = () => { RUNS.clear(); Q.QUEUE.length = 0; fs.rmSync(INTR, { recursive: true, force: true }); fs.rmSync(MARK, { recursive: true, force: true }); clearIncomplete("sid-a"); clearIncomplete("sid-b"); };
 after(reset);
 

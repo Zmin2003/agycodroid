@@ -1,0 +1,7 @@
+#!/system/bin/sh
+# 官方 Antigravity CLI（agy，原样二进制，官方 bionic 构建，直接跑）。
+# 不用 glibc 加载器、不用 --preload、不用 seccomp 垫片：直接 exec 已装的 agy。
+# 没装上时报错，别静默跑别的。
+BIN="$HOME/.local/share/agycodroid/agy/current/agy"
+[ -f "$BIN" ] || { echo "agycodroid: agy 还没装上（$BIN 不在），到设置 → 更新里装一次" >&2; exit 2; }
+exec "$BIN" "$@"

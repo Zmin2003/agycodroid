@@ -38,7 +38,7 @@
 
   $("btn-files").addEventListener("click", () => openFiles());
   // 顶栏按钮怎么摆（0.4.20）：五个工具键各自「常驻」（挪进 #tb-pins，不折叠）/「收起」（照旧收在 ⋯ 里）/「隐藏」，外加先后顺序。
-  //   存在 ccapp-ui.json 的 topbar：{ order, pin, off }；没设过就是全收起、原来的顺序。⋯ 里一个都不剩时 ⋯ 也藏掉
+  //   存在 agyapp-ui.json 的 topbar：{ order, pin, off }；没设过就是全收起、原来的顺序。⋯ 里一个都不剩时 ⋯ 也藏掉
   const TB_BTNS = { files: "btn-files", term: "btn-term", web: "btn-web", palette: "btn-palette", new: "btn-new" };
   const TB_ORDER = Object.keys(TB_BTNS);
   function tbConf() {
@@ -101,7 +101,7 @@
     else await new Promise((r) => setTimeout(r, 450));
     try {
       // 截屏要以 shell 身份跑：先经原生桥领一次性截屏码（priv 对白名单外的命令会弹确认，后台时直接拒绝）
-      const shot = window.CCApp && CCApp.privShot ? String(CCApp.privShot(delay || 0) || "") : "";
+      const shot = window.AGApp && AGApp.privShot ? String(AGApp.privShot(delay || 0) || "") : "";
       const j = await api("/api/screenshot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delay, shot }) });
       if (draftEpoch !== ep0 && (view.sessionId || "") !== draftOwner(ep0, key0)) {
         draftPutAway(draftOwner(ep0, key0), "", [j]);
@@ -208,10 +208,10 @@
       paintAcct(s);
       paintSafeMode(s.safeMode);
       recheckSetup();
-      // 日志分享靠安卓壳（cccodroid）打包、弹分享面板；旧版应用没有
-      // 打包诊断、到 GitHub 反馈只有 cccodroid 有：整行藏起来
-      $("btn-share-logs").closest(".srow").classList.toggle("hidden", s.product !== "cccodroid");
-      $("btn-issue").closest(".srow").classList.toggle("hidden", s.product !== "cccodroid");
+      // 日志分享靠安卓壳（agycodroid）打包、弹分享面板；旧版应用没有
+      // 打包诊断、到 GitHub 反馈只有 agycodroid 有：整行藏起来
+      $("btn-share-logs").closest(".srow").classList.toggle("hidden", s.product !== "agycodroid");
+      $("btn-issue").closest(".srow").classList.toggle("hidden", s.product !== "agycodroid");
       $("btn-ledger").classList.toggle("hidden", !s.hasLedger);
       paintModel(curModel() || s.model || "—");
       state.model = s.model;
@@ -231,7 +231,7 @@
         `${t("上游")}     ${s.upstream}\n` +
         `${t("凭据")}     ${credTxt}\n` +
         `${t("DNS 桥")}   ${s.bridge ? t("已连接") : t("未启动")}\n` +
-        `${t("模型")}     ${s.model || t("(由 claude 决定)")}\n` +
+        `${t("模型")}     ${s.model || t("(由 agy 决定)")}\n` +
         `${t("生成")}     ${s.busy ? t("进行中") : t("空闲")}${s.queued ? t(" · 排队 {n} 条", { n: s.queued }) : ""}\n` +
         `${t("工作区")}   ${s.workspace}`;
       if (es && !srv.connected) {
@@ -248,13 +248,13 @@
       if (!ok()) return;
       // 手机浏览器从 127.0.0.1 / localhost 打开：/api 因来源校验必然 403，网关其实在线（0.6.9 审计 195-G.6）。
       // 按有没有原生桥判断是不是在应用里，不按地址：127.0.0.2 不通的设备上应用自己的界面也在 127.0.0.1
-      if (e.status === 403 && !window.CCApp) {
+      if (e.status === 403 && !window.AGApp) {
         srv.foreign = true;
         clearTimeout(busWatch); busWatch = 0;
         if (es) { try { es.close(); } catch {} es = null; }
         clearStatusRetry();
-        $("status-box").textContent = t("请在 cccodroid 应用里打开");
-        setStatus(t("请在 cccodroid 应用里打开"), "warn");
+        $("status-box").textContent = t("请在 agycodroid 应用里打开");
+        setStatus(t("请在 agycodroid 应用里打开"), "warn");
         return;
       }
       $("status-box").textContent = t("无法连接网关：{msg}", { msg: e.message });
@@ -282,7 +282,7 @@
   })();
 
   // ── 滚动冻结脱困（自动 + 顶栏雪花按钮）──────────────────────────────
-  //  冻住时页面救不了自己：跨站跳转会被壳当外链拦掉，只能请壳（CCApp.unfreeze）跳一次别的站点（localhost:9，见 MainActivity.bounce）再回来。
+  //  冻住时页面救不了自己：跨站跳转会被壳当外链拦掉，只能请壳（AGApp.unfreeze）跳一次别的站点（localhost:9，见 MainActivity.bounce）再回来。
   //  会话 id 本来就在 localStorage；输入框草稿先放 sessionStorage，回来再填上。
   //  每次脱困都在 localStorage["cc.freezeLog"] 留最近 5 次现场（含触摸日志尾巴），以后找触发条件用。
   (() => {
@@ -305,7 +305,7 @@
         fetch("/api/freeze", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ why, touch: log[log.length - 1].touch }) }).catch(() => {});
       } catch {}
-      if (window.CCApp && window.CCApp.unfreeze) { toast(t("正在重新挂载界面…")); window.CCApp.unfreeze(); }
+      if (window.AGApp && window.AGApp.unfreeze) { toast(t("正在重新挂载界面…")); window.AGApp.unfreeze(); }
       else toast(t("这个版本的应用还不能脱困，请更新应用；临时办法是重启网关"), true);
     }
     // 手动脱困：长按顶栏标题 0.6 秒（按住时标题慢慢变淡，到点轻振一下）。冻住时点按照常能用，触摸事件也都收得到；
@@ -326,7 +326,7 @@
       tb.addEventListener("touchcancel", stop);
       tb.addEventListener("contextmenu", (e) => e.preventDefault());
     })();
-    window.__ccUnfreeze = unfreeze;
+    window.__agyUnfreeze = unfreeze;
 
     // 自动判定：单指竖向拖了 60px 以上、手指下的滚动容器明明还能往那个方向滚，
     // 松手 350ms 后 scrollTop 却没往那个方向动过 —— 连续两次（20 秒内）就算冻住。
@@ -510,7 +510,7 @@
 
   // 返回键 / 侧滑返回：壳先问这里，从最上层往下关一层浮层，关了就返回 true；什么都没开才由壳把界面退到后台。
   // 顺序按 z-index 从高到低（灯箱 90 > 终端文本 73 > 终端 72 > 查看器 71 > 文件 70 > 补全弹窗 60 > 底部菜单 55 > 侧栏 50）
-  window.__ccBack = guardHook("__ccBack", () => {
+  window.__agyBack = guardHook("__agyBack", () => {
     const open = (id) => !$(id).classList.contains("hidden") && !$(id)._moLeave;   // 正在退场的不算开着，返回键往下一层走
     if (OV.back()) return true;     // 菜单、速览卡、弹层：关最上面那个
     const steps = [
@@ -547,7 +547,7 @@
   if (window.CCLayout) CCLayout.init({ openDrawer: () => openDrawer(), closeDrawer,
     // 常驻栏展开：面板从左边弹进来（右边内容已经让出位置）
     dockIn: () => MO.spring(drawerEl.querySelector(".drawer-panel"), "snap", (p) => ({ transform: `translateX(${(MO.rtl() ? 100 : -100) * (1 - p)}%)` })) });
-  window.__cc = { view, srv, state, send, abort, openSession, newConversation, openPage, bus: onBus,   // bus：测试时往前端灌事件
+  window.__agy = { view, srv, state, send, abort, openSession, newConversation, openPage, bus: onBus,   // bus：测试时往前端灌事件
     openGit, openViewer, openFiles, openDrawer, showWhatsNew, mdEd: () => VW.ed, provCard: (id) => { state.provView = id; renderProvCard(); },
     lin: { prof: linProfOpen, pick: linPickStart, wiz: mergeWizard, get: () => LIN } };   // 脉络：探针直接开剖面 / 多选 / 汇合向导
 
@@ -573,7 +573,7 @@
       if (left > 1) ensureSettings(left - 1);
     }, 4000);
     ensureSettings(3);
-    uiSync(); loadFonts();               // 界面定制（ccapp-ui.json）、导入字体的清单，各和本地缓存对一下（换过机、清过缓存时补回来）
+    uiSync(); loadFonts();               // 界面定制（agyapp-ui.json）、导入字体的清单，各和本地缓存对一下（换过机、清过缓存时补回来）
     updateCtx(state.ctxUsed, state.ctxTotal);   // 别把恢复回来的用量抹成 0
     // 后台时不轮询（#56），切回前台补一次
     let statusMissed = false;
@@ -589,7 +589,7 @@
   /** 更新说明：更新后第一次打开时，主窗口正中弹一张卡片（外壳决定显示哪几版，见 WhatsNew.java；
    *  全新安装、开发端外壳没有这个接口时什么都不做）。显示出来就记为看过 */
   function showWhatsNew() {
-    const A = window.CCApp;
+    const A = window.AGApp;
     if (!A || typeof A.whatsNew !== "function") return false;
     let list = [];
     try { list = JSON.parse(A.whatsNew(isZh() ? "zh" : ((window.I18N && I18N.lang) || "en")) || "[]"); } catch { return false; }

@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 
-const proj = path.join(CFG.home, ".claude", "projects", "-v066");
+const proj = path.join(PATHS.projects, "-v066");
 fs.mkdirSync(proj, { recursive: true });
 function session(turns) {
   const sid = crypto.randomUUID(), L = [], ids = {};

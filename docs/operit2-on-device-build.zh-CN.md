@@ -1,10 +1,10 @@
-# 案例：在 cccodroid 里从源码构建 Operit2（Flutter + Rust）APK
+# 案例：在 agycodroid 里从源码构建 Operit2（Flutter + Rust）APK
 
 [English](operit2-on-device-build.md)
 
-2026-10-20，在一台 Android arm64 设备上，用 cccodroid 从源码完整构建了 [Operit2](https://github.com/AAswordman/Operit2)，得到可安装、可启动的 arm64 release APK。整个过程没有电脑、没有 root、没有云 CI，全部在本机完成。
+2026-10-20，在一台 Android arm64 设备上，用 agycodroid 从源码完整构建了 [Operit2](https://github.com/AAswordman/Operit2)，得到可安装、可启动的 arm64 release APK。整个过程没有电脑、没有 root、没有云 CI，全部在本机完成。
 
-这不是 cccodroid 的内置功能，而是一次边界测试：它同时用到了 glibc 与 bionic 两套运行时、Android NDK 交叉编译、Rust 目标构建、Flutter AOT、proot、qemu 用户态模拟和 SELinux 规避。把经过写下来，是因为其中大部分坑与具体项目无关——凡是“在手机上编译另一个大型项目”，都可能再遇到。
+这不是 agycodroid 的内置功能，而是一次边界测试：它同时用到了 glibc 与 bionic 两套运行时、Android NDK 交叉编译、Rust 目标构建、Flutter AOT、proot、qemu 用户态模拟和 SELinux 规避。把经过写下来，是因为其中大部分坑与具体项目无关——凡是“在手机上编译另一个大型项目”，都可能再遇到。
 
 ## 1. 结果
 
@@ -35,7 +35,7 @@
 最终采用“两层”结构：
 
 1. **proot-distro 的 Ubuntu 26.04 arm64 容器（glibc）**：运行 Flutter/Dart 官方 Linux 工具，以及官方 Linux-aarch64 CMake。
-2. **cccodroid 自带的 Termux 工具（bionic）**：Java 21、clang、Rust、Node、Python、aapt2、ninja 等，通过 proot 绑定注入容器。
+2. **agycodroid 自带的 Termux 工具（bionic）**：Java 21、clang、Rust、Node、Python、aapt2、ninja 等，通过 proot 绑定注入容器。
 
 只用其中一层都不够：Ubuntu 里没有可用的 Android 构建工具（apt 在该容器里还遇到 TLS 证书问题），而 bionic 环境又跑不了 Flutter 的 glibc 宿主工具。
 
@@ -44,14 +44,14 @@
 proot 只会暴露显式绑定的路径。实际使用的登录命令：
 
 ```sh
-P=/data/user/0/cc.codroid/files/usr
-W=/data/user/0/cc.codroid/files/home/workspace
+P=/data/user/0/cc.agyroid/files/usr
+W=/data/user/0/cc.agyroid/files/home/workspace
 
 proot-distro login ubuntu --shared-tmp \
   -b /system:/system \
   -b /apex:/apex \
-  -b $P:/data/data/cc.codroid/files/usr \
-  -b $P:/data/user/0/cc.codroid/files/usr \
+  -b $P:/data/data/cc.agyroid/files/usr \
+  -b $P:/data/user/0/cc.agyroid/files/usr \
   -b $W:/workspace -- /bin/bash -lc '<命令>'
 ```
 
@@ -62,7 +62,7 @@ proot-distro login ubuntu --shared-tmp \
 
 | 工具 | 版本 |
 |---|---|
-| cccodroid devkit | Java 21.0.12、clang 21.1.8、Rust 1.99.1、Node 26.4.0、Python 3.14.6、aapt2 16.0.0.4、ninja 1.13.2 |
+| agycodroid devkit | Java 21.0.12、clang 21.1.8、Rust 1.99.1、Node 26.4.0、Python 3.14.6、aapt2 16.0.0.4、ninja 1.13.2 |
 | proot-distro / Ubuntu | 5.10.0 / Ubuntu 26.04.1 LTS arm64 |
 | Flutter | 3.41.10-ohos（引擎固定为 stock `42d3d75a56efe1a2e9902f52dc8006099c45d937`） |
 | Dart | 3.11.5 |
@@ -89,7 +89,7 @@ proot-distro login ubuntu --shared-tmp \
 | 12 | 终端运行时没有现成产物 | 需要交叉编译 bash/busybox/proot/loader | 按目标 ABI 编译出四个 `.so`；`ashmem_memfd.c` 补 `#include <string.h>` |
 | 13 | Alpine rootfs 构建失败 | TLS 证书缺失；apk-tools 3.x 用 `O_TMPFILE` + `linkat(/proc/self/fd/…)` 写数据库，被 Android SELinux 拒绝 | 换 http 镜像并拷入 CA；改用 apk-tools-static 2.14.4（命名临时文件）；修目录权限后固定 mtime 重新打包 |
 | 14 | 插件打包工具缺失 | 需要 TypeScript 与 pnpm 依赖 | 装 typescript 5.9.3；在 workflow 包目录执行 `pnpm install --frozen-lockfile` |
-| 15 | Gradle/AGP 环境 | 需要固定 Gradle、aapt2、JVM 参数与签名 | Gradle wrapper 指向本地发行版；`android.aapt2FromMavenOverride` 指向 cccodroid 自带 aapt2；调 JVM 内存与 worker 数；生成本地 keystore |
+| 15 | Gradle/AGP 环境 | 需要固定 Gradle、aapt2、JVM 参数与签名 | Gradle wrapper 指向本地发行版；`android.aapt2FromMavenOverride` 指向 agycodroid 自带 aapt2；调 JVM 内存与 worker 数；生成本地 keystore |
 | 16 | **AOT 快照目标错误** | 桌面 Linux-arm64 的 `gen_snapshot` 生成 `arm64 linux no-compressed-pointers`，Android 引擎要求 `arm64 android compressed-pointers` | 用官方 x86_64 Android `gen_snapshot` + `qemu-user-x86-64` + x86_64 Ubuntu rootfs 生成；替换 `linux-arm64/gen_snapshot` 为 qemu wrapper；清掉旧构建缓存 |
 | 17 | Gradle daemon 中途消失 | AOT 收尾阶段 daemon 被杀（无 hs_err，内存充足） | kernel dill 已缓存，直接重跑；AOT 重跑约 15 分钟后成功 |
 | 18 | 安装被 SELinux 拦住 | system_server 不能读 /sdcard（FUSE） | shell 先复制到 `/data/local/tmp`，再从那里 `pm install` |
@@ -107,7 +107,7 @@ clang 21 的驱动配 clang 19 的 `include`，会在 NEON 等内置头文件上
 ```sh
 NDK=/workspace/dl/android-ndk-r28c
 mkdir -p /workspace/dl/clang-merged
-ln -s /data/data/cc.codroid/files/usr/lib/clang/21/include /workspace/dl/clang-merged/include
+ln -s /data/data/cc.agyroid/files/usr/lib/clang/21/include /workspace/dl/clang-merged/include
 ln -s $NDK/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/19/lib /workspace/dl/clang-merged/lib
 ```
 
@@ -143,9 +143,9 @@ head -c 1200 libapp.so | strings -n 20 | grep -o "product .*pointers"
 解决办法是使用官方 Android 构建产物里的 x86_64 `gen_snapshot`（`android-arm64-release/linux-x64/gen_snapshot`），通过 qemu 运行：
 
 ```sh
-#!/data/data/cc.codroid/files/usr/bin/bash
+#!/data/data/cc.agyroid/files/usr/bin/bash
 unset LD_PRELOAD
-exec /data/data/cc.codroid/files/usr/bin/qemu-x86_64 \
+exec /data/data/cc.agyroid/files/usr/bin/qemu-x86_64 \
   -L /workspace/dl/amd64-rootfs \
   /workspace/flutter-sdk/bin/cache/artifacts/engine/android-arm64-release/linux-x64/gen_snapshot "$@"
 ```
@@ -163,7 +163,7 @@ AOT 产物在 `.dart_tool/flutter_build/<hash>/arm64-v8a/app.so`。换了 `gen_s
 ### 6.1 准备
 
 ```sh
-# Java/clang/Rust/Node/Python/CMake/Ninja/aapt2 由 cccodroid 的 devkit 自带，
+# Java/clang/Rust/Node/Python/CMake/Ninja/aapt2 由 agycodroid 的 devkit 自带，
 # 先确认命令可用即可，不必重复安装，以免覆盖工具包里的版本。
 pip install proot-distro
 proot-distro install ubuntu
@@ -177,8 +177,8 @@ Android SDK 需要 build-tools 35.0.0、platforms;android-36、NDK 28.2.13676358
 以 API 23 为例（其余 API 同理）：
 
 ```sh
-#!/data/data/cc.codroid/files/usr/bin/bash
-exec /data/data/cc.codroid/files/usr/bin/clang \
+#!/data/data/cc.agyroid/files/usr/bin/bash
+exec /data/data/cc.agyroid/files/usr/bin/clang \
   --target=aarch64-linux-android23 \
   --sysroot=/workspace/dl/android-ndk-r28c/toolchains/llvm/prebuilt/linux-x86_64/sysroot \
   -resource-dir=/workspace/dl/clang-merged "$@"
@@ -190,14 +190,14 @@ exec /data/data/cc.codroid/files/usr/bin/clang \
 
 ```sh
 # android-sdk/cmake/3.22.1/bin/cmake
-#!/data/data/cc.codroid/files/usr/bin/bash
+#!/data/data/cc.agyroid/files/usr/bin/bash
 exec /workspace/dl/cmake-3.31.6-linux-aarch64/bin/cmake "$@"
 ```
 
 ```sh
 # android-sdk/cmake/3.22.1/bin/ninja
-#!/data/data/cc.codroid/files/usr/bin/bash
-exec /data/data/cc.codroid/files/usr/bin/ninja "$@"
+#!/data/data/cc.agyroid/files/usr/bin/bash
+exec /data/data/cc.agyroid/files/usr/bin/ninja "$@"
 ```
 
 原因见上表第 9 项：Flutter 的 Gradle 插件会强行给 app 挂一个空 CMake 工程来触发 NDK 下载，所以即使项目没有 C++，也必须让 CMake 可用。
@@ -215,10 +215,10 @@ Operit2 自己的适配（细节见其仓库）：
 
 ```sh
 #!/bin/bash
-export PATH=/data/data/cc.codroid/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export JAVA_HOME=/data/data/cc.codroid/files/usr/lib/jvm/java-21-openjdk
+export PATH=/data/data/cc.agyroid/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export JAVA_HOME=/data/data/cc.agyroid/files/usr/lib/jvm/java-21-openjdk
 export FLUTTER_OHOS_STORAGE_BASE_URL=https://storage.googleapis.com
-export OPERIT_LIBCLANG_DIR=/data/data/cc.codroid/files/usr/lib
+export OPERIT_LIBCLANG_DIR=/data/data/cc.agyroid/files/usr/lib
 export ANDROID_HOME=/workspace/android-sdk
 export ANDROID_SDK_ROOT=/workspace/android-sdk
 export LANG=C.UTF-8
@@ -251,7 +251,7 @@ unzip -p $APK assets/android-runtime/arm64-v8a/rootfs.tar.gz.bin | sha256sum
 SELinux 不允许 system_server 读 /sdcard，安装时要中转：
 
 ```sh
-priv 'cp /sdcard/cccodroid/app.apk /data/local/tmp/app.apk'
+priv 'cp /sdcard/agycodroid/app.apk /data/local/tmp/app.apk'
 priv 'pm install -r /data/local/tmp/app.apk'
 priv 'am start -W -n app.operit/.MainActivity'
 ```
@@ -272,4 +272,4 @@ priv 'am start -W -n app.operit/.MainActivity'
 
 ## 9. 边界
 
-这是一次性案例记录，不是 cccodroid 的官方构建支持。版本、脚本路径和上游项目结构都可能变化；照做前先确认各组件版本，并自建签名密钥，不要把别人的密钥或口令写进仓库。
+这是一次性案例记录，不是 agycodroid 的官方构建支持。版本、脚本路径和上游项目结构都可能变化；照做前先确认各组件版本，并自建签名密钥，不要把别人的密钥或口令写进仓库。

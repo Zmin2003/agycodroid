@@ -2,11 +2,11 @@
 
 English | [中文](download-sources.zh-CN.md)
 
-cccodroid fetches eight kinds of things from the network, most of them from more than one place. This guide records where each one comes from, why we trust it, where the code lives, and how to check it after a change.
+agycodroid fetches eight kinds of things from the network, most of them from more than one place. This guide records where each one comes from, why we trust it, where the code lives, and how to check it after a change.
 
 **The rule: trust first, download second.** Every item has a trust anchor that does not depend on where the bytes came from: a hash pinned in the APK, or a signing key pinned in code. A mirror is just another route to the same file and needs no trust of its own. Adding a source never weakens security as long as its content is still checked against the anchor. Conversely, **no change may ever turn something fetched from a mirror into the anchor itself.**
 
-Last verified: 2026-10-20 (v0.2.19).
+Last verified: 2026-11-19 (agycodroid fork; the Antigravity CLI row was re-checked against the live official manifest — version at check time 1.5.12, always re-read the manifest, never pin it).
 
 ---
 
@@ -16,14 +16,14 @@ Last verified: 2026-10-20 (v0.2.19).
 |---|---|---|---|---|
 | 1 | Devkit (by module from 0.3.9: ~330 MB by default, ~700 MB for all; older apps use the ~650 MB single package) | GitHub Release → dl.cccodroid.net/devkit/ | `devkit-pin.json` shipped in the APK (sha256 of the single-package gz / tar and of `modules.json`, which in turn holds each block's sha256) | `Installer.java`, `Updater.java`, `gateway/gw/modules.mjs` (adding modules later) |
 | 2 | APK updates | Release list: GitHub API → cccodroid.net/dl/releases.json → dl.cccodroid.net/dl/releases.json; APK: GitHub Release → cccodroid.net/dl/ → dl.cccodroid.net/dl/ → gh-proxy | Android APK signature (only the same release key can update) + sha256 in the release list | `Updater.java` |
-| 3 | Claude Code | Official → npmmirror → Tencent npm → npmjs (last success first) | sha256 from Anthropic's official manifest (manifest checked against Anthropic's PGP signature); npm ECDSA signature when no manifest is reachable | `assets/scripts/install-claude.mjs` |
+| 3 | Antigravity CLI (agy) | Official manifest only (antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json) | sha512 from Google's official manifest (no PGP signature exists for agy); version / URL / sha512 read from the manifest at install time, never hard-coded | `assets/scripts/install-agy.mjs` |
 | 4 | Component index | GitHub Release → cccodroid.net/components/ | ed25519 key pinned in the gateway | `gateway/gw/components.mjs` `compFetchIndex` |
 | 5 | Component packages | GitHub Release ⇄ dl.cccodroid.net/components/ (alternating, last success remembered) | sha256 from the signed index, then the in-package MANIFEST after unpacking | `gateway/gw/components.mjs` `compRunInstall` |
 | 6 | pkg | Termux official → packages.termux.dev → grimler.se → TUNA/USTC/BFSU/NJU (main, x11) | Termux autobuilds key pinned in pkg, checks `Release.gpg` | `assets/bin/pkg.mjs` |
 | 7 | glibc libs for custom components | Termux official glibc repo only | HTTPS + sha256 from `Packages` | `gateway/gw/custom.mjs` `customFetchLibs` |
 | 8 | On-device models | ModelScope (official Qwen only) → HuggingFace → hf-mirror.com | sha256 pinned in the catalog (from HF LFS) | `gateway/gw/local.mjs` `LOCAL_CATALOG` |
 
-**Two shared techniques since 0.4.1** (devkit, APK updates, component packages and Claude Code):
+**Two shared techniques since 0.4.1** (devkit, APK updates, component packages and Antigravity CLI):
 
 - **Segmented parallel download**: for files of 16 MB or more from a server that honours Range, the remaining bytes are split into up to 4 segments fetched at once and written at their offsets into one `.part` (pre-sized to the full length). Per-segment progress lives in `.part.seg`, so an interrupted download, or one that switched sources, resumes from it; if `.seg` and `.part` disagree, both are discarded. A source without Range support falls back to a single connection. Measured on dl.cccodroid.net: about 2.7 MB/s on one connection, about 14 MB/s on four. Code: `fetchSegmented` in `Installer.java`, and `gateway/gw/pget.mjs`.
 - **Switching away from slow sources** (since 0.4.2, Java downloads of the APK and devkit): each connection is measured in 30-second windows, and less than 600 KB in a window counts as a failure, which triggers a retry and then the next source. With no source left it keeps resuming without counting failures. Before, only a failed connection or 60 seconds without a byte switched sources, so a slow trickle from GitHub sat at 0% forever (reported for 0.3.16 → 0.4.1). Code: `Slow` in `Installer.java`.
@@ -39,22 +39,22 @@ Two hostnames, one server:
 
 | Host | Behind Cloudflare? | Serves |
 |---|---|---|
-| `cccodroid.net` | yes (proxied) | Website, APKs (`/dl/`), component indexes (`/components/<official\|community>/components.json(.sig)`), Claude Code manifests (`/claude-code/`) |
-| `dl.cccodroid.net` | no (DNS only, direct) | Devkits (`/devkit/`), component packages (`/components/<official\|community>/<file>`), Claude Code manifests (`/claude-code/`, same copy) |
+| `cccodroid.net` | yes (proxied) | Website, APKs (`/dl/`), component indexes (`/components/<official\|community>/components.json(.sig)`), Antigravity CLI manifests (`/claude-code/`) |
+| `dl.cccodroid.net` | no (DNS only, direct) | Devkits (`/devkit/`), component packages (`/components/<official\|community>/<file>`), Antigravity CLI manifests (`/claude-code/`, same copy) |
 
-**Why two**: files of hundreds of MB don't belong on a CDN, and some networks in China only reach one of the two, so the Claude Code manifests live on both.
+**Why two**: files of hundreds of MB don't belong on a CDN, and some networks in China only reach one of the two, so the Antigravity CLI manifests live on both.
 
-**Who maintains them**: the generator `repos/cccodroid-site/src/build.mjs`, run every 30 minutes by `cccodroid-site.timer`. The service timeout is raised to 60 minutes by the drop-in `/etc/systemd/system/cccodroid-site.service.d/timeout.conf`. What each step does:
+**Who maintains them**: the generator `repos/agycodroid-site/src/build.mjs`, run every 30 minutes by `agycodroid-site.timer`. The service timeout is raised to 60 minutes by the drop-in `/etc/systemd/system/agycodroid-site.service.d/timeout.conf`. What each step does:
 
 - **APKs and release list** (`fetchReleases`): only files whose sha256 matches GitHub's record; keeps the last 4 versions.
 - **Devkits** (`fetchDevkits`): only the version pinned by the APK and the newest one, checked against `devkit.lock.json`.
 - **Component indexes** (`fetchIndexes`): updated only when the ed25519 signature verifies; on failure the previous copy is kept.
 - **Component packages** (`fetchComponentFiles`): only packages listed in a verified index, each checked by sha256. A verified file gets a `.ok` marker next to it (not publicly reachable); files no longer listed are deleted. This runs **after** the site switch, so the initial 4 GB sync doesn't hold up site updates.
-- **Claude Code manifests** (`fetchClaude`): version pointers for the stable and latest channels plus `manifest.json` and `.sig` for the last 12 versions, **accepted only if Anthropic's PGP signature verifies**. Only manifests are mirrored, never the binary; see section 3.
+- **Antigravity CLI manifests** (`fetchAntigravity`): version pointers for the stable and latest channels plus `manifest.json` and `.sig` for the last 12 versions, **accepted only if Anthropic's PGP signature verifies**. Only manifests are mirrored, never the binary; see section 3.
 
-nginx config: `/etc/nginx/sites-available/cccodroid.conf` and `cccodroid-dl.conf`. Data lives in `/var/www/cccodroid/data/`, owned by `ccsite`. `/claude-code/` on `dl.cccodroid.net` is an `alias` to `data/current/claude-code/`, so it switches atomically with the site.
+nginx config: `/etc/nginx/sites-available/agycodroid.conf` and `agycodroid-dl.conf`. Data lives in `/var/www/agycodroid/data/`, owned by `ccsite`. `/claude-code/` on `dl.cccodroid.net` is an `alias` to `data/current/claude-code/`, so it switches atomically with the site.
 
-Deployment: see `repos/cccodroid-site/README.md`. **Other sites run on this server; touch only cccodroid files.**
+Deployment: see `repos/agycodroid-site/README.md`. **Other sites run on this server; touch only agycodroid files.**
 
 ---
 
@@ -71,51 +71,40 @@ Deployment: see `repos/cccodroid-site/README.md`. **Other sites run on this serv
 ### 2. APK updates
 
 - The GitHub API is tried first, then `cccodroid.net/dl/releases.json`, then `dl.cccodroid.net/dl/releases.json` (the same file, direct, not through Cloudflare). It has the same shape as GitHub's release list. Android itself enforces the APK signature.
-- The APK is tried from GitHub Release → `cccodroid.net/dl/<version>/` → `dl.cccodroid.net/dl/<version>/` → gh-proxy, resuming the same `.part`. The dl host's `/dl/` was added for 0.4.2 (`cccodroid-dl.conf` on the VPS, sharing the main site's `data/dl/`); older versions only use the first two.
-- For local testing, `home/.config/cccodroid/update-feed` overrides the release list URL.
+- The APK is tried from GitHub Release → `cccodroid.net/dl/<version>/` → `dl.cccodroid.net/dl/<version>/` → gh-proxy, resuming the same `.part`. The dl host's `/dl/` was added for 0.4.2 (`agycodroid-dl.conf` on the VPS, sharing the main site's `data/dl/`); older versions only use the first two.
+- For local testing, `home/.config/agycodroid/update-feed` overrides the release list URL.
 
-### 3. Claude Code (the hardest one)
+### 3. Antigravity CLI (the hardest one)
 
-**Why we mirror only manifests**: Claude Code is closed source; hosting the binary ourselves would be redistribution and risks breaking the terms. Anthropic also publishes it on npm as `@anthropic-ai/claude-code-linux-arm64`, and its `package/claude` is **byte-identical** to the official download (verified on 2.1.292). So the binary comes from npm mirrors and the manifest comes from us.
+**Manifest only — no mirrors, no fallback.** Antigravity CLI is closed source; hosting the binary ourselves would be redistribution and risks breaking the terms. Google publishes no per-version download address and no signature: the only source is the official manifest at `https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json` (the same address the official `install.sh` uses: `DOWNLOAD_BASE_URL + "/manifests/" + platform + ".json"`). The manifest returns `{"version","url","sha512"}` — the version is whatever is current at that moment, the URL is the tar.gz, the sha512 is its checksum. Version / URL / sha512 are read live at install time and are never hard-coded anywhere in the app.
 
-**Trust anchors, in priority order**:
+**Trust anchor (only one)**: the sha512 in Google's official manifest, fetched over TLS. There is no PGP signature list for agy — do not invent one, and do not add a key. The install flow (`android/assets/scripts/install-agy.mjs`):
 
-1. The `linux-arm64` sha256 in the official `manifest.json`, fetched from, in order:
-   - `downloads.claude.ai`: trusted via HTTPS; the signature is also checked when available;
-   - `cccodroid.net/claude-code/`: PGP signature **required**;
-   - `dl.cccodroid.net/claude-code/`: PGP signature **required**.
-2. If none of the three is reachable, fall back to the npm registry's ECDSA signature (over `name@version:integrity`), then check the package's sha512. A version installed this way gets a `.npm-only` marker.
+1. Read the manifest, take `version` / `url` / `sha512`.
+2. Download the tar.gz from the manifest's URL, verify sha512, refuse to install on mismatch.
+3. Extract the member named `antigravity`, land it as `agy` (755).
+4. Trial-run `agy --version`; only then switch the `current` symlink. Keep current + previous version only.
+5. Save two records for the pre-start check: a copy of the manifest (`manifest.json`) and the binary's own sha512 (`agy.sha512`, computed at install time — the manifest's sha512 is the tar.gz's, not the binary's).
 
-**Recheck**: 2 minutes after start and every 6 hours after that, the gateway runs `install-claude.mjs --recheck` on versions marked `.npm-only`:
+**Limits the manifest imposes** (not our choice):
 
-- Match: the marker is removed and the result goes into the repair ledger.
-- Mismatch: a `.mismatch` marker is written and logged. `Updater.java` sees it and shows Claude Code as "update available"; tapping update re-downloads that version, and success clears the marker.
-
-**Pinned keys** (change only after verification):
-
-| Key | Fingerprint / ID | Where | Source (at least two must agree when changing) |
-|---|---|---|---|
-| Anthropic release key (RSA 4096) | `31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE` | `ANTHROPIC_KEYS` in `install-claude.mjs`; `CLAUDE_KEYS` in `build.mjs` | `https://downloads.claude.ai/keys/claude-code.asc`, keys.openpgp.org |
-| npm registry key (ECDSA P-256) | `SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U` | `NPM_KEYS` in `install-claude.mjs` | `https://registry.npmjs.org/-/npm/v1/keys` (unexpired keys only) |
+- The manifest only ever names the latest release: a version that is not the manifest's current one cannot be installed unless it is already on the device (a version directory with a saved `manifest.json` copy can be switched back to without downloading).
+- There are no stable / latest channels and no pinned-version installs of never-installed versions.
+- `agy` is an official bionic Android build and runs directly: no glibc loader, no seccomp shim, no DNS bridge.
 
 **Download behaviour**:
 
-- A source below 20 KB/s for 30 seconds, or failing twice in a row, is dropped for the next one.
-- Downloads resume across sources of the same kind: the direct download uses `claude.part`; every npm mirror shares one `claude.tgz.part`, since their integrity is identical.
-- When every source fails, wait 15 seconds and try one more round, keeping partial data.
-- The last successful source is recorded in `~/.local/share/cccodroid/claude/.source` and tried first next time.
-- In-app update checks also have fallbacks for the version number: official → cccodroid.net → dl.cccodroid.net → npm mirror dist-tags. Anthropic's npm `stable` / `latest` tags match the official channels.
+- Downloads resume from a `.part` file; the expected sha512 is kept in `.part.sha512` so a resumed download is still verified.
+- When the manifest is unreachable, the install fails with a plain-language error; there is no mirror to fall back to.
 
-**Testing**: two environment variables override the URLs to simulate an unreachable official server (content still has to pass signature and hash checks):
+**Testing**: one environment variable overrides the manifest URL to simulate an unreachable official server (content still has to pass the sha512 check):
 
 ```sh
-CCODROID_CLAUDE_OFFICIAL=https://127.0.0.1:9/x   # make the official server unreachable
-CCODROID_CLAUDE_MIRROR=https://dl.cccodroid.net/claude-code   # use only this manifest mirror
-bash install-claude.sh stable        # or latest, or an exact version
-node install-claude.mjs --recheck    # recheck
+AGAPP_AGY_MANIFEST_URL=https://127.0.0.1:9/x   # make the official manifest unreachable
+bash install-agy.sh latest        # or an exact version, if already installed
 ```
 
-Cover at least: npm only; official reachable but downloading from a mirror; official fully down, manifest mirror plus npm mirror; recheck.
+Cover at least: manifest reachable, install succeeds and `agy --version` matches; manifest unreachable, install fails cleanly; tar.gz sha512 mismatch, install refuses; switching back to a previously installed version works offline.
 
 ### 4 & 5. Component index and packages
 
@@ -148,24 +137,24 @@ Every catalog entry has a pinned sha256. Official Qwen models try ModelScope fir
 ## Routine checks (before a release or when something breaks)
 
 ```sh
-# Claude Code versions agree in all three places, both manifest mirrors present;
-# every component package in the indexes exists on dl.cccodroid.net with the right size
+# agy official manifest is reachable and has version/url/sha512; every component package in the indexes exists on dl.cccodroid.net with the right size
 node scripts/check-mirrors.mjs
 
 # The generator's latest runs
-ssh <server> 'journalctl -u cccodroid-site -n 20 --no-pager'
+ssh <server> 'journalctl -u agycodroid-site -n 20 --no-pager'
 ```
 
 **Common symptoms**:
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Install log says the cccodroid.net mirror's signature can't be fetched | The user's route to Cloudflare is unstable | Normal; dl.cccodroid.net is tried next, npm only if both fail |
-| Manifest mirror stuck on an old version | Generator couldn't reach the official server and kept the last copy | Check journalctl; it catches up once the official server is back |
-| Component package 404 on the mirror | Just published, generator hasn't run yet | Wait 30 minutes or run `systemctl start cccodroid-site` |
+| Install log says the cccodroid.net mirror's signature can't be fetched | The user's route to Cloudflare is unstable | Normal; dl.cccodroid.net is tried next, then gh-proxy |
+| Component package 404 on the mirror | Just published, generator hasn't run yet | Wait 30 minutes or run `systemctl start agycodroid-site` |
 | pkg says a mirror's Release signature is missing | Mirror doesn't sync `Release.gpg`, or is incomplete | Normal, next source is used; drop the mirror from the list if it persists |
 | pkg fails verification on every source | Termux rotated its key | Verify and update `TERMUX_KEYS` (section 6) |
-| Every Claude Code manifest fails verification | Anthropic rotated its key | Verify, then update both `install-claude.mjs` and `build.mjs`. **Do not disable verification in the meantime.** |
+| agy install fails: manifest unreachable | Google's manifest endpoint is down or blocked on this network | Nothing to fall back to — wait and retry; check whether the manifest URL loads in a browser |
+| agy install fails: sha512 mismatch | Download corrupted, or the manifest changed mid-download | Retry; the installer re-reads the manifest and re-verifies from scratch |
+| Installed agy is older than the manifest | A newer release exists | Normal — update from Settings; the previous version is kept as a fallback |
 
 ---
 

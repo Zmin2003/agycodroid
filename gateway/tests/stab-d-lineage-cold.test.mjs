@@ -12,7 +12,7 @@ import { routeSessions } from "../gw/sessions.mjs";
 
 const SID = "11111111-2222-3333-4444-555555555555";
 const OTHER = "99999999-8888-7777-6666-555555555555";
-const CACHE = path.join(CFG.home, ".cache", "ccapp-lineage-index.json");
+const CACHE = path.join(CFG.home, ".cache", "agyapp-lineage-index.json");
 const DIR = path.join(PATHS.projects, "proj-cold");
 const FILE = path.join(DIR, SID + ".jsonl");
 const OTHER_FILE = path.join(DIR, OTHER + ".jsonl");

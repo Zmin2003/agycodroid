@@ -8,7 +8,7 @@ import { CFG } from "../gw/config.mjs";
 import * as Q from "../gw/queue.mjs";
 import { RUNS } from "../gw/runs.mjs";
 
-const MARK = path.join(CFG.home, "ccapp-run-mark.json"), INTR = path.join(CFG.home, "ccapp-interrupted.json");
+const MARK = path.join(CFG.home, "agyapp-run-mark.json"), INTR = path.join(CFG.home, "agyapp-interrupted.json");
 const reset = () => { RUNS.clear(); Q.QUEUE.length = 0; fs.rmSync(INTR, { recursive: true, force: true }); fs.rmSync(MARK, { recursive: true, force: true }); Q.setInterrupted([]); };
 after(reset);
 const warns = () => (Q.snapshot().recoverWarns || []).map((w) => w.key);
@@ -18,7 +18,7 @@ test("运行标记坏了：留底，并且给出可见警告", () => {
   fs.writeFileSync(MARK, "{\"runs\":[");
   Q.recoverRunMark();
   assert.ok(warns().some((k) => k.includes("上次的运行状态没恢复")), "要能在快照里看见");
-  const bads = fs.readdirSync(CFG.home).filter((n) => n.startsWith("ccapp-run-mark.json.bad-"));
+  const bads = fs.readdirSync(CFG.home).filter((n) => n.startsWith("agyapp-run-mark.json.bad-"));
   assert.ok(bads.length >= 1, "坏文件留底");
   for (const b of bads) fs.rmSync(path.join(CFG.home, b));
 });

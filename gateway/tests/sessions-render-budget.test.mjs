@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const web = process.env.CCAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
+const web = process.env.AGAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
 const sessionsJs = fs.readFileSync(path.join(web, "app/07-sessions.js"), "utf8");
 const pagesJs = fs.readFileSync(path.join(web, "app/14-projects-sched.js"), "utf8");
 const openPageJs = pagesJs.slice(pagesJs.indexOf("  function openPage(name, cat) {"), pagesJs.indexOf("  function closePage() {"));

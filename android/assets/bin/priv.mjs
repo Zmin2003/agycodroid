@@ -1,9 +1,9 @@
-// priv —— 经 cccodroid 应用进程里的 Shizuku binder，以 shell 身份（uid 2000）执行命令。
+// priv —— 经 agycodroid 应用进程里的 Shizuku binder，以 shell 身份（uid 2000）执行命令。
 // 协议见 android/java/cc/codroid/Priv.java。
 import net from "node:net";
 
-// 私有目录里的文件套接字：别的应用抢不走（以前的抽象套接字 \0cc.codroid.priv 谁都能先绑 —— 审查 H2）
-const SOCKET = process.env.CCAPP_PRIV_SOCK || "/data/data/cc.codroid/files/.priv.sock";
+// 私有目录里的文件套接字：别的应用抢不走（以前的抽象套接字 \0cc.agyroid.priv 谁都能先绑 —— 审查 H2）
+const SOCKET = process.env.AGAPP_PRIV_SOCK || "/data/data/cc.agyroid/files/.priv.sock";
 const args = process.argv.slice(2);
 const HELP = `用法:
   priv '<命令>'           以 shell 身份执行（/system/bin/sh -c）
@@ -57,7 +57,7 @@ function exec(argv) {
   // 连上之后的写错误（对端先结束了，我们还在递 stdin）不算失败 —— 回应可能已经在缓冲里，等 close 时再判断
   s.on("error", (e) => {
     if (connected) return;
-    process.stderr.write(`priv: 连不上 cccodroid（${e.code || e.message}）。应用的后台服务在运行吗？\n`);
+    process.stderr.write(`priv: 连不上 agycodroid（${e.code || e.message}）。应用的后台服务在运行吗？\n`);
     process.exit(125);
   });
   s.on("close", () => {

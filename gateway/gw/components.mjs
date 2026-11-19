@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import crypto from "node:crypto";
 import { CFG, LIVE, LAST_LANG, PREFIX, log, tr, tz } from "./config.mjs";
-import { claudeEnv, killTree } from "./claude.mjs";
+import { agyEnv, killTree } from "./agy.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { termEnv } from "./terminal.mjs";
 import { SKILLS_DIR, addMcp, removeMcp, skillMeta } from "./extensions.mjs";
@@ -27,11 +27,11 @@ import { writeAtomic } from "./statefile.mjs";
 //   · 已装记录在 files/components/<id>.json（$PREFIX 之外：工具包整体替换时不会把记录一起换掉）；
 //     记录里列着装进去的每个文件，卸载就按它删，不会误删工具包自己的东西。
 //   · 状态：absent / downloading / verifying / installing / ok / outdated（工具包变了）/ damaged / error
-// 只在 cccodroid（有 Termux 前缀）上可用；开发端没有 $PREFIX，接口返回 supported:false。
-const COMP_INDEX = process.env.CCAPP_COMPONENTS_INDEX ||
+// 只在 agycodroid（有 Termux 前缀）上可用；开发端没有 $PREFIX，接口返回 supported:false。
+const COMP_INDEX = process.env.AGAPP_COMPONENTS_INDEX ||
   "https://github.com/greyoak111/cccodroid/releases/download/components/components.json";
 // 社区组件（v0.2.0 起）：greyoak111/cccodroid-components 仓库，CI 按配方打包、出签名索引
-const COMP_COMMUNITY_INDEX = process.env.CCAPP_COMPONENTS_COMMUNITY_INDEX ||
+const COMP_COMMUNITY_INDEX = process.env.AGAPP_COMPONENTS_COMMUNITY_INDEX ||
   "https://github.com/greyoak111/cccodroid-components/releases/download/index/components.json";
 // 索引签名公钥（ed25519）：每份索引旁边都有 <索引>.sig（对原始字节的签名，base64），验不过整份不用。
 // 索引里有每个包的 sha256，所以验了索引就等于验了包。私钥只在发布机和组件仓库的 CI 密钥里。
@@ -107,16 +107,16 @@ function compFetch(src, quick) {
   const t = quick ? ["--connect-timeout", "8", "--max-time", "20", "--retry", "1"] : ["--max-time", "30", "--retry", "2"];
   return new Promise((resolve, reject) => {
     execFile(path.join(PREFIX, "bin", "curl"), ["-fsSL", ...t, src],
-      { env: claudeEnv(), maxBuffer: 4 << 20, encoding: "buffer" },
+      { env: agyEnv(), maxBuffer: 4 << 20, encoding: "buffer" },
       (e, so, se) => (e ? reject(new Error(String(se || e.message).trim().slice(0, 200))) : resolve(so)));
   });
 }
 // 备用源：cccodroid.net 镜像了两份索引（连同 .sig，逐字节同 GitHub）。主地址拉不到才用；照样验签，镜像不需要被信任
-const COMP_INDEX_MIRROR = { preset: process.env.CCAPP_COMPONENTS_INDEX_MIRROR || "https://cccodroid.net/components/official/components.json",
-  community: process.env.CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR || "https://cccodroid.net/components/community/components.json" };   // 环境变量只给测试用
-/** 取一份索引并验签。没签名、签名不对一律拒绝；只有网关启动时带了 CCAPP_COMPONENTS_ALLOW_UNSIGNED=1（测试用）才放行。
+const COMP_INDEX_MIRROR = { preset: process.env.AGAPP_COMPONENTS_INDEX_MIRROR || "https://cccodroid.net/components/official/components.json",
+  community: process.env.AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR || "https://cccodroid.net/components/community/components.json" };   // 环境变量只给测试用
+/** 取一份索引并验签。没签名、签名不对一律拒绝；只有网关启动时带了 AGAPP_COMPONENTS_ALLOW_UNSIGNED=1（测试用）才放行。
  *  以前看私有目录里有没有 allow-unsigned 文件，应用身份跑的任何程序（包括模型自己）touch 一下就把签名关了（审查 v0.5.9 D2） */
-const allowUnsigned = () => process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED === "1";
+const allowUnsigned = () => process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED === "1";
 // 上回主地址拉不到、靠镜像拉到的：这回先试镜像（记在磁盘缓存里，重开 App 也记得）
 // 镜像地址 → 改用镜像的时刻（两份索引各记各的）；一天后重新先试主地址——镜像是定时同步的，可能比 GitHub 晚一拍
 let compIndexViaMirror = {};
@@ -144,7 +144,7 @@ async function compFetchIndex(src, mirror) {
   return { ...parsed, signed: !!ok, _raw: String(body), _sig: sig && sig.length === 64 ? sig.toString("base64") : "" };
 }
 
-/** 两个来源合并：预置（cccodroid 仓库）在前，社区（cccodroid-components）在后；id 撞了以预置为准。
+/** 两个来源合并：预置（agycodroid 仓库）在前，社区（agycodroid-components）在后；id 撞了以预置为准。
  *  拉索引与读磁盘缓存都走这里，合并口径只有一份。 */
 function compMerge(got) {
   const components = {};
@@ -226,12 +226,12 @@ export async function compIndex(force) {
 }
 
 async function compIndexFetch() {
-  // 共享目录里的索引只在网关启动时带了 CCAPP_COMPONENTS_USE_LOCAL_INDEX=1 才认：/sdcard 别的应用也能写，
+  // 共享目录里的索引只在网关启动时带了 AGAPP_COMPONENTS_USE_LOCAL_INDEX=1 才认：/sdcard 别的应用也能写，
   // 放一份 GitHub 上公开的旧索引（签名是真的）就能把组件压回旧构建（审查 10-29 中2）。
   // 以前看私有目录里的 use-local-index 文件，应用身份跑的任何程序（包括模型自己）touch 一下就能换来源；
   // 和 allow-unsigned 一样只认启动环境变量（0.6.9 审计 195-V.2）
-  const local = process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX === "1" && process.env.CCAPP_SHARED && COMP_DIR &&
-    path.join(process.env.CCAPP_SHARED, "components", "components.json");
+  const local = process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX === "1" && process.env.AGAPP_SHARED && COMP_DIR &&
+    path.join(process.env.AGAPP_SHARED, "components", "components.json");
   const sources = [
     { source: "preset", url: local && fs.existsSync(local) ? "file://" + local : COMP_INDEX },
     { source: "community", url: COMP_COMMUNITY_INDEX },
@@ -339,7 +339,7 @@ async function compList(force) {
       error: job && job.error ? tr(LAST_LANG, job.error) : "",
       bin: (b && b.bin) || (rec && rec.bin) || [],
       selftest: (b && b.selftest) || "",
-      // 来源与可信度：预置组件由 cccodroid 发布、随版本测过；社区组件看 verified（真机验证记录）
+      // 来源与可信度：预置组件由 agycodroid 发布、随版本测过；社区组件看 verified（真机验证记录）
       source: e ? e.source : (rec && rec.source) || "", signed: e ? !!e.signed : true,
       verified: e ? e.source === "preset" || !!(b && b.verified) : true,
       license: (e && e.license) || "", homepage: (e && e.homepage) || "", needs: (e && e.needs) || {},
@@ -690,7 +690,7 @@ export async function compRepair(id) {
 }
 /** 起安装任务：起了返回 { r, job }，没起返回给界面的结果 */
 async function compStart(id) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   const cur = COMP_JOBS.get(id);
   if (cur && !cur.finished) return { ok: false, message: "busy" };
   const dk = devkitIdentity();
@@ -774,7 +774,7 @@ export const skillDst = (name) => {
   const dst = path.join(SKILLS_DIR, name);
   return path.dirname(dst) === path.resolve(SKILLS_DIR) ? dst : null;
 };
-const SKILL_OWNER = ".cccodroid-component";
+const SKILL_OWNER = ".agycodroid-component";
 const SKILL_NAME_RE = /^(?!\.+$)[A-Za-z0-9._-]{1,64}$/;
 function compInstallSkill(id, rel, rec) {
   const src = path.join(PREFIX, rel.replace(/^usr\//, ""));
@@ -783,7 +783,7 @@ function compInstallSkill(id, rel, rec) {
   if (!dst) { log(`[comp] ${id} 技能名不合法，没装：${String(name).slice(0, 80)}`); return; }
   // 同名目录已经在：用户自己的、手动导入的、别的组件的 —— 不是本组件的就不碰（#104 05-010）。
   // 本组件上一版的技能在升级/重装时已由 compRemoveFiles 按 rec.skill 删掉；空目录（v0.1.9 留下的）照旧删。
-  // 目录里的 .cccodroid-component 记着是哪个组件放的：装到一半被杀、记录还没写上 skill 的，重装时认得出是自己的
+  // 目录里的 .agycodroid-component 记着是哪个组件放的：装到一半被杀、记录还没写上 skill 的，重装时认得出是自己的
   const ucb = ucAppBegin();
   try { fs.rmdirSync(dst); } catch {}
   let owner = (readSmall(path.join(dst, SKILL_OWNER), 512) || "").trim();
@@ -967,7 +967,7 @@ export function compHealSkills() {
     if (!f.endsWith(".json")) continue;
     const id = f.slice(0, -5), rec = compRecord(id);
     if (!rec || rec.state !== "ok" || rec.skill || (COMP_JOBS.get(id) && !COMP_JOBS.get(id).finished)) continue;
-    const rel = `usr/share/cccodroid/components/${id}/skill`;
+    const rel = `usr/share/agycodroid/components/${id}/skill`;
     if (!fs.existsSync(path.join(PREFIX, rel.slice(4), "SKILL.md"))) continue;
     try { fs.rmdirSync(path.join(SKILLS_DIR, id)); } catch {}     // 当时留下的空目录（只删空的）
     // 这段跑在启动定时器里（网关没装 uncaughtException 兜底）：哪一步抛了都只跳过这一个组件
@@ -1139,7 +1139,7 @@ async function compRunInstall(id, b, job) {
   // 首启脚本在锁外跑（可能几分钟）；收尾这步重新进锁：技能目录、共享文件复核、ok 记录
   // 和别的组件卸载时的删文件不能交错（196-供应链.1）
   await compFsExclusive(async () => {
-    // 5) 给 Claude 的技能
+    // 5) 给 Antigravity 的技能
     if (b.skill) compInstallSkill(id, b.skill, rec);
     // 首次配置这段时间里，另一个卸载 / pkg 卸载可能把本组件依赖的共享文件删掉了：
     // 提交 ok 之前再核一次，别报「装好了」却缺依赖（0.6.9 审计 #185）
@@ -1308,7 +1308,7 @@ function compRemovalRecord(id) {
 }
 
 export async function compRemove(id) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   if (typeof id !== "string" || !/^[a-z0-9-]{1,40}$/.test(id)) return { ok: false, message: "bad id" };
   const job = COMP_JOBS.get(id);
   if (job && !job.finished) return { ok: false, message: "busy" };
@@ -1359,11 +1359,11 @@ export async function compRemove(id) {
   } finally { if (COMP_JOBS.get(id) === removal) COMP_JOBS.delete(id); }
 }
 
-// ── 组件的运行数据：约定放在 ~/.cccodroid/<id>/（blender 的 Debian 环境、下载缓存等），卸载组件不碰它。
+// ── 组件的运行数据：约定放在 ~/.agycodroid/<id>/（blender 的 Debian 环境、下载缓存等），卸载组件不碰它。
 // 卸载后报出大小、问用户要不要一起删。目录名不一定等于 id（gpu-driver-glibc 用 gpu-driver 的目录），
 // 所以只认和 id 同名的目录，还装着 <id>-xxx 组件时当作共用、不提议删
-function compDataDir(id) { return path.join(CFG.home, ".cccodroid", id); }
-// ~/.cccodroid 下别的子系统的目录：不是组件的运行数据，永远不许按「组件」删（11-03 审查 M-8）
+function compDataDir(id) { return path.join(CFG.home, ".agycodroid", id); }
+// ~/.agycodroid 下别的子系统的目录：不是组件的运行数据，永远不许按「组件」删（11-03 审查 M-8）
 const COMP_DATA_RESERVED = new Set(["custom", "bin", "services", "agents", "local-mode", "cache", "tmp", "logs"]);
 /** 只有组件索引里有的 id 才算组件：清理接口只按 id 删目录，别让它删到不相干的东西 */
 function compDataKnown(id) {
@@ -1392,12 +1392,12 @@ async function compDataInfo(id) {
   try { if (!fs.lstatSync(dir).isDirectory()) return null; } catch { return null; }
   // 记录坏了也当还装着：不能按「没装」把它的运行数据删了（195-Z.11）
   if (!compRecordInfo(id).missing || compDataShared(id) || !compDataKnown(id)) return null;
-  return { path: "~/.cccodroid/" + id, bytes: await compDuBytes(dir) };
+  return { path: "~/.agycodroid/" + id, bytes: await compDuBytes(dir) };
 }
-/** 卸掉的组件留下的运行数据（存储页汇总用）：~/.cccodroid 下每个够格提议删的目录 */
+/** 卸掉的组件留下的运行数据（存储页汇总用）：~/.agycodroid 下每个够格提议删的目录 */
 export async function compLeftovers() {
   const out = [];
-  let ns = []; try { ns = fs.readdirSync(path.join(CFG.home, ".cccodroid")); } catch {}
+  let ns = []; try { ns = fs.readdirSync(path.join(CFG.home, ".agycodroid")); } catch {}
   for (const id of ns) { const i = await compDataInfo(id).catch(() => null); if (i) out.push({ id, ...i }); }
   return out;
 }
@@ -1427,7 +1427,7 @@ async function compPurgeData(id) {
 // 令牌只由 gh 自己存（~/.config/gh/hosts.yml）：网关不读那个文件、不转发、不记 gh 的输出，
 // 对外只给账号名与状态。登录成功后跑 gh auth setup-git，git 走 https 推送就能用
 const GH = { job: null };
-// cccodroid：gh 组件装在 $PREFIX/bin；开发端没有组件这一层，用终端 PATH 里的 gh（devbin/gh）
+// agycodroid：gh 组件装在 $PREFIX/bin；开发端没有组件这一层，用终端 PATH 里的 gh（devbin/gh）
 function ghBin() {
   if (PREFIX) return path.join(PREFIX, "bin", "gh");
   for (const d of String(termEnv().PATH || "").split(":")) if (d && fs.existsSync(path.join(d, "gh"))) return path.join(d, "gh");

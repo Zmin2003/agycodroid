@@ -1,8 +1,10 @@
 // 补档（脉络规划书 §12 / G5）：改版前的旧会话没有「在场的 AI」给章起题名，由用户在脉络页点一下，网关替它补。
 // 素材：每章结束时那份压缩摘要（现成的浓缩，不重读全文），取开头「主要诉求」和末尾「当前工作」两段；
 //      还没压缩过的最后一章没有摘要，拿这一章里用户的提问。
-// 调用：claude -p，走全局默认的接口和模型（用户 10-26 定的，不另挑便宜型号）；不留会话记录、不给工具、不起 MCP，
+// 调用：agy -p 单次调用，走全局默认的接口和模型（用户 10-26 定的，不另挑便宜型号）；不留会话记录，
 //      在空的私有目录里跑。一个会话的章一次问完（太多就分批），题名过 validateTitle，不合格的带着原因再问一次。
+// 注意：agy 的 -p 没有 --tools "" 这类“禁用工具”的旗标（也读不到 --system-prompt），
+//      提示词直接拼进用户消息里；它会不会顺手调工具，靠提示词本身约束（只输出 JSON 题名）。
 // 记 by:"backfill"——最弱的来源，AI 建档、用户改名都能盖过它；跑的时候有人刚给某章起了名就跳过那章。
 import fs from "node:fs";
 import path from "node:path";
@@ -11,9 +13,8 @@ import { CFG, LAST_LANG, log, tz } from "./config.mjs";
 import { ucPending } from "./userconf.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { publish } from "./bus.mjs";
-import { claudeBlocked, claudeCmd, claudeEnv, currentModelInfo, ensureBridge, killTree, settingsArgs } from "./claude.mjs";
+import { agyBlocked, agyCmd, agyEnv, currentModelInfo, killTree, writeAgySettings } from "./agy.mjs";
 import { sealed } from "./edition.mjs";
-import { isLoginMode } from "./models.mjs";
 import { SETTINGS } from "./settings-store.mjs";
 import { PROVIDER } from "./providers.mjs";
 import { lineageCached, lineageGraph } from "./lineage.mjs";
@@ -31,7 +32,7 @@ const langName = (l) => (/^zh-(Hant|TW|HK)/i.test(l) ? "Traditional Chinese" : L
 
 // ── 素材 ──
 
-/** 压缩摘要 → 喂给模型的一段：「主要诉求」开头一截 + 「当前工作」一截（摘要按 Claude Code 的固定小节写） */
+/** 压缩摘要 → 喂给模型的一段：「主要诉求」开头一截 + 「当前工作」一截（摘要按 Antigravity CLI 的固定小节写） */
 export function digestSummary(text) {
   let s = String(text || "").replace(/\r/g, "");
   const k = s.search(/\bSummary:\s*\n/);
@@ -162,20 +163,24 @@ export function parseTitles(text) {
   } catch { return {}; }
 }
 
-const WORK = path.join(CFG.home, ".cache", "ccapp-backfill");
+const WORK = path.join(CFG.home, ".cache", "agyapp-backfill");
 /** 问一次。o.provider / o.model：自动起名用对话那家（autotitle.mjs）；不给就是补档，走全局默认、子进程挂在 JOB 上好停 */
 export async function ask(prompt, o = {}) {
-  // 起 claude 就会加载用户级钩子、CLAUDE.md：有没确认的改动先别起（见 userconf.mjs）。发行版封口，用户级配置一概不读，也就没有卡片
-  if (!sealed() && ucPending()) return { error: tz("Claude Code 的用户级配置有改动还没确认。先发一条消息，在弹出的卡片里确认后再试。") };
-  const blocked = await claudeBlocked();
+  // 用户级配置有没确认的改动先别起（见 userconf.mjs）。发行版封口，用户级配置一概不读，也就没有卡片
+  if (!sealed() && ucPending()) return { error: tz("Antigravity CLI 的用户级配置有改动还没确认。先发一条消息，在弹出的卡片里确认后再试。") };
+  const blocked = await agyBlocked();
   if (blocked) return { error: blocked };
   if (!o.provider && JOB.stop) return { error: "stopped" };   // 核验那一下里用户点了停止：别再起（调用方先看 JOB.stop，这条不记错）
   return new Promise((resolve) => {
     fs.mkdirSync(WORK, { recursive: true });
     const P = o.provider || PROVIDER, own = !o.provider;
-    const [cmd, args] = claudeCmd([...settingsArgs(P), "-p", "--no-session-persistence", "--tools", "", "--strict-mcp-config",
-      "--system-prompt", systemPrompt(), "--output-format", "json", ...(o.model ? ["--model", o.model] : [])]);
-    const child = spawn(cmd, args, { cwd: WORK, env: own ? claudeEnv() : claudeEnv({ model: o.model || "", provider: P }), stdio: ["pipe", "pipe", "pipe"], detached: true });
+    // 起进程前写一遍网关管理的 settings.json（权限模式、预先放行的规则以这一轮为准）
+    try { writeAgySettings(P, {}); } catch (e) { log(`写 agy 设置失败: ${e.message}`); }
+    // agy 没有 --system-prompt：起题名的指令拼进用户消息最前面。
+    // -p 的提示走参数（argv 单个参数上限 128 KB；BATCH_CHARS 封顶 48k 字，够不着）。
+    // 也没有 --tools "" 这类“禁用工具”的旗标：它会不会顺手调工具，靠提示词本身约束（只输出 JSON 题名）。
+    const [cmd, args] = agyCmd(["-p", systemPrompt() + "\n\n" + prompt, "--output-format", "json", ...(o.model ? ["--model", o.model] : [])]);
+    const child = spawn(cmd, args, { cwd: WORK, env: agyEnv({ model: o.model || "", provider: P }), stdio: ["ignore", "pipe", "pipe"], detached: true });
     if (own) JOB.child = child;
     let out = "", err = "", done = false;
     const fin = (r) => { if (done) return; done = true; clearTimeout(timer); if (own) JOB.child = null; resolve(r); };
@@ -184,16 +189,14 @@ export async function ask(prompt, o = {}) {
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { err += d; });
     child.on("error", (e) => fin({ error: e.message }));
-    // claude 刚起就退出时，写提示可能撞上 EPIPE：没人接的 error 会被 crashguard 当成「上游管道断了」让整个网关退出（0.6.9 审计 P1-5，v4pro 复核）
-    child.stdin.on("error", () => {});
-    child.on("close", () => {
+    child.on("close", (code) => {
+      if (code !== 0) return fin({ error: (err || out).trim().slice(-300) || "exit " + code });
       let j = null; try { j = JSON.parse(out.trim().split("\n").pop()); } catch {}
       if (!j) return fin({ error: (err || out).trim().slice(-300) || "no output" });
-      if (j.is_error) return fin({ error: String(j.result || j.subtype || "error").slice(0, 300) });
+      if (j.status && j.status !== "SUCCESS") return fin({ error: String(j.error?.message || j.response || j.status).slice(0, 300) });
       const u = j.usage || {};
-      fin({ text: j.result || "", tin: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), tout: u.output_tokens || 0 });
+      fin({ text: j.response || "", tin: (u.input_tokens || 0) + (u.cache_read_tokens || 0), tout: u.output_tokens || 0 });
     });
-    child.stdin.end(prompt);
   });
 }
 
@@ -263,8 +266,6 @@ async function start(only) {
   let targets = await backfillTargets();
   if (only) targets = targets.filter((t) => t.id === only);
   if (!targets.length) return { ok: false, message: "nothing" };
-  // 和正式运行一样：全局那家（非官方登录）经本地 DNS 桥，先把桥拉起来
-  if (!isLoginMode() && !(await ensureBridge())) return { ok: false, message: "bridge" };
   Object.assign(JOB, { running: true, stop: false, sessions: targets.length, total: targets.reduce((n, t) => n + t.chapters.length, 0), done: 0, ok: 0, skipped: 0, failed: 0, tin: 0, tout: 0, error: "", startedAt: Date.now(), endedAt: 0 });
   log(`补档开始：${JOB.sessions} 个会话、${JOB.total} 章（模型 ${SETTINGS.model || "默认"}）`);
   tick();

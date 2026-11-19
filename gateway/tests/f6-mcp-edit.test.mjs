@@ -1,7 +1,7 @@
-// F6（11-15）：MCP 编辑 = remove + add-json（claude 同名 add / add-json 都直接报错，没有 update）。
+// F6（11-15）：MCP 编辑 = remove + add-json（agy 同名 add / add-json 都直接报错，没有 update）。
 // 合并语义：留空 = 保留原值（值只存 ~/.claude.json，不回前端）、提交的同名键覆盖、点掉的键删除；
 // 写回用 add-json：定义整体一个 JSON 参数，值里的逗号/等号/引号/换行不会被切坏；
-// add 失败把旧定义原样加回。停用中的条目只改停用名单，不碰 claude。假 claude 记录 argv。
+// add 失败把旧定义原样加回。停用中的条目只改停用名单，不碰 agy。假 agy 记录 argv。
 import { PATHS, CFG } from "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
@@ -10,13 +10,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { _setSealed } from "../gw/edition.mjs";
 
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "f6-"));
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "f6-"));
 const cli = path.join(root, "fake-cli.sh"), argLog = path.join(root, "argv.log");
 const failOnce = path.join(root, "fail-once"), failAll = path.join(root, "fail-all");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done >> '${argLog}'\nprintf '\\n' >> '${argLog}'\nsub=""; prev=""\nfor a in "$@"; do if [ "$prev" = "mcp" ]; then sub="$a"; break; fi; prev="$a"; done\ncase "$sub" in\n  remove) exit 0 ;;\n  add-json) if [ -f '${failAll}' ]; then exit 1; elif [ -f '${failOnce}' ]; then rm -f '${failOnce}'; exit 1; fi ;;\nesac\nexit 0\n`, { mode: 0o700 });
-const prev = { claude: PATHS.claude, loader: PATHS.loader, claudeLoader: PATHS.claudeLoader };
-PATHS.claude = process.execPath; PATHS.loader = PATHS.claudeLoader = cli;
+const prev = { agy: PATHS.agy };
+PATHS.agy = cli;
 const { editMcp, getMcp, _extForTest } = await import("../gw/extensions.mjs");
 const { mcpAddArgs } = _extForTest;
 const { extOff, saveExtOff, EXT_OFF_FILE } = await import("../gw/extoff.mjs");
@@ -29,7 +29,7 @@ const putDef = (name, d) => {   // 合并不覆盖：一个测试里可以放几
   fs.writeFileSync(f, JSON.stringify(cur));
 };
 const resetLog = () => fs.rmSync(argLog, { force: true });
-/** 假 claude 的历次调用：每组一次调用；loader 会加 --library-path / node 前缀，从 "mcp" 处切 */
+/** 假 agy 的历次调用：每组一次调用，从 "mcp" 处切 */
 const calls = () => fs.existsSync(argLog) ? fs.readFileSync(argLog, "utf8").split("\n\n").filter((b) => b.trim()).map((b) => { const a = b.split("\n"); const i = a.indexOf("mcp"); return i >= 0 ? a.slice(i) : a; }) : [];
 /** 最近一次 add-json 的 JSON 参数 */
 const lastJson = () => JSON.parse(calls().at(-1)[5]);

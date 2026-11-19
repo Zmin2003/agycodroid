@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
 
 const SERVER = new URL("../server.mjs", import.meta.url).pathname;
 const PROBE = new URL("./fixtures/b3-interval-probe.mjs", import.meta.url).pathname;
-const home = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "b3-head-"));
+const home = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "b3-head-"));
 const probe = path.join(home, "probe.log");
 let child = null;
 after(() => { try { child?.kill("SIGKILL"); } catch {} fs.rmSync(home, { recursive: true, force: true }); });
@@ -22,8 +22,8 @@ const freePort = () => new Promise((res, rej) => {
 
 test("HEAD 静态资源：与 GET 同头、不带正文；回收站清理登记为每天一次且已 unref", async () => {
   const port = await freePort();
-  const env = { ...process.env, CCAPP_HOME: home, HOME: home, CCAPP_LOG: path.join(home, "gateway.log"), CCAPP_B3_PROBE: probe };
-  delete env.NODE_TEST_CONTEXT; delete env.CCAPP_TEST;
+  const env = { ...process.env, AGAPP_HOME: home, HOME: home, AGAPP_LOG: path.join(home, "gateway.log"), AGAPP_B3_PROBE: probe };
+  delete env.NODE_TEST_CONTEXT; delete env.AGAPP_TEST;
   child = spawn(process.execPath, ["--import", PROBE, SERVER, String(port)], { env, stdio: ["ignore", "pipe", "pipe"] });
   let out = "";
   child.stdout.on("data", (d) => { out += d; }); child.stderr.on("data", (d) => { out += d; });

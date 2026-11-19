@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const web = process.env.CCAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
+const web = process.env.AGAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
 const chat = fs.readFileSync(path.join(web, "app/02-chat-view.js"), "utf8");
 // 只取生产 dropCards：CHAT_BLOCKS / TOOL_CARDS / AG 都由测试注入，避免把逻辑抄进测试
 const start = chat.indexOf("  function dropCards(root) {");

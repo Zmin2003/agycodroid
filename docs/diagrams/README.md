@@ -8,7 +8,10 @@ Every component in the specs cites the source lines it describes (pinned to a co
 
 | Diagram · 图 | English | 中文 |
 |---|---|---|
-| Runtime architecture · 运行时架构 | [light](cccodroid-architecture.en-light.png) · [dark](cccodroid-architecture.en-dark.png) · [HTML](cccodroid-architecture.en.html) · [JSON](cccodroid-architecture.en.json) | [浅色](cccodroid-architecture.zh-CN-light.png) · [深色](cccodroid-architecture.zh-CN-dark.png) · [HTML](cccodroid-architecture.zh-CN.html) · [JSON](cccodroid-architecture.zh-CN.json) |
+| Runtime architecture · 运行时架构 | [light](cccodroid-architecture.en-light.png) · [dark](cccodroid-architecture.en-dark.png) · [HTML](agycodroid-architecture.en.html) · [JSON](agycodroid-architecture.en.json) | [浅色](cccodroid-architecture.zh-CN-light.png) · [深色](cccodroid-architecture.zh-CN-dark.png) · [HTML](agycodroid-architecture.zh-CN.html) · [JSON](agycodroid-architecture.zh-CN.json) |
+
+> The PNGs are still the pre-fork renders (old filenames, old branding in the image); only the HTML/JSON have been re-rendered for agycodroid so far. Re-render the PNGs from the JSON specs (workflow below) and they will take the `agycodroid-architecture.*.png` names.
+> PNG 还是 fork 之前的渲染（旧文件名、图里也是旧品牌）；目前只有 HTML/JSON 按 agycodroid 重渲染过。按下面的流程从 JSON 规格重渲染 PNG，出来的就是 `agycodroid-architecture.*.png` 的新名字。
 
 | Format · 格式 | Use · 用途 |
 |---|---|
@@ -26,19 +29,19 @@ Install the Archify skill, then from this directory (replace `$A` with the skill
 装好 Archify skill 后，在本目录执行（`$A` 换成 skill 根目录）：
 
 ```sh
-node $A/bin/archify.mjs finalize architecture cccodroid-architecture.en.json cccodroid-architecture.en.html \
+node $A/bin/archify.mjs finalize architecture agycodroid-architecture.en.json agycodroid-architecture.en.html \
   --repo-root ../.. --quality showcase --json
 # light / dark SVG as an intermediate step · 先抽出浅色 / 深色 SVG 作中间产物
-node extract-svg.mjs cccodroid-architecture.en.html en-light.svg light
-node extract-svg.mjs cccodroid-architecture.en.html en-dark.svg dark
+node extract-svg.mjs agycodroid-architecture.en.html en-light.svg light
+node extract-svg.mjs agycodroid-architecture.en.html en-dark.svg dark
 node check-svg.mjs en-light.svg                 # well-formedness check · 标签配对自检
 ```
 
 PNG: serve the directory with `node png-server.mjs .` (port 8799), open `http://127.0.0.1:8799/render-png.html` in any browser and run `go()` in the console;
-it draws each SVG onto a 2× canvas and posts the PNG back to the server. Rename the results to `cccodroid-architecture.<lang>-<theme>.png`.
+it draws each SVG onto a 2× canvas and posts the PNG back to the server. Rename the results to `agycodroid-architecture.<lang>-<theme>.png`.
 
 PNG：`node png-server.mjs .`（端口 8799）起一个服务，任意浏览器打开 `http://127.0.0.1:8799/render-png.html`，在控制台执行 `go()`，
-它把每张 SVG 画到 2 倍大小的画布上，再把 PNG 传回服务端落盘。最后改名为 `cccodroid-architecture.<语言>-<主题>.png`。
+它把每张 SVG 画到 2 倍大小的画布上，再把 PNG 传回服务端落盘。最后改名为 `agycodroid-architecture.<语言>-<主题>.png`。
 
 PNG without a browser (what the current PNGs were made with): flatten the SVG for [resvg](https://github.com/linebender/resvg) — CSS variables, `color-mix()` and theme selectors resolved — then render at 2× with the system fonts.
 `resvg-wasm` is fetched from npm (`@resvg/resvg-wasm`, MPL-2.0) and not vendored here:
@@ -48,7 +51,7 @@ PNG without a browser (what the current PNGs were made with): flatten the SVG fo
 
 ```sh
 node flatten-svg.mjs en-light.svg f-en-light.svg
-node resvg-png.mjs <resvg-wasm 解包目录> f-en-light.svg cccodroid-architecture.en-light.png
+node resvg-png.mjs <resvg-wasm 解包目录> f-en-light.svg agycodroid-architecture.en-light.png
 ```
 
 ### On Android · 在安卓上
@@ -61,7 +64,7 @@ Archify 用硬链接做原子发布并核对 inode。安卓的 SELinux 不许普
 
 ```sh
 export TMPDIR=$PWD/tmp NODE_OPTIONS="--import=$PWD/android-link-shim.mjs"
-node $A/bin/archify.mjs finalize architecture cccodroid-architecture.en.json cccodroid-architecture.en.html --repo-root <repo> --quality showcase --json
+node $A/bin/archify.mjs finalize architecture agycodroid-architecture.en.json agycodroid-architecture.en.html --repo-root <repo> --quality showcase --json
 ```
 
 The `browser-check` gate needs desktop Chrome / Chromium and is skipped on the phone; the other gates (validate, deliver, check) run.

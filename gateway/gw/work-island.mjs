@@ -1,5 +1,5 @@
 // ── 工作岛（可选集成）──────────────────────────────────────────────────────
-// 在网关进程里直接订阅事件总线，把 Claude 的工作状态经 am 送给「工作岛」应用。
+// 在网关进程里直接订阅事件总线，把 Antigravity 的工作状态经 am 送给「工作岛」应用。
 //
 // 约束：
 //  · 不另起进程：没有 detached child、没有 PID 文件、没有看门狗。
@@ -95,8 +95,8 @@ function isAndroid() {
 }
 
 function detectApp(cb) {
-  if (process.env.CCAPP_WORK_ISLAND === "1") return cb(true);
-  if (process.env.CCAPP_WORK_ISLAND === "0") return cb(false);
+  if (process.env.AGAPP_WORK_ISLAND === "1") return cb(true);
+  if (process.env.AGAPP_WORK_ISLAND === "0") return cb(false);
   // pm 默认按“当前用户”查；应用 uid 会撞 INTERACT_ACROSS_USERS（asks to run as user 10），
   // 必须显式 --user 0。但 Android 16 上包可见性会把 pm list 裁成「只剩自己」，
   // 列不出来不等于没装——再用 am 探一次服务（显式组件不受 list 过滤影响）。
@@ -126,7 +126,7 @@ export const _islandForTest = { seam, send: amSend, sendSync: amSendSync, state:
 export function startWorkIsland() {
   if (started || detecting) return;
   if (!SETTINGS.workIsland) return;              // 默认关，用户开了才动
-  if (process.env.CCAPP_WORK_ISLAND === "0") return;
+  if (process.env.AGAPP_WORK_ISLAND === "0") return;
   if (!seam.android()) return;
   started = true;
   detecting = true;

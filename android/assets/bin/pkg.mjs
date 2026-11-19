@@ -1,7 +1,7 @@
-// pkg —— 在 cccodroid 里装 Termux 仓库的包。
+// pkg —— 在 agycodroid 里装 Termux 仓库的包。
 //
-// Termux 的包把路径写死成 /data/data/com.termux/…，而 cc.codroid 和 com.termux 一样长（10 个字符），
-// 所以和打工具包时一样，逐字节把 /data/data/com.termux/ 换成 /data/data/cc.codroid/ 就能原样跑，
+// Termux 的包把路径写死成 /data/data/com.termux/…，而 cc.agyroid 和 com.termux 一样长（10 个字符），
+// 所以和打工具包时一样，逐字节把 /data/data/com.termux/ 换成 /data/data/cc.agyroid/ 就能原样跑，
 // 不用 patchelf、不用 proot。zip 类归档（.jar/.whl…）里面是压缩过的，要解开改完再压回去。
 //
 // 规矩：
@@ -19,7 +19,7 @@ import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { TERMUX_KEYS, verifyDetached } from "./pgp.mjs";     // 正本在 devkit/pgp.mjs，打包时拷到这旁边
 import { verifyLock } from "./lockcheck.mjs";                // devkit.lock.json 的 ed25519 验签（196-供应链.4）
 
-const PREFIX = process.env.PREFIX || process.env.CCAPP_PREFIX;
+const PREFIX = process.env.PREFIX || process.env.AGAPP_PREFIX;
 if (!PREFIX || !fs.existsSync(path.join(PREFIX, ".devkit-ok"))) {
   console.error("pkg：工具包还没装好（找不到 $PREFIX/.devkit-ok）");
   process.exit(1);
@@ -33,7 +33,7 @@ const TARGET = "/data/data/" + (FILES.match(/^\/data\/(?:data|user\/\d+)\/([^/]+
 const BIN = (n) => path.join(PREFIX, "bin", n);
 if (TARGET.length !== TERMUX.length) { console.error(`pkg：本应用的包名必须恰好 10 个字符才能等长改写（现在是 ${TARGET}）`); process.exit(1); }
 // 经加载器（targetSdk 36）时 dpkg 脚本等仍要 termux-exec 的 linker 版，才能起数据目录里的程序
-const ENV = { ...process.env, PATH: [path.join(PREFIX, "bin"), process.env.PATH].join(":"), LD_PRELOAD: process.env.CCAPP_BIONIC_PRELOAD || "" };
+const ENV = { ...process.env, PATH: [path.join(PREFIX, "bin"), process.env.PATH].join(":"), LD_PRELOAD: process.env.AGAPP_BIONIC_PRELOAD || "" };
 
 // 和工具包用同一组仓库（devkit/devkit.json 的 repos）
 const REPOS = [
@@ -642,7 +642,7 @@ function install(names, { unverified = false, auto = false, upgrade = false } = 
   for (const n of names) {
     const real = ix.pkgs.has(n) ? n : (ix.provides.get(n) || [])[0];
     if (!real) { const near = [...ix.pkgs.keys()].filter((k) => k.includes(n)).slice(0, 6); die(`仓库里没有 ${n}${near.length ? "。相近的：" + near.join(" ") : ""}`); }
-    if (EXCLUDE.has(real)) die(`${real} 是给 Termux App 本身用的，在 cccodroid 里没有意义`);
+    if (EXCLUDE.has(real)) die(`${real} 是给 Termux App 本身用的，在 agycodroid 里没有意义`);
     if (have.has(real) && !mine[real]) { console.log(`${real} 已在工具包里（${baseVersions().get(real) || "版本未知"}），不用装`); continue; }
     // 上次升级在「删旧文件」和「写新记录」之间被打断：记录还是 ok，文件已经没了。
     // 以前普通 pkg install 会当成已装跳过，修不好（0.6.9 审计 196 首装.4）
@@ -660,7 +660,7 @@ function install(names, { unverified = false, auto = false, upgrade = false } = 
       else console.log(`${real} ${mine[real].version} 已经装了`);
       continue;
     }
-    if (!VERIFIED[real] && !unverified && !auto) die(`${real} 还没在 cccodroid 上验证过。确定要试就加 --unverified：pkg install --unverified ${real}\n本机实测过的：${Object.keys(VERIFIED).join(" ")}`);
+    if (!VERIFIED[real] && !unverified && !auto) die(`${real} 还没在 agycodroid 上验证过。确定要试就加 --unverified：pkg install --unverified ${real}\n本机实测过的：${Object.keys(VERIFIED).join(" ")}`);
     roots.push(real);
   }
   if (!roots.length) return;
