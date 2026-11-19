@@ -1,12 +1,18 @@
-cccodroid
-Copyright 2026 greyoak111 and contributors
+agycodroid
+Copyright 2026 Zmin2003 and contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
-It is a third-party launcher and is not affiliated with or endorsed by Anthropic.
-Claude Code is proprietary software of Anthropic PBC; it is NOT distributed with
-this product. It is downloaded by the user from Anthropic's official channel and
-run unmodified, subject to Anthropic's terms.
+It is a third-party launcher and is not affiliated with or endorsed by Google.
+Antigravity CLI is proprietary software of Google; it is NOT distributed with
+this product. It is downloaded by the user from Google's official manifest and
+run unmodified, subject to Google's terms.
+
+agycodroid is a fork of cccodroid (Copyright 2026 greyoak111 and contributors,
+Apache License 2.0, https://github.com/greyoak111/cccodroid), which runs
+Claude Code the same way. cccodroid is a third-party launcher, not affiliated
+with or endorsed by Anthropic; Claude Code is proprietary software of
+Anthropic PBC and is not distributed with either project.
 
 Bundled third-party components:
   - Shizuku-API 13.1.5 (MIT) — third_party/shizuku/LICENSE
