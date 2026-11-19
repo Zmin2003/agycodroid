@@ -44,7 +44,7 @@ try {
   const list = raw.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
   released = { zh: [], en: [] };
   for (const r of list) {
-    if (!/^v\d+\.\d+\.\d+$/.test(r.tag_name) || r.prerelease || r.draft) continue;
+    if (!/^v\d+\.\d+(?:\.\d+)?$/.test(r.tag_name) || r.prerelease || r.draft) continue;
     const v = r.tag_name.slice(1), date = ymd(new Date(r.published_at || r.created_at)), s = split(r.body || "");
     released.zh.push({ v, date, md: s.zh });
     released.en.push({ v, date, md: s.en });
@@ -63,7 +63,7 @@ for (const lang of ["zh", "en"]) {
   const top = rel.reduce((m, x) => (cmpVer(x.v, m) > 0 ? x.v : m), "0");
   const fresh = [];
   for (const f of fs.existsSync(WN) ? fs.readdirSync(WN) : []) {
-    const m = f.match(/^v(\d+\.\d+\.\d+)\.(zh|en)\.md$/);
+    const m = f.match(/^v(\d+\.\d+(?:\.\d+)?)\.(zh|en)\.md$/);
     if (!m || m[2] !== lang || cmpVer(m[1], top) <= 0) continue;
     fresh.push({ v: m[1], date: today, pre: 1, md: tidy(fs.readFileSync(path.join(WN, f), "utf8")) });
   }
