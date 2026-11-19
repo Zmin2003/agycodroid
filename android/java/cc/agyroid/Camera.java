@@ -40,6 +40,7 @@ final class Camera {
 
     static Intent intent(Context c, File f) throws Exception {
         Uri u = Share.uriFor(c, f);
+        if (u == null) throw new java.io.IOException(Tr.t("相机文件不在可分享目录"));
         Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE).putExtra(MediaStore.EXTRA_OUTPUT, u)
             .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         i.setClipData(ClipData.newRawUri(f.getName(), u));

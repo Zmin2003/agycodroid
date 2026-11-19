@@ -285,7 +285,7 @@ async function start(only) {
   return { ok: true, ...jobState() };
 }
 
-export function stopBackfill() {
+function stopBackfill() {
   JOB.stop = true;
   if (JOB.child) killTree(JOB.child);
   return { ok: true };
@@ -305,4 +305,4 @@ export async function routeBackfill(req, res, u, p) {
   if (b.action === "start") return sendJson(res, 200, await startBackfill(b.session ? String(b.session) : null));
   return sendJson(res, 400, { error: "action" });
 }
-export { promptsFrom as _promptsFrom, summaryAt as _summaryAt };   // 测试用
+export { promptsFrom as _promptsFrom };   // 测试用

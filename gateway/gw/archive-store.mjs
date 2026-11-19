@@ -89,7 +89,7 @@ export function archiveBrief(id, size, compacts) {
 // AI 标的杂项只对小会话算数：压缩过（有第 2 章，或记录里数到压缩）、会话文件超过 512 KB，就当它判错了 ——
 // AI 多在第一轮就判「用完即弃」，后来干成正经活也不会改口（11-03 群反馈）。用户自己归入的照旧算。
 // 档案里的标记不动，规则以后要改也能回退
-export const MISC_AI_MAX = 512 * 1024;
+const MISC_AI_MAX = 512 * 1024;
 export function miscOf(e, size = 0, compacts = 0) {
   if (!e?.misc) return false;
   if (e.miscBy === "user") return true;

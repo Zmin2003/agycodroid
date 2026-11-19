@@ -15,37 +15,6 @@ const EXAMPLE_MODELS = [
   { id: "gemini-3.8-flash-medium", name: "gemini-3.8-flash-medium", context_window: 0, max_output_tokens: 0, input_modalities: ["text"], effort: { supported_levels: ["low", "medium", "high", "xhigh", "max"], default_level: null } },
 ];
 
-/** 把不同厂商的 /models 响应归一成同一种形状（保留：测试和 extraModels 校验还在用它）。 */
-export function normalizeModels(j) {
-  const raw = Array.isArray(j && j.data) ? j.data
-            : Array.isArray(j && j.models) ? j.models : [];
-  return raw.filter((m) => m && m.id).map((m) => {
-    const caps = m.capabilities || {};
-    const LV = ["low", "medium", "high", "xhigh", "max"];
-    let effort = m.effort && typeof m.effort === "object" && Array.isArray(m.effort.supported_levels)
-      ? { supported_levels: m.effort.supported_levels.filter((x) => LV.includes(x)), default_level: LV.includes(m.effort.default_level) ? m.effort.default_level : null }
-      : null;
-    if (!effort && caps.effort && typeof caps.effort === "object") {
-      const lv = ["low", "medium", "high", "xhigh", "max"]
-        .filter((k) => caps.effort[k] && caps.effort[k].supported);
-      if (lv.length) effort = { supported_levels: lv, default_level: "high" };
-    }
-    let mods = Array.isArray(m.input_modalities) ? m.input_modalities.filter((x) => ["text", "image", "audio", "video", "pdf", "document", "file"].includes(x)) : null;
-    if (!mods || !mods.length) {
-      const img = caps.image_input && caps.image_input.supported;
-      mods = img ? ["text", "image"] : ["text"];
-    }
-    return {
-      id: String(m.id).slice(0, 200),
-      name: String(m.name || m.display_name || m.id).slice(0, 200),
-      context_window: Number(m.context_window || m.contextWindow || m.max_input_tokens) || 0,
-      max_output_tokens: Number(m.max_output_tokens || m.maxOutputTokens || m.max_tokens) || 0,
-      input_modalities: mods,
-      effort,
-    };
-  });
-}
-
 // ── 输入栏模型选单列哪几家 ──
 // 以前「走登录」「本机」一律算能用：没登录的官方账户、没下过模型的端侧也挂在选单里，点了用不了（群友 10-31）。
 // Google 账户：login.mjs 每次探过登录态都报到这里；网关刚起还没问过，就当没登录（不再读 ~/.claude/.credentials.json——
@@ -76,7 +45,7 @@ export function effortLevelsOf(model, p = PROVIDER) {
 export function learnWindow(result, p = PROVIDER) {}
 /** 别名（init 里报的实际模型名） */
 export const ALIAS_SEEN = {};
-export function withWindows(list) { return list; }   // 没有窗口可补，原样返回
+function withWindows(list) { return list; }   // 没有窗口可补，原样返回
 
 // 模型名由用户决定：除了英文，也有中文、方括号标价格的。
 // 只挡空白、逗号和控制 / 格式字符（换行、零宽、双向覆盖），其余交给 agy；长度仍限 128。
@@ -120,9 +89,6 @@ export function cachedModels(p = PROVIDER) {
   if (c && c.list) return c.list;
   return staticList(p);
 }
-/** 这家的清单拉过没有：静态清单永远算有 */
-export function modelsCached(p = PROVIDER) { return true; }
-
 /** agy 的 --effort 档位收敛到该模型真正支持的档位。
  *  没设过（want 为空）就保持不设 —— 由模型自己决定，别替用户做主。 */
 export function normEffort(model, want, p = PROVIDER) {

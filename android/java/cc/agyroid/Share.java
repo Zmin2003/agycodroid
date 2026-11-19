@@ -16,7 +16,6 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -64,6 +63,7 @@ public final class Share extends ContentProvider {
     }
 
     private File fileFor(Uri u) throws FileNotFoundException {
+        if (u == null) throw new FileNotFoundException();
         java.util.List<String> seg = u.getPathSegments();
         if (seg.size() < 2) throw new FileNotFoundException();
         File d = root(getContext(), seg.get(0));
@@ -100,7 +100,9 @@ public final class Share extends ContentProvider {
         if (secret(cf)) throw new IOException(Tr.t("这是凭据或私钥文件，不分享"));
         String p = cf.getPath();
         boolean priv = false;
-        for (File d : new File[]{c.getDataDir(), c.createDeviceProtectedStorageContext().getDataDir()})
+        Context de = c.createDeviceProtectedStorageContext();
+        File deDir = de == null ? null : de.getDataDir();
+        for (File d : new File[]{c.getDataDir(), deDir})
             if (d != null && p.startsWith(d.getCanonicalPath() + "/")) priv = true;
         if (priv) {
             Env env = new Env(c);
@@ -256,7 +258,7 @@ public final class Share extends ContentProvider {
             sb.append("SoC ").append(Build.VERSION.SDK_INT >= 31 ? Build.SOC_MODEL : "?").append("  内核 ").append(System.getProperty("os.version")).append('\n');
             StatFs st = new StatFs(env.files.getPath());
             sb.append("私有目录剩余 ").append(st.getAvailableBytes() >> 20).append(" MB\n");
-            sb.append("开发工具包就绪 ").append(env.devkitReady()).append("  claude 就绪 ").append(env.claudeReady()).append('\n');
+            sb.append("开发工具包就绪 ").append(env.devkitReady()).append("  agy 就绪 ").append(env.agyReady()).append('\n');
             File ok = new File(env.usr, ".devkit-ok");
             if (ok.isFile()) sb.append(".devkit-ok ").append(new String(java.nio.file.Files.readAllBytes(ok.toPath()), StandardCharsets.UTF_8).trim()).append('\n');
             sb.append("安全模式 ").append(new File(env.home, ".agyapp-safe-mode").exists()).append('\n');
@@ -373,6 +375,7 @@ public final class Share extends ContentProvider {
     @Override public boolean onCreate() { return true; }
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        if (uri == null) throw new FileNotFoundException();
         if ("r".equals(mode)) {
             // 交出去之前照「分享」的规矩再查一遍（凭据、私有目录、硬链接），不只看在不在分享根下面（11-03 审查 L-12）
             File f = fileFor(uri);
@@ -400,6 +403,7 @@ public final class Share extends ContentProvider {
     }
 
     @Override public String getType(Uri uri) {
+        if (uri == null) return "application/octet-stream";
         // 和发出去时 Intent 里写的类型同一套（月报 PNG、PDF 以前在这里都报成二进制，按类型打开的接收方会被系统拒掉，#147-3）
         return mimeOfName(uri.getLastPathSegment());
     }

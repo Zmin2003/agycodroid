@@ -17,7 +17,7 @@ import { holdsPrivate, zoneOf } from "./pathguard.mjs";
 // /api/upload 把界面拿到的东西（粘贴/拖放/选择）落盘成 claude 能读的路径
 export const UPLOAD_DIR = path.join(CFG.workspace, "uploads");
 /** 按 UTF-8 字节数截断，不切开多字节字符 */
-export function clipBytes(s, max) {
+function clipBytes(s, max) {
   if (Buffer.byteLength(s) <= max) return s;
   let out = "", n = 0;
   for (const ch of s) { const b = Buffer.byteLength(ch); if (n + b > max) break; out += ch; n += b; }

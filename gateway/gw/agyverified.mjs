@@ -34,8 +34,12 @@ export function refreshVerified() {
 export async function verifiedInfo(lang = "zh") {
   refreshVerified();
   const verified = {}, bad = {};
-  for (const [v, recs] of Object.entries(data?.versions || {})) if (Array.isArray(recs) && recs.length)
-    verified[v] = recs.map((r) => ({ device: String(r.device || ""), android: String(r.android || ""), at: String(r.at || ""), app: String(r.app || ""), targetSdk: +r.targetSdk || 0 }));
+  for (const [v, recs] of Object.entries(data?.versions || {})) {
+    if (!Array.isArray(recs) || !recs.length) continue;
+    const list = recs.filter((r) => r && typeof r === "object")
+      .map((r) => ({ device: String(r.device || ""), android: String(r.android || ""), at: String(r.at || ""), app: String(r.app || ""), targetSdk: +r.targetSdk || 0 }));
+    if (list.length) verified[v] = list;
+  }
   for (const [v, b] of Object.entries(data?.bad || {})) if (b) bad[v] = { text: String((lang === "zh" ? b.zh : b.en) || b.zh || b.en || ""), fixed: String(b.fixed || "") };
   return { verified, bad, verifiedError: lastError };
 }

@@ -19,7 +19,7 @@ export function _setSealed(v) { SEALED = !!v; }
 // agy 只有 settings.json 这一个配置入口，没有“另找配置目录”的环境变量。
 // 密钥不在这里管：GEMINI_API_KEY 由 agyEnv() 在起进程时按当前接口现配（见 agy.mjs），
 // 继承来的旧值一律清掉，别让网关自己身上的 key 漏进某一轮。
-export const SEAL_ENV_DROP = [];
+const SEAL_ENV_DROP = [];
 export function sealEnv(env) {
   if (!SEALED) return env;
   for (const k of SEAL_ENV_DROP) delete env[k];

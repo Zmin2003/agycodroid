@@ -133,6 +133,7 @@ final class Env {
      *  它给的页面和脚本跟界面同源，能读到桥口令、能调 /api。所以这里带随机数去取，网关用令牌对「随机数 + 请求行 + 内容哈希」
      *  回一个 HMAC（gateway/gw/access.mjs 的 staticMac），对不上就整个不交给 WebView。pq 是路径加查询串，原样发出去 */
     static android.webkit.WebResourceResponse fetchStatic(String pq) {
+        if (pq == null) return null;
         String t = key();
         if (t.isEmpty()) return null;
         pq = pq.replaceAll("([?&])k=[0-9a-f]{32}&?", "$1").replaceAll("[?&]$", "");   // 桥口令一律不往外发（审查 M-3）
@@ -269,6 +270,7 @@ final class Env {
     /** 拼要起的命令：经加载器时，数据目录里的 ELF 程序前面加上 linker64 */
     java.util.List<String> cmd(String... argv) {
         java.util.List<String> l = new java.util.ArrayList<>(java.util.Arrays.asList(argv));
+        if (l.isEmpty()) return l;
         if (loader && isElf(l.get(0)) && !l.get(0).startsWith("/system/")) l.add(0, LINKER);
         return l;
     }

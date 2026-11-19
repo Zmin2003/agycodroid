@@ -237,7 +237,7 @@ function finish(j, err) {
 }
 
 /** 解压到 dest：先解进同级的临时目录，查过（软链不许指出去）再挪进 dest；dest 已有同名的，新解出来的自动改名，不覆盖 */
-export function startExtract(file, { dest, entries, enc, password }) {
+function startExtract(file, { dest, entries, enc, password }) {
   const j = newJob("extract", { file, dest });
   (async () => {
     const list = await archiveList(file, { enc, password });
@@ -330,11 +330,11 @@ export function uniquePath(p) {
 }
 
 // ── 压缩 ────────────────────────────────────────────────────────────────
-export const CREATE_FORMATS = { zip: "zip", "7z": "7z", tar: "tar", "tar.gz": "gzip", "tar.xz": "xz", "tar.bz2": "bzip2" };
+const CREATE_FORMATS = { zip: "zip", "7z": "7z", tar: "tar", "tar.gz": "gzip", "tar.xz": "xz", "tar.bz2": "bzip2" };
 /** 不打进压缩包的：凭据目录（同 files.mjs 的 SECRET_RE） */
 const EXCLUDE = [".ssh", ".gnupg", ".aws"];
 
-export function startCreate({ items, dest, format, level, password, encryptNames }) {
+function startCreate({ items, dest, format, level, password, encryptNames }) {
   const j = newJob("create", { dest });
   (async () => {
     const parent = path.dirname(items[0]);

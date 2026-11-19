@@ -32,7 +32,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -348,7 +347,8 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(fpsBeat); ui.postDelayed(fpsBeat, 30000);
         if (pane != null) pane.resume();
         pushWall();
-        getSystemService(android.app.NotificationManager.class).cancel(41);    // Priv.toFront 的「点此回来」
+        android.app.NotificationManager nm = getSystemService(android.app.NotificationManager.class);
+        if (nm != null) nm.cancel(41);    // Priv.toFront 的「点此回来」
         Notify.get(this).onForeground(); }                                    // 确认卡就在眼前，通知撤掉
     @Override protected void onPause() { ui.removeCallbacks(fpsBeat); Battery.foreground(false); super.onPause();
         if (pane != null) pane.pause();
@@ -492,7 +492,8 @@ public class MainActivity extends Activity {
             }
         });
         // 监听挂在 show 之前（getDecorView 会先把窗口内容建出来），关得再快也不会漏掉这次减计数
-        d.getWindow().getDecorView().addOnAttachStateChangeListener(new android.view.View.OnAttachStateChangeListener() {
+        android.view.Window w = d.getWindow();
+        if (w != null && w.getDecorView() != null) w.getDecorView().addOnAttachStateChangeListener(new android.view.View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(android.view.View v) {}
             @Override public void onViewDetachedFromWindow(android.view.View v) { if (!gone[0]) { gone[0] = true; GUARDED.decrementAndGet(); } }
         });
@@ -862,7 +863,9 @@ public class MainActivity extends Activity {
         try { real = android.system.Os.readlink("/proc/self/fd/" + pfd.getFd()); }
         catch (Exception e) { pfd.close(); throw new java.io.IOException(Tr.t("读不了这个文件")); }
         // 本用户、别的用户空间、设备加密区、外置扩容盘上的私有目录都算
-        String q = java.util.regex.Pattern.quote(getPackageName()), dd = getApplicationInfo().dataDir;
+        String q = java.util.regex.Pattern.quote(getPackageName());
+        android.content.pm.ApplicationInfo ai = getApplicationInfo();
+        String dd = ai == null ? null : ai.dataDir;
         if (real.matches("(/mnt/expand/[^/]+)?/data/(data|user(_de)?/\\d+)/" + q + "(/.*)?|/mnt/expand/[^/]+/(user|user_de)/\\d+/" + q + "(/.*)?")
                 || dd != null && (real.equals(dd) || real.startsWith(dd + "/"))) {
             pfd.close();
@@ -1104,7 +1107,8 @@ public class MainActivity extends Activity {
     }
 
     private InputStream openUri(Uri u) throws java.io.IOException {
-        if ("file".equals(u.getScheme())) return new java.io.FileInputStream(u.getPath());
+        if (u == null) throw new java.io.IOException(Tr.t("读不了这个文件"));
+        if ("file".equals(u.getScheme())) { String p = u.getPath(); if (p == null) throw new java.io.IOException(Tr.t("读不了这个文件")); return new java.io.FileInputStream(p); }
         InputStream in = getContentResolver().openInputStream(u);
         if (in == null) throw new java.io.IOException(Tr.t("读不了这个文件"));
         return in;
@@ -1112,7 +1116,7 @@ public class MainActivity extends Activity {
 
     private long sizeOf(Uri u) {
         if (u == null) return -1;
-        if ("file".equals(u.getScheme())) return new File(u.getPath()).length();
+        if ("file".equals(u.getScheme())) { String p = u.getPath(); return p == null ? -1 : new File(p).length(); }
         try (android.database.Cursor c = getContentResolver().query(u, new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
             if (c != null && c.moveToFirst() && !c.isNull(0)) return c.getLong(0);
         } catch (Exception ignored) {}
@@ -1362,6 +1366,7 @@ public class MainActivity extends Activity {
     @SuppressLint("BatteryLife")
     private void askBatteryExemption() {
         PowerManager pm = getSystemService(PowerManager.class);
+        if (pm == null) return;
         SharedPreferences sp = getSharedPreferences("ui", MODE_PRIVATE);
         if (pm.isIgnoringBatteryOptimizations(getPackageName()) || sp.getBoolean("askedBattery", false)) return;
         ui.post(() -> {
@@ -1384,9 +1389,11 @@ public class MainActivity extends Activity {
     /** @return 这次弹了东西（系统权限框或引导框） */
     private boolean askNotifications() {
         android.app.NotificationManager nm = getSystemService(android.app.NotificationManager.class);
+        if (nm == null) return false;
         SharedPreferences sp = getSharedPreferences("ui", MODE_PRIVATE);
         // targetSdk ≥ 33 的包可以直接弹系统的通知权限框（28 的包不行，见上）
-        if (Build.VERSION.SDK_INT >= 33 && getApplicationInfo().targetSdkVersion >= 33
+        android.content.pm.ApplicationInfo ai = getApplicationInfo();
+        if (Build.VERSION.SDK_INT >= 33 && ai != null && ai.targetSdkVersion >= 33
                 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED
                 && !sp.getBoolean("askedNotifyPerm", false)) {
             sp.edit().putBoolean("askedNotifyPerm", true).apply();
@@ -2374,7 +2381,9 @@ public class MainActivity extends Activity {
                     if (a.st_dev == b.st_dev && a.st_ino == b.st_ino) { ui.post(() -> savedJs(false, "same")); return; }
                 }
             } catch (Exception ignore) {}
-            java.io.File tmp = new java.io.File(getCacheDir(), "save-as-" + System.nanoTime() + ".tmp");
+            java.io.File cd = getCacheDir();
+            if (cd == null) { ui.post(() -> savedJs(false, Tr.t("缓存目录不可用"))); return; }
+            java.io.File tmp = new java.io.File(cd, "save-as-" + System.nanoTime() + ".tmp");
             try {
                 // 先复制到临时文件：中途失败也不会把源/目标写成半截
                 try (InputStream in = new java.io.FileInputStream(from); OutputStream o = new java.io.FileOutputStream(tmp)) {

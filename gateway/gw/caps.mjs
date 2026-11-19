@@ -58,7 +58,7 @@ function permRules() {
 
 function capabilities() {
   const init = LAST_INIT || {};
-  const cmds = (init.slash_commands || FALLBACK_COMMANDS).filter((c) => !c.startsWith("__"));
+  const cmds = FALLBACK_COMMANDS.filter((c) => !c.startsWith("__"));   // agy 的 init 不报 slash_commands，一律用内置表
   // 常用指令（commands/*.md）：说明从文件头读；刚建好、agy 还没重新报 init 的也先列上
   const mine = cmdDescs();
   for (const n of Object.keys(mine)) if (!cmds.includes(n)) cmds.push(n);

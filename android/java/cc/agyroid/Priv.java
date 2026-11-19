@@ -179,6 +179,7 @@ final class Priv {
         // am start 成功时也有输出（Starting: Intent …），按退出码和有没有报错判断（11-04 报告 A3：以前看输出是否为空，恒走通知）
         if (running() && granted() && amStarted(runRc("am start --activity-reorder-to-front -n " + cmp))) return "shizuku";
         android.app.NotificationManager nm = ctx.getSystemService(android.app.NotificationManager.class);
+        if (nm == null) return "notification";
         nm.createNotificationChannel(new android.app.NotificationChannel("front", Tr.t("回到应用"), android.app.NotificationManager.IMPORTANCE_HIGH));
         android.app.PendingIntent pi = android.app.PendingIntent.getActivity(ctx, 41,
             new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
@@ -441,7 +442,7 @@ final class Priv {
                     }
                     // 不带版本号 = 装当前渠道查到的那一版：按那一版判（10-31 六轮核验）
                     String chk = ver.trim().isEmpty() ? Updater.get(ctx).latestAntigravity() : ver;
-                    if ("claude".equals(item) && Updater.get(ctx).claudeDowngrade(chk)
+                    if ("claude".equals(item) && Updater.get(ctx).agyDowngrade(chk)
                         && !ask(Tr.f("把 Antigravity CLI 降级到 {0}", chk), caller(pid), "upd:" + chk, false)) {
                         resp = new JSONObject().put("ok", false).put("message", Tr.t("没有允许，Antigravity CLI 没有降级"));
                         break;
@@ -575,6 +576,7 @@ final class Priv {
     /** 开着 VPN 时活动网络是 VPN 本身：看底下有没有一条连上了的 Wi-Fi（定时任务「仅 Wi-Fi」用） */
     private static boolean vpnOverWifi(Context c) {
         android.net.ConnectivityManager cm = c.getSystemService(android.net.ConnectivityManager.class);
+        if (cm == null) return false;
         for (android.net.Network n : cm.getAllNetworks()) {
             android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(n);
             if (nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) && !nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)

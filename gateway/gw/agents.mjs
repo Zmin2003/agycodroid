@@ -39,7 +39,7 @@ const realCwd = (cwd) => { try { return fs.realpathSync(cwd); } catch { return p
 export const onShared = (cwd) => SHARED.test(realCwd(cwd) + "/");
 const legacyDir = (cwd, sessionId) => path.join(cwd, ".agycodroid", "agents", String(sessionId).slice(0, 8));
 /** 共享存储上的项目，联络簿的私有根目录（run 把它 --add-dir 给 claude，读汇报不用再要授权） */
-export const privateAgentsBase = (cwd) => path.join(CFG.home, ".agycodroid", "agents", crypto.createHash("sha256").update(realCwd(cwd)).digest("hex").slice(0, 12));
+const privateAgentsBase = (cwd) => path.join(CFG.home, ".agycodroid", "agents", crypto.createHash("sha256").update(realCwd(cwd)).digest("hex").slice(0, 12));
 export const agentsDir = (cwd, sessionId) => !onShared(cwd) ? legacyDir(cwd, sessionId) : path.join(privateAgentsBase(cwd), String(sessionId).slice(0, 8));
 
 /** 读某会话的联络簿（界面翻历史用）。最多 n 行，取最后的 */

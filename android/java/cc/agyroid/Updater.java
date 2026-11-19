@@ -17,7 +17,6 @@ import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -93,7 +92,8 @@ final class Updater {
         Tr.init(c);   // 新进程里词典可能还没初始化，渠道名会退回中文
         NotificationChannel ch = new NotificationChannel(CH, Tr.t("更新"), NotificationManager.IMPORTANCE_DEFAULT);
         ch.setDescription(Tr.t("新版本已下载、等你点一下安装"));
-        c.getSystemService(NotificationManager.class).createNotificationChannel(ch);
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        if (nm != null) nm.createNotificationChannel(ch);
     }
 
     private Updater(Context c) {
@@ -817,7 +817,8 @@ final class Updater {
     /** 自动模式的规则：见类注释 */
     private void autoApply() {
         if (!loopOn) return;
-        boolean unmetered = !ctx.getSystemService(ConnectivityManager.class).isActiveNetworkMetered();
+        ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
+        boolean unmetered = cm != null && !cm.isActiveNetworkMetered();
         if ("available".equals(claude.state) && unmetered && !agyHeld && !agyOlder && !switching.get()) {
             // 版本只读一次，装之前再按已装的现读比一遍：几个字段可能是两次检查交错写的，别凭拼起来的状态装回旧版（10-31 八轮核验）
             String v = claude.latest;
@@ -868,7 +869,7 @@ final class Updater {
     // synchronized + 起线程前先把状态占上（审查 #105 05-007）：每个 Priv 连接一条线程，两次请求挨得近时，
     // 以前都只看到旧状态、各起一份下载/安装，共用 .part 与临时目录互相踩
     synchronized JSONObject apply(String id, boolean user, String version) {
-        Item it = id.equals("app") ? app : id.equals("devkit") ? devkit : id.equals("claude") ? claude : null;
+        Item it = "app".equals(id) ? app : "devkit".equals(id) ? devkit : "claude".equals(id) ? claude : null;
         JSONObject r = new JSONObject();
         try {
             if (it == null) return r.put("ok", false).put("message", Tr.t("未知项 ") + id);
@@ -1166,7 +1167,8 @@ final class Updater {
             prefs().edit().remove("devkitStaged").apply();
             refreshCurrent();
             devkit.set("uptodate", "");
-            ctx.getSystemService(NotificationManager.class).cancel(20);
+            NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+            if (nm != null) nm.cancel(20);
             Ledger.add(env, repairing ? "repair" : "install", true, (repairing ? Tr.t("修复完成：重装 ") : Tr.t("已装上 ")) + tagOf(devkit.base),
                 new JSONObject().put("sha256", devkit.sha));
         } catch (Exception e) {
@@ -1297,7 +1299,9 @@ final class Updater {
         PendingIntent pi = PendingIntent.getActivity(ctx, 23,
             new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        ctx.getSystemService(NotificationManager.class).notify(20, new Notification.Builder(ctx, CH)
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm == null) return;
+        nm.notify(20, new Notification.Builder(ctx, CH)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle(Tr.t("开发工具包不完整"))
             .setContentText(text)
@@ -1320,7 +1324,8 @@ final class Updater {
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build();
-        ctx.getSystemService(NotificationManager.class).notify(it == app ? 21 : 20, n);
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(it == app ? 21 : 20, n);
     }
 
     // ── 小工具 ───────────────────────────────────────────────────────────

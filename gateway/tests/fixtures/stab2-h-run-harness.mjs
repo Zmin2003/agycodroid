@@ -11,7 +11,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 process.env.AGAPP_IDLE_CLOSE_MS = "200";   // 空闲收尾定时器别把测试进程拖住 2 分钟（只给测试用的开关）
-export const home = process.env.AGAPP_HOME;
+const home = process.env.AGAPP_HOME; // 只在夹具内部用（usageTotals 读 agyapp-usage.json）；没有测试 import 它
 export const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "stab2h-"));
 const cli = path.join(root, "fake-cli.sh");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";

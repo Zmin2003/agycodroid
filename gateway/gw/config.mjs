@@ -30,7 +30,6 @@ export const CFG = {
 // 前缀布局（agycodroid）：工具链是原生 Termux 前缀，agy 是官方原版 bionic 二进制，
 // 由宿主 App 用环境变量告诉我们位置；没设就按旧布局（runtime/ 下）找。
 export const PREFIX = process.env.AGAPP_PREFIX || "";
-export const NO_BRIDGE = true;   // agy 是 bionic 程序，自己解析 DNS，不需要本地桥
 export const PATHS = {
   loader: process.env.AGAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
   glibcLib: process.env.AGAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
@@ -168,4 +167,3 @@ export function tr(lang, msg) {
  *  界面 03-perm-status.js 的 WIDE_MODES 是同一张表，改一处要同步另一处 */
 export const PERM_MODES = ["request-review", "proceed-in-sandbox", "always-proceed", "strict"];
 /** 比「沙箱里自动放行」宽的模式：只有 always-proceed 是自动全放行 */
-export const WIDE_PERM_MODES = ["always-proceed"];

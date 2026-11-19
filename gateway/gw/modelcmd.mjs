@@ -1,4 +1,3 @@
-import { log } from "./config.mjs";
 import { SETTINGS, saveSettings } from "./settings-store.mjs";
 import { PROVIDER, providerById } from "./providers.mjs";
 import { effortLevelsOf, fetchModels, normEffort } from "./models.mjs";

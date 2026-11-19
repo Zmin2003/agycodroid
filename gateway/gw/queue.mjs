@@ -6,11 +6,7 @@ import { onShutdown } from "./crashguard.mjs";
 import { SETTINGS, saveSettings, capList } from "./settings-store.mjs";
 import { keepBad, writeAtomic } from "./statefile.mjs";
 import { clearIncomplete, markIncomplete } from "./incomplete.mjs";
-import { PERM_MODES, PROVIDER, keyOf, providerById } from "./providers.mjs";
-import { effectiveModel } from "./sessmodel.mjs";
-// 这个会话真跑时用哪家：钉的 → 项目默认 → 全局（和 run.mjs 的 pickProvider 一致；只看钉的会漏掉项目，#102 04-004）
-const runProvider = (sid) => providerById(effectiveModel(sid).provider) || PROVIDER;
-import { isLoginMode } from "./models.mjs";
+import { PERM_MODES, PROVIDER, keyOf } from "./providers.mjs";
 import { findSessionFile } from "./sessions.mjs";
 import { sealSession } from "./integrity.mjs";
 import { killRunProcs, killTree, safeModePerm } from "./agy.mjs";
@@ -95,7 +91,7 @@ export function setPermMode(mode, { persist = true } = {}) {
 }
 // 恢复失败得让用户看见（FIND-041）：以前只写进 gateway.log，界面上既没有中断卡、也没有任何提示。
 // 存中文键 + 变量，界面用同一份词典翻（状态经 SSE 下发，不经过 sendJson 的按请求翻译）
-export const RECOVER_WARNS = [];
+const RECOVER_WARNS = [];
 const warnRecover = (key, vars) => { if (!RECOVER_WARNS.some((w) => w.key === key)) RECOVER_WARNS.push({ key, vars: vars || {} }); };
 export function snapshot() {
   return {
@@ -426,46 +422,6 @@ export function holdLane(run) {
 
 // ── 空闲压缩（上游 2.1.299 起只在终端交互模式里有；网关每轮起一个进程，用不上，照它的条件自己做）──
 // 上游的条件：自动压缩开着、没关空闲压缩、1 小时缓存、缓存还热、上下文 ≥ 20 万、之后没有新请求、额度没逼近上限。
-// 1 小时缓存从接口返回的 cache_creation.ephemeral_1h_input_tokens 看出来（订阅账户就是这种）；
-// 第三方厂商的缓存规则各不相同，不做。计时从这一轮结束算起，54 分钟时缓存还剩约 6 分钟。
-// 两个环境变量只给测试用（缩短等待、降低门槛）
-const IDLE_MS = Number(process.env.AGAPP_IDLE_MS) || 54 * 60 * 1000, IDLE_MIN_TOKENS = Number(process.env.AGAPP_IDLE_MIN) || 200000;
-const IDLE = new Map();   // 会话号 → { timer, ctx, at, size }
-export function idleDisarm(sid) { const x = IDLE.get(sid); if (x) { clearTimeout(x.timer); IDLE.delete(sid); } }
-export function idleDisarmAll() { for (const sid of [...IDLE.keys()]) idleDisarm(sid); }
-function autoCompactOff() {
-  if (/^(1|true)$/i.test(process.env.DISABLE_COMPACT || "") || /^(1|true)$/i.test(process.env.DISABLE_AUTO_COMPACT || "")) return true;
-  try { return JSON.parse(fs.readFileSync(path.join(CFG.home, ".claude", "settings.json"), "utf8")).autoCompactEnabled === false; } catch { return false; }
-}
-export function idleArm(sid, flags) {
-  idleDisarm(sid);
-  const ctx = flags.mainCtx || 0;
-  const P = runProvider(sid);            // 按这个会话用的那家（缓存计时只对原生家有意义）
-  if (SETTINGS.idleCompaction === false || !P.nativeModels || P.local) return;
-  if (!flags.cache1h || flags.cache5m || ctx < IDLE_MIN_TOKENS || autoCompactOff()) return;
-  let size = -1; try { size = fs.statSync(findSessionFile(sid).file).size; } catch { return; }
-  const timer = setTimeout(() => idleFire(sid), IDLE_MS);
-  timer.unref?.();
-  IDLE.set(sid, { timer, ctx, at: Date.now(), size });
-  log(`⏲ 空闲压缩已挂上：会话 ${sid.slice(0, 8)} 上下文 ${ctx}，${IDLE_MS / 60000} 分钟后没动静就压缩`);
-}
-function idleFire(sid) {
-  const x = IDLE.get(sid);
-  IDLE.delete(sid);
-  const P = runProvider(sid);
-  if (!x || SETTINGS.idleCompaction === false || !P.nativeModels) return;
-  const why = (() => {
-    if (laneRun("s:" + sid)) return "正在跑";
-    if (QUEUE.some((q) => sidOfLane(laneOfItem(q)) === sid)) return "有排队的消息";
-    try { if (fs.statSync(findSessionFile(sid).file).size !== x.size) return "会话有新内容"; } catch { return "会话文件不见了"; }
-    // agy 没有额度（Anthropic 的 RATE_LIMITS 已删），也不会走到这里：上面 !P.nativeModels 就退了。
-    return null;
-  })();
-  if (why) { log(`⏲ 空闲压缩跳过（${why}）：会话 ${sid.slice(0, 8)}`); return; }
-  log(`⏲ 空闲压缩：会话 ${sid.slice(0, 8)} 闲置 ${Math.round((Date.now() - x.at) / 60000)} 分钟，上下文 ${x.ctx}`);
-  enqueue({ message: "/compact", sessionId: sid, auto: "idle" });
-}
-
 /** 有空位就从队列里挑能跑的：车道空闲、且是这条车道上排在最前的（同一会话不许插队、不许同时跑两轮） */
 /** 会话确实没了：会话目录读得了、里面却找不到它。目录整个读不了（存储出错）不算——那时丢消息就是误删（同 195-Y.8） */
 export function sessionGone(sid) {

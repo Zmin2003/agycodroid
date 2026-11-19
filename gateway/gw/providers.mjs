@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { CFG, PATHS, log, tz } from "./config.mjs";
+import { CFG, log, tz } from "./config.mjs";
 import { SETTINGS, saveSettings } from "./settings-store.mjs";
 import { MODEL_ID_RE, dropModelCache, extraModelsOf } from "./models.mjs";
 import { RUNS } from "./runs.mjs";

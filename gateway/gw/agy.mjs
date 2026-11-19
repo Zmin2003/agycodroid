@@ -163,15 +163,6 @@ export function agyCmd(extra) {
   return [PATHS.agy, [...extra]];
 }
 
-/** 装着的 agy 版本（取自版本目录名）不低于 v：认不出版本的一律当不够 */
-export function agyAtLeast(v) {
-  let cur; try { cur = path.basename(path.dirname(fs.realpathSync(PATHS.agy))); } catch { return false; }
-  const a = cur.split(".").map(Number), b = v.split(".").map(Number);
-  if (a.length !== 3 || a.some((x) => !Number.isInteger(x))) return false;
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return true;
-}
-
 /** 装着的 agy 版本（版本目录名，认不出返回 ""） */
 export function agyVersion() {
   try { return path.basename(path.dirname(fs.realpathSync(PATHS.agy))); } catch { return ""; }

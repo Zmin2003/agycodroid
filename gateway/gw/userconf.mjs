@@ -97,7 +97,7 @@ function walkTree(out, dir, rel, depth, cnt) {
 }
 
 /** 现在盘上的状态：rel → 指纹 */
-export function ucScan() {
+function ucScan() {
   const home = CFG.home, out = new Map();
   for (const rel of FILES) { const f = fingerprint(rel, path.join(home, rel)); if (f && !(isJsonPart(rel) && f.text === "{}")) out.set(rel, f); }
   const cnt = { n: 0 };
@@ -485,7 +485,6 @@ export function ucSetRevertNote(rels, procs) {
 }
 export function ucTakeNote() { const n = REVERT_NOTE; REVERT_NOTE = ""; return n; }
 /** 这一轮没送到模型：放回去 */
-export function ucPutNote(n) { if (n) REVERT_NOTE = REVERT_NOTE ? n + " " + REVERT_NOTE : n; }
 
 /** 测试用：清掉内存里的状态 */
 export function _ucReset() {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { CFG, PATHS, log, tz } from "./config.mjs";
+import { CFG, log, tz } from "./config.mjs";
 import { isLoginMode, noteLoggedIn } from "./models.mjs";
 import { agyBlocked, agyCmd, agyEnv, killTree, runAntigravity } from "./agy.mjs";
 import { RUNS } from "./runs.mjs";

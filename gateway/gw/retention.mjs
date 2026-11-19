@@ -10,8 +10,8 @@ import { CFG } from "./config.mjs";
 import { readSmallFile } from "./saferead.mjs";
 
 export const RETENTION_DAYS = 36500;
-export const retentionOk = (v) => Number.isInteger(v) && v >= 1;
-export const USER_SETTINGS_FILE = () => path.join(CFG.home, ".claude", "settings.json");
+const retentionOk = (v) => Number.isInteger(v) && v >= 1;
+const USER_SETTINGS_FILE = () => path.join(CFG.home, ".claude", "settings.json");
 
 /** 用户级设置里的保留期：{ days, own }。own = 用户自己写了合法的值；没写、写坏了、文件读不了都按 RETENTION_DAYS */
 export function sessionRetention() {

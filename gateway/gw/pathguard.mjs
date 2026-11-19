@@ -29,7 +29,7 @@ export function dataRoots() {
 }
 
 /** 所有私有根（字符串形式；判定按身份，这里只是候选） */
-export function privateRoots() {
+function privateRoots() {
   return [CFG.home, CFG.runtime, PREFIX, ...dataRoots()].filter(Boolean);
 }
 

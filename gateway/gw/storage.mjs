@@ -19,7 +19,7 @@ import { NEXT, readBody, sendJson } from "./http.mjs";
 import { sessionRetention } from "./retention.mjs";
 
 const DAY = 86400e3;
-export const TMP_DAYS = 7, JUNK_DAYS = 30, KEEP_BACKUPS = 5;
+const TMP_DAYS = 7, JUNK_DAYS = 30, KEEP_BACKUPS = 5;
 const FRESH = 10 * 60e3;               // 缓存里 10 分钟内写过的不删：可能正在下载
 const TOP = 20;                        // 列表最多列几项
 const WALK_MAX = 200000;               // 一个条目里最多数这么多个文件，再多就当「看不全」不删

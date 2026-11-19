@@ -72,8 +72,10 @@ final class Notify {
         // 不用 IMPORTANCE_HIGH：那会弹横幅。这是安静的开发工具，进通知栏、响一声就够（用户 2026-10-15 定）
         NotificationChannel ask = new NotificationChannel(CH_ASK, Tr.t("等你确认"), NotificationManager.IMPORTANCE_DEFAULT);
         ask.setDescription(Tr.t("应用在后台时，Antigravity 等你批准命令、计划或回答问题"));
-        nm.createNotificationChannel(done);
-        nm.createNotificationChannel(ask);
+        if (nm != null) {
+            nm.createNotificationChannel(done);
+            nm.createNotificationChannel(ask);
+        }
     }
 
     boolean doneOn() { return sp.getBoolean("done", true); }

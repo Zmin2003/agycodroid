@@ -61,7 +61,7 @@ function loadSettings() {
   }
   // 旧版没限过：已经存进去的超长列表在这里截住，别让它每一轮把 claude 的命令行撑爆（审查 v0513b 低-3）
   // 条数、每条长度之外还要管总长：64×4096 加上工具名单能超过 ARG_MAX（128 KB），每轮 spawn 都 E2BIG（10-31 复核）
-  const cap = (a, n, len, total) => (Array.isArray(a) ? capList(a, n, len, total) : a);
+  const cap = (a, n, len, total) => (Array.isArray(a) ? capList(a, n, len, total) : []);   // 不是数组（手改设置写错形状）按空处理，别让字符串被逐字拆成规则
   SETTINGS.addDirs = cap(SETTINGS.addDirs, 64, 4096, 16384) || [];
   SETTINGS.hiddenProviders = Array.isArray(SETTINGS.hiddenProviders) ? capList(SETTINGS.hiddenProviders, 64, 64) : [];
   if (SETTINGS.allowedTools) SETTINGS.allowedTools = cap(SETTINGS.allowedTools, 200, 512, 8192);

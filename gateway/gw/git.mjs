@@ -587,4 +587,3 @@ export async function routeGit(req, res, u, p) {
   return NEXT;
 }
 export const _gitForTest = git;   // 只给测试用
-export const _gitRisksForTest = gitRisks;

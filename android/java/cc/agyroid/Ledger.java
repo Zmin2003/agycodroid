@@ -2,7 +2,6 @@ package cc.agyroid;
 
 import android.util.Log;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -42,17 +41,5 @@ final class Ledger {
             }
             Log.i("agycodroid-ledger", e.toString());
         } catch (Exception ex) { Log.w("agycodroid-ledger", "记账失败: " + ex); }
-    }
-
-    /** 最近 n 条，新的在前 */
-    static JSONArray recent(Env env, int n) {
-        JSONArray out = new JSONArray();
-        try {
-            List<String> lines = Files.readAllLines(file(env).toPath(), StandardCharsets.UTF_8);
-            for (int i = lines.size() - 1; i >= 0 && out.length() < n; i--) {
-                try { out.put(new JSONObject(lines.get(i))); } catch (Exception ignored) {}
-            }
-        } catch (Exception ignored) {}
-        return out;
     }
 }

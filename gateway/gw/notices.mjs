@@ -20,7 +20,7 @@ export const PUBKEY = crypto.createPublicKey(!LIVE && process.env.AGAPP_TEST_PUB
   "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=\n-----END PUBLIC KEY-----\n");
 const EVERY = 3 * 3600e3;
 /** 读回验过签才存的那份：正文原样字节 + 旁边的 .sig；签名对不上、缺 .sig（旧版存的）都当没有，等下次联网重取 */
-export function loadSigned(file) {
+function loadSigned(file) {
   try {
     const body = fs.readFileSync(file), sig = fs.readFileSync(file + ".sig", "utf8").trim();
     if (!crypto.verify(null, body, PUBKEY, Buffer.from(sig, "base64"))) { log(`[signed] ${path.basename(file)} 签名对不上，不认`); return null; }
@@ -28,7 +28,7 @@ export function loadSigned(file) {
   } catch { return null; }
 }
 /** 存正文原样字节（不重新序列化，签名才对得上）和签名；先写 .sig 再换正文，换到一半也只是验不过、当没有 */
-export function saveSigned(file, body, sig) {
+function saveSigned(file, body, sig) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file + ".sig.tmp", sig); fs.renameSync(file + ".sig.tmp", file + ".sig");
   fs.writeFileSync(file + ".tmp", body); fs.renameSync(file + ".tmp", file);

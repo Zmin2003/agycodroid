@@ -18,7 +18,7 @@ import { archiveDb, saveArchive, miscOf } from "./archive-store.mjs";
 import { SPEC_VERSION, archiveNo, chapterView, normStatus, pickChapter, validateTitle } from "./archive-core.mjs";
 
 const DIR = path.join(HERE, "archive");
-export const ARCHIVE_CLI = path.join(DIR, "cc-archive.mjs");
+const ARCHIVE_CLI = path.join(DIR, "cc-archive.mjs");
 const specFile = (lang) => path.join(DIR, /^zh/i.test(lang) ? "spec.zh.md" : "spec.en.md");
 const SID = /^[0-9a-f-]{36}$/i;
 const LANG_NAME = { zh: "Chinese", en: "English", ja: "Japanese", ko: "Korean", es: "Spanish", fr: "French", ru: "Russian", ar: "Arabic", id: "Indonesian" };

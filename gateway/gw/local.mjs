@@ -78,7 +78,7 @@ function localCustom() {
     cfg: { label: j.label || tz("自定义"), tools: j.tools || "", systemPrompt: j.systemPrompt || "", llamaArgs: j.llamaArgs || [], ctx: j.ctx || 0 } };
 }
 /** 当前生效的自定义配置；没选自定义、文件不在或写坏了都回落聊天（返回 null） */
-export function localCustomActive() {
+function localCustomActive() {
   if (SETTINGS.localMode !== "custom") return null;
   const c = localCustom();
   return c.ok ? c.cfg : null;

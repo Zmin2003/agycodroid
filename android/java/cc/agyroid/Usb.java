@@ -37,6 +37,7 @@ final class Usb {
     private static boolean hasAdb(UsbDevice d) {
         for (int i = 0; i < d.getInterfaceCount(); i++) {
             UsbInterface f = d.getInterface(i);
+            if (f == null) continue;
             if (f.getInterfaceClass() == UsbConstants.USB_CLASS_VENDOR_SPEC && f.getInterfaceSubclass() == 66 && f.getInterfaceProtocol() == 1) return true;
         }
         return false;
@@ -57,12 +58,14 @@ final class Usb {
     static JSONObject list(Context c) throws Exception {
         UsbManager m = mgr(c);
         JSONArray a = new JSONArray();
+        if (m == null) return new JSONObject().put("ok", true).put("devices", a);
         for (UsbDevice d : m.getDeviceList().values()) a.put(describe(m, d));
         return new JSONObject().put("ok", true).put("devices", a);
     }
 
     /** 选设备：给了 name（/dev/bus/usb/…）就按名字，否则取唯一一台带 adb 接口的 */
     private static UsbDevice pick(UsbManager m, String name) {
+        if (m == null) return null;
         UsbDevice only = null;
         int n = 0;
         for (UsbDevice d : m.getDeviceList().values()) {
@@ -103,6 +106,7 @@ final class Usb {
     static void open(Context c, JSONObject req, LocalSocket sock) throws Exception {
         UsbManager m = mgr(c);
         OutputStream out = sock.getOutputStream();
+        if (m == null) { reply(out, new JSONObject().put("ok", false).put("message", Tr.t("这台设备没有 USB 主机功能"))); return; }
         UsbDevice d = pick(m, req.optString("name", null));
         if (d == null) { reply(out, new JSONObject().put("ok", false).put("message", Tr.t("没找到唯一一台开了 USB 调试的设备；用 usb-adb list 看看，再用 --name 指定"))); return; }
         if (!ask(c, m, d, req.optLong("timeout", 60))) { reply(out, new JSONObject().put("ok", false).put("message", Tr.t("USB 授权被拒绝或超时（请在弹出的系统对话框里点「确定」）"))); return; }

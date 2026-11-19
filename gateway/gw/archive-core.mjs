@@ -126,7 +126,3 @@ export function chapterView(rec, entry) {
   return { chapters: out, volumes: vols, sessionTitle: titled ? titled.title : null };
 }
 
-/** 压缩后会话重新开始时的钩子（挂在网关给 claude 的 --settings 里）：只陈述事实，规则在系统提示里（见 archive.mjs） */
-export function archiveHooks() {
-  return { SessionStart: [{ matcher: "compact", hooks: [{ type: "command", command: "echo 'agycodroid: the context was just compacted.'" }] }] };
-}

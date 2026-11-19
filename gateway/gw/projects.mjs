@@ -23,7 +23,7 @@ import { syncGitSafe } from "./gitsafe.mjs";
 
 const FILE = path.join(CFG.home, "agyapp-projects.json");
 // 项目颜色：和界面强调色同一套饱和度，按顺序分配（用户可改）
-export const PROJ_COLORS = ["#c96442", "#2f6aa8", "#3d7a2a", "#8a5cb8", "#b08a2e", "#2f8a8a", "#b0506e", "#6b7280"];
+const PROJ_COLORS = ["#c96442", "#2f6aa8", "#3d7a2a", "#8a5cb8", "#b08a2e", "#2f8a8a", "#b0506e", "#6b7280"];
 const SAME = ["", "follow"];   // 「跟随全局」存成空串
 
 // 读坏了（语法错、不是数组）原文件留底成 .bad-*，别让下一次保存把整张表覆盖掉（gw/statefile.mjs）

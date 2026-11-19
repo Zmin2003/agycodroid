@@ -11,7 +11,7 @@ import { setLastInit } from "./caps.mjs";
 import { RUNS, SESSIONS, rememberSession, runFlag, runList } from "./runs.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { clearIncomplete, markIncomplete } from "./incomplete.mjs";
-import { INTERRUPTED, QUEUE, RUN_LANE, RUN_SESSIONS, abortRun, clearInterrupted, endRun, holdLane, idleDisarm, laneOfItem, publishState, runEmit, runTag, saveRunMark, setInterrupted, setPermMode, sidForItem } from "./queue.mjs";
+import { INTERRUPTED, QUEUE, RUN_LANE, RUN_SESSIONS, abortRun, clearInterrupted, endRun, holdLane, laneOfItem, publishState, runEmit, runTag, saveRunMark, setInterrupted, setPermMode, sidForItem } from "./queue.mjs";
 import { LOCAL_CMD_RE, handleLocalCommand } from "./modelcmd.mjs";
 import { usageAdd, usageIsPrompt, usageMeter } from "./usage.mjs";
 import { TASKS_HINT, contextWindowOf, toolsHint, translate } from "./stream.mjs";
@@ -243,7 +243,7 @@ export async function startRun(item) {
   // 在被中断的那个会话里又跑起来了（点了「继续」或者直接接着聊）：等这一轮真答出来再撤中断提示。
   // 以前一开跑就撤，「继续」起不来、空完成时卡片已经没了，用户不知道没跑（0.6.9 审计 195-R.1）。跑着时界面本来就不显示这张卡
   run.intrPending = !!run.sessionId && INTERRUPTED.some((e) => e.sessionId === run.sessionId);
-  if (run.sessionId) { RUN_SESSIONS.set(run.id, run.sessionId); idleDisarm(run.sessionId); }
+  if (run.sessionId) RUN_SESSIONS.set(run.id, run.sessionId);
   if (run.sessionId) markIncomplete(run.sessionId, run.id);   // 这一轮开跑：先记上，拿到结果再清（FIND-040）
   const emit = (ev) => runEmit(run, ev);
   emit({ type: "run_start", text: run.text, sessionId: run.sessionId, follow: run.follow, cid: run.cid, startedAt: run.startedAt, ...(run.auto ? { auto: run.auto } : {}) });
@@ -602,7 +602,7 @@ export async function startRun(item) {
     if (item.mergeFrom && !item.sessionId) { recordExtra(run.sessionId, item.mergeFrom); item.mergeFrom = null; }   // 汇合：当场记来源（事后推断不出来）
     saveRunMark();                       // 标记里补上会话号：被杀之后「继续」要靠它 --conversation
     flushRecords();                      // init 之前攒下的用户消息，现在按会话号落盘
-    if (!SESSIONS.has(init.session_id)) {
+    if (init.session_id && !SESSIONS.has(init.session_id)) {
       SESSIONS.set(init.session_id, { id: init.session_id, title: message.slice(0, 60), createdAt: Date.now() });
       // 网关长跑不重启时别一直涨（0.6.9 审计 200-6-05 剩下的一半，v4pro 复核）。只拿来判断「本次起过的会话」，淘汰掉的退回查文件在不在
       if (SESSIONS.size > 5000) SESSIONS.delete(SESSIONS.keys().next().value);

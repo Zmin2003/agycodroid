@@ -14,7 +14,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -37,6 +36,7 @@ public final class Docs extends DocumentsProvider {
 
     @Override
     public boolean onCreate() {
+        if (getContext() == null || getContext().getFilesDir() == null) return false;
         Tr.init(getContext());
         home = new File(new File(getContext().getFilesDir(), "home"), "workspace");   // 和 Env.home 同一处：files/home/workspace
         return home.isDirectory();
@@ -158,7 +158,8 @@ public final class Docs extends DocumentsProvider {
         r.add(Root.COLUMN_SUMMARY, "workspace/ · " + Tr.f("读写"));
         r.add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY | Root.FLAG_SUPPORTS_CREATE
             | Root.FLAG_SUPPORTS_SEARCH | Root.FLAG_SUPPORTS_IS_CHILD);
-        r.add(Root.COLUMN_ICON, getContext().getApplicationInfo().icon);
+        android.content.pm.ApplicationInfo ai = getContext() != null ? getContext().getApplicationInfo() : null;
+        r.add(Root.COLUMN_ICON, ai == null ? 0 : ai.icon);
         r.add(Root.COLUMN_AVAILABLE_BYTES, home.getUsableSpace());
         return c;
     }

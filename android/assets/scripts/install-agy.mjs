@@ -29,6 +29,7 @@ const MANIFEST_URL = process.env.AGAPP_AGY_MANIFEST_URL
 const PREFIX = process.env.PREFIX || "";
 const CURL = PREFIX ? path.join(PREFIX, "bin", "curl") : "curl";
 const TAR = PREFIX ? path.join(PREFIX, "bin", "tar") : "tar";
+if (!process.env.HOME) { console.log("✗ 没有 HOME：不知道往哪里装（要在 agycodroid 的终端里跑）"); process.exit(1); }
 const DEST = path.join(process.env.HOME, ".local/share/agycodroid/agy");
 const CHANNEL = process.argv[2] || "latest";
 const say = (s) => console.log(s);

@@ -12,8 +12,6 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
 import java.io.File;
-import java.net.HttpURLConnection;
-import java.net.URL;
 
 /**
  * 网关的宿主。为什么要它：
@@ -103,15 +101,17 @@ public class GatewayService extends Service {
         NotificationChannel ch = new NotificationChannel(CH, Tr.t("后台运行"), NotificationManager.IMPORTANCE_LOW);
         ch.setDescription(Tr.t("保持网关与正在进行的任务在后台运行"));
         ch.setShowBadge(false);
-        nm.createNotificationChannel(ch);
+        if (nm != null) nm.createNotificationChannel(ch);
         // 34 起要带类型（与清单的 specialUse 对应）；早的系统用两参数版
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, note(Tr.t("正在启动…")), 0x40000000 /* FOREGROUND_SERVICE_TYPE_SPECIAL_USE */);
         else startForeground(1, note(Tr.t("正在启动…")));
 
         PowerManager pm = getSystemService(PowerManager.class);
-        wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "agycodroid:gateway");
-        wake.setReferenceCounted(false);
-        wake.acquire();
+        if (pm != null) {
+            wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "agycodroid:gateway");
+            wake.setReferenceCounted(false);
+            wake.acquire();
+        }
 
         // 提权中转：和网关同寿命（priv 命令、设置页的 Shizuku 状态都靠它）
         Priv.start(this);
@@ -652,6 +652,7 @@ public class GatewayService extends Service {
     /** /proc/<pid>/cmdline（\0 分隔）是不是本应用的网关：现在经引导起（node --input-type=module -e <boot.mjs> <files/app> <端口>），
      *  升级前留下的旧网关是 node <files/app>/server.mjs <端口> */
     static boolean isGatewayCmd(String cmd, String app) {
+        if (cmd == null || app == null) return false;
         if (cmd.contains(app + "/server.mjs")) return true;
         return cmd.contains("\0--input-type=module\0-e\0") && cmd.endsWith("\0" + app + "\0" + Env.PORT + "\0");
     }
@@ -728,7 +729,8 @@ public class GatewayService extends Service {
     private void update(String text) {
         if (text.equals(last)) return;
         last = text;
-        getSystemService(NotificationManager.class).notify(1, note(text));
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(1, note(text));
     }
 
     private Notification note(String text) {

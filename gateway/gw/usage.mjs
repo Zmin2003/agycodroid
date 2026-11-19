@@ -462,12 +462,6 @@ export function ccMem(args, timeoutMs = 90000) {
   });
 }
 
-/** 设备工具 MCP 没有 agy 的接法：以前这里返回 device-mcp.mjs 的 MCP 配置，agycodroid 里不再提供（见 run.mjs）。
- *  导出名留着，给还调它的地方一个明确的 null。 */
-export function deviceMcpConfig() {
-  return null;
-}
-
 export function privCall(req, timeoutMs = 20000) {
   return new Promise((resolve) => {
     if (!PREFIX) {

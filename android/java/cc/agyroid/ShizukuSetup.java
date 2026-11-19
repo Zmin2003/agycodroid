@@ -73,7 +73,8 @@ final class ShizukuSetup {
         env = new Env(c);
         NotificationChannel ch = new NotificationChannel(CH, Tr.t("Shizuku 激活"), NotificationManager.IMPORTANCE_HIGH);
         ch.setDescription(Tr.t("无线调试配对码输入框、激活结果"));
-        c.getSystemService(NotificationManager.class).createNotificationChannel(ch);
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        if (nm != null) nm.createNotificationChannel(ch);
         flushStaleNote(c);
         new Thread(this::sweepLegacyAdb, "shz-sweep").start();
     }
@@ -614,6 +615,7 @@ final class ShizukuSetup {
     // ── 工具 ───────────────────────────────────────────────────────────
     private boolean onWifi() {
         ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
+        if (cm == null) return false;
         NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
         if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return true;
         // 走蜂窝上网但 Wi‑Fi 也连着（"WLAN 助理"之类）：看所有网络
@@ -681,6 +683,7 @@ final class ShizukuSetup {
     /** 找本机广播的 mDNS 服务端口。局域网里别的设备也可能在广播：优先地址是本机的那些 */
     private List<Integer> discover(String type, long ms) throws Exception {
         NsdManager nm = ctx.getSystemService(NsdManager.class);
+        if (nm == null) return new ArrayList<>();
         List<NsdServiceInfo> found = Collections.synchronizedList(new ArrayList<>());
         NsdManager.DiscoveryListener l = new Disc(found, null);
         nm.discoverServices(type, NsdManager.PROTOCOL_DNS_SD, l);
@@ -745,6 +748,7 @@ final class ShizukuSetup {
     private synchronized void startPairDiscovery() {
         stopPairDiscovery();
         NsdManager nm = ctx.getSystemService(NsdManager.class);
+        if (nm == null) return;
         Set<String> mine = localAddrs();
         Disc d = new Disc(null, s -> {
             NsdServiceInfo r = resolve(nm, s);
@@ -839,7 +843,8 @@ final class ShizukuSetup {
                 MainActivity.internal(ctx, MainActivity.ACTION_SHIZUKU_NOOP).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT), true);
         }
-        ctx.getSystemService(NotificationManager.class).notify(NOTE, b.build());
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(NOTE, b.build());
     }
 
     private void failNote(String text) {
@@ -847,7 +852,9 @@ final class ShizukuSetup {
         PendingIntent pi = PendingIntent.getActivity(ctx, NOTE + 1,
             MainActivity.internal(ctx, MainActivity.ACTION_SHIZUKU).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        ctx.getSystemService(NotificationManager.class).notify(NOTE, new Notification.Builder(ctx, CH)
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm == null) return;
+        nm.notify(NOTE, new Notification.Builder(ctx, CH)
             .setSmallIcon(android.R.drawable.ic_secure)
             .setContentTitle("Shizuku")
             .setContentText(text)
@@ -857,7 +864,10 @@ final class ShizukuSetup {
             .build());
     }
 
-    private void cancelNote() { ctx.getSystemService(NotificationManager.class).cancel(NOTE); }
+    private void cancelNote() {
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm != null) nm.cancel(NOTE);
+    }
 
     private static String tail(String s) {
         s = s == null ? "" : s.trim();

@@ -49,7 +49,7 @@ function save() {
 if (!DB.since) { DB.since = Date.now(); saveNow(); }
 
 /** SIGTERM 收尾：把防抖里还没写的那一段落盘（和 sessmodel 同一套） */
-export function flushManagedSessions() {
+function flushManagedSessions() {
   clearTimeout(saveT);
   saveT = 0;
   saveNow();
@@ -71,7 +71,7 @@ export function looksBackground(sid, created, entrypoint) {
 }
 
 /** 这个会话算不算应用里开的：记过的算；created 比分界早的（升级前的老会话）也算。 */
-export function isManaged(sid, created) {
+function isManaged(sid, created) {
   if (!sid) return false;
   if (DB.ids[String(sid)]) return true;
   return DB.since > 0 && created > 0 && created < DB.since;

@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -141,14 +140,14 @@ public class BrowserPane extends LinearLayout {
 
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                return route(r.getUrl().toString());
+                return route(r == null || r.getUrl() == null ? null : r.getUrl().toString());
             }
             @SuppressWarnings("deprecation")
             @Override public boolean shouldOverrideUrlLoading(WebView v, String url) { return route(url); }
             // 界面专用地址（任何端口）和网关端口：子资源、iframe、XHR 也一律不许碰（GHSA-hwmm 第 1 项）。
             // 这里和界面共用 CookieManager，专用地址上的会话 Cookie 不分端口，放过去就被那个端口上的应用收走了
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
-                return forbidden(r.getUrl().toString()) ? MainActivity.blocked() : null;
+                return forbidden(r == null || r.getUrl() == null ? null : r.getUrl().toString()) ? MainActivity.blocked() : null;
             }
             @Override public void onPageStarted(WebView v, String url, Bitmap icon) { Log.i(TAG, "start " + logUrl(url)); pickStop(); shown(url); }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
@@ -222,6 +221,7 @@ public class BrowserPane extends LinearLayout {
         android.content.SharedPreferences ui = c.getSharedPreferences("ui", Context.MODE_PRIVATE);
         if ("accent".equals(k)) {     // 界面里自定了强调色（见 MainActivity.accentPref）就用它
             String own = ui.getString(night ? "accent_dark" : "accent_light", "");
+            if (own == null) own = "";
             if (own.matches("#[0-9a-f]{6}")) return Color.parseColor(own);
         }
         String skin = ui.getString("skin", "native");
@@ -229,6 +229,7 @@ public class BrowserPane extends LinearLayout {
         String[] keys = { "bg", "card", "field", "line", "fg", "dim", "hint", "accent" };
         String own = "shise".equals(skin) ? ui.getString(night ? "pal_dark" : "pal_light", "")
             : "goucheng".equals(skin) && !night ? ui.getString("gc_pal_light", "") : "";   // 构成浅色调过纸色（MainActivity.gcPal）
+        if (own == null) own = "";
         String[] v = own.matches("#[0-9a-f]{6}(,#[0-9a-f]{6}){7}") ? own.split(",")
             : "shise".equals(skin)     // 还没算过（刚切过来、界面没起来）：M3 的默认紫
             ? (night ? new String[] { "#141218", "#1d1b20", "#2b2930", "#49454f", "#e6e0e9", "#cac4d0", "#938f99", "#d0bcff" }

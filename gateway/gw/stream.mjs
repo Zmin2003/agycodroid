@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CFG, LAST_LANG, PREFIX, tr, tz} from "./config.mjs";
-import { SETTINGS} from "./settings-store.mjs";
+import { CFG, HERE, LAST_LANG, PREFIX, tr, tz} from "./config.mjs";
 import { currentModelInfo, agyVersion} from "./agy.mjs";
 import { envFacts} from "./envfacts.mjs";
 import { APP} from "./appfiles.mjs";

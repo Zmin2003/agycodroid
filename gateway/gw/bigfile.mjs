@@ -82,7 +82,7 @@ export function rewriteLines(src, dst, fn) {
 }
 
 /** 把一段流按行改写（line → line），给导入时改 cwd 用 */
-export function lineMapper(fn) {
+function lineMapper(fn) {
   let rest = Buffer.alloc(0);
   return new Transform({
     transform(chunk, _e, cb) {

@@ -89,7 +89,6 @@ export async function fetchText(r, max = 8 * 1024 * 1024) {
   }
   return Buffer.concat(parts).toString("utf8");
 }
-export const fetchJsonCapped = async (r, max) => JSON.parse(await fetchText(r, max));
 
 // App 按次签名的请求：签名里带了请求体的 sha256（access.mjs 的 sigOk），读完核对，冒牌的转发时改了体就不认
 const bodySigOk = (req, b) => !req.ccBodySha || crypto.createHash("sha256").update(b).digest("hex") === req.ccBodySha;
@@ -123,7 +122,7 @@ export function uiTag() {
 
 // app.js 的源码按功能拆在 web/app/ 下（文件名带序号），这里按文件名顺序原样拼成一个文件下发：
 // 浏览器拿到的仍是同一个闭包，和拆之前逐字节相同。报错里的 app.js 行号用 node scripts/appjs.mjs --line N 对回分段
-export function appParts() {
+function appParts() {
   try { return fs.readdirSync(path.join(PATHS.web, "app")).filter((f) => f.endsWith(".js")).sort(); } catch { return []; }
 }
 let appCache = { key: "", data: null };

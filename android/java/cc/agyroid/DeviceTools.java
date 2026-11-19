@@ -59,8 +59,8 @@ final class DeviceTools {
      *  不再是同 uid 脚本改一下 prefs 就能伪造的明文（11-03 审查 H-2） */
     static void a11yConfirmed(Context c, String mode, boolean on) {
         if (on) Consent.grant(c, Consent.DEV_ON, "1");
-        if (mode.equals("auto") || mode.equals("on")) Consent.grant(c, Consent.DEV_A11Y, mode);
-        if (mode.equals("on")) new Thread(() -> A11y.enable(c, 4000)).start();
+        if ("auto".equals(mode) || "on".equals(mode)) Consent.grant(c, Consent.DEV_A11Y, mode);
+        if ("on".equals(mode)) new Thread(() -> A11y.enable(c, 4000)).start();
     }
     static boolean on(Context c) { return Consent.on(c, Consent.DEV_ON); }
     /** 读屏模式：off / auto（用时自动开）/ on（常开） */
@@ -302,7 +302,9 @@ final class DeviceTools {
         List<ResolveInfo> l = pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0);
         JSONArray out = new JSONArray();
         Set<String> seen = new HashSet<>();
+        if (l == null) return new JSONObject().put("ok", true).put("apps", out);
         for (ResolveInfo ri : l) {
+            if (ri == null || ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName, label = String.valueOf(ri.loadLabel(pm));
             if (!seen.add(pkg)) continue;
             if (!q.isEmpty() && !pkg.toLowerCase().contains(q) && !label.toLowerCase().contains(q)) continue;

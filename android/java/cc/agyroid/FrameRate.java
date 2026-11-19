@@ -31,10 +31,12 @@ final class FrameRate {
     static void apply(Activity a) {
         int rate = target(a);
         Window w = a.getWindow();
-        WindowManager.LayoutParams lp = w.getAttributes();
-        if (lp.preferredRefreshRate != rate) {
-            lp.preferredRefreshRate = rate;
-            try { w.setAttributes(lp); } catch (Throwable ignored) {}
+        if (w != null) {
+            WindowManager.LayoutParams lp = w.getAttributes();
+            if (lp.preferredRefreshRate != rate) {
+                lp.preferredRefreshRate = rate;
+                try { w.setAttributes(lp); } catch (Throwable ignored) {}
+            }
         }
         Intent i = new Intent(ACTION_MIUI_GAME_FPS).setPackage("com.miui.powerkeeper");
         i.putExtra("override_pkg_name", a.getPackageName());

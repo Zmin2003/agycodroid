@@ -149,7 +149,7 @@ final class Installer {
             String got = sha256(part);
             if (sha.equals(got)) break;
             part.delete(); seg.delete();
-            IOException bad = new IOException(Tr.f("sha256 不符（期望 {0}…，实得 {1}…）", sha.substring(0, 12), got.substring(0, 12)));
+            IOException bad = new IOException(Tr.f("sha256 不符（期望 {0}…，实得 {1}…）", head12(sha), got.substring(0, 12)));
             // 大小对、内容不对：这一份是谁给的说不准（中途可能换过源），至少当前这个不再用；换下一个从头下，都换完了才报错。
             // 坏来源装不进去这一点不变，只是别让它把重试也吃死
             String next = left.poll();
@@ -543,7 +543,7 @@ final class Installer {
         String got = hex(md.digest());
         if (tarSha != null && !tarSha.isEmpty() && !tarSha.equals(got)) {
             deleteTree(dir);
-            throw new IOException(Tr.f("解出来的内容与清单不符（tar sha256 期望 {0}…，实得 {1}…），旧工具包未改动", tarSha.substring(0, 12), got.substring(0, 12)));
+            throw new IOException(Tr.f("解出来的内容与清单不符（tar sha256 期望 {0}…，实得 {1}…），旧工具包未改动", head12(tarSha), got.substring(0, 12)));
         }
         return got;
     }
@@ -1232,6 +1232,9 @@ final class Installer {
         }
         return v;
     }
+    /** 清单里的 sha 可能短于 12 位（手写错）：只取前 12 位，短的原样给，不抛 */
+    private static String head12(String s) { return s == null ? "" : s.length() > 12 ? s.substring(0, 12) : s; }
+
     private static String cstr(byte[] b, int off, int len) {
         int end = off;
         while (end < off + len && b[end] != 0) end++;

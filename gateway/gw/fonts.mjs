@@ -12,7 +12,7 @@ import { NEXT, readBody, readBodyBuf, sendJson } from "./http.mjs";
 
 const DIR = path.join(CFG.home, "fonts");
 const LIST = path.join(DIR, "fonts.json");
-export const FONT_MAX = 40 * 1024 * 1024, FONT_COUNT = 10;
+const FONT_MAX = 40 * 1024 * 1024, FONT_COUNT = 10;
 const ID_RE = /^[0-9a-f]{12}$/;
 const MIME = { ttf: "font/ttf", otf: "font/otf", woff: "font/woff", woff2: "font/woff2" };
 

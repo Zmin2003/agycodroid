@@ -1,7 +1,6 @@
   // ── 使用统计：网关按 UTC 刻钟记，旧记录按小时；这里按本地时区汇总成日 / 周 / 月 ──
   const us = { raw: null, days: new Map(), month: null, busy: false };
   const usDayKey = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  const usMonthKey = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   const usNum = (n) => Number(n || 0).toLocaleString(I18N.lang);
   const usCompact = (n) => { try { return new Intl.NumberFormat(I18N.lang, { notation: "compact", maximumFractionDigits: 1 }).format(n || 0); } catch { return usNum(n); } };
   function usEmpty() { return { m: 0, t: 0, tl: 0, i: 0, o: 0, c: 0, s: new Set(), md: {}, mt: {}, st: {}, hr: new Array(24).fill(0) }; }

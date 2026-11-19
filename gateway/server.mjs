@@ -19,7 +19,7 @@
 //    providers   厂商目录、密钥（Google OAuth / Gemini API Key） access      令牌、Host/Origin 校验
 //    settings    设置                                   bus         事件总线（SSE）
 //    models      模型清单                               runs        正在跑的轮次、最近会话
-//    claude      shell、DNS 桥、claude 进程环境         queue       排队、车道、被杀接续、空闲压缩
+//    agy         shell、agy 进程环境                     queue       排队、车道、被杀接续
 //    sessions    会话列表、重命名、搜索、会话接口       run         跑一轮
 //    sessionops  分叉、回退、回收站、导出导入           stream      系统提示补充、流事件翻译、订阅额度
 //    transcript  分页读会话记录                         modelcmd    /model /effort
@@ -40,7 +40,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { CFG, PATHS, PREFIX, log, reqLang } from "./gw/config.mjs";
+import { CFG, PATHS, log, reqLang } from "./gw/config.mjs";
 import { SETTINGS, routeSettings, saveSettings } from "./gw/settings.mjs";
 import { API_KEY, PROVIDER, routeProviders } from "./gw/providers.mjs";
 import { fetchModels, normEffort, routeModels } from "./gw/models.mjs";
@@ -203,13 +203,12 @@ server.listen(CFG.port, "127.0.0.1", () => {
   if (UI_HOST !== "127.0.0.1") uiServer.listen(CFG.port, UI_HOST);
   else log("⚠️ 这台设备上 127.0.0.2 连不通，界面改走 127.0.0.1（应用启动时探测，见 Env.checkHost）");
   // 浏览器直接开这个地址只拿得到静态页，/api 按来源校验一律 403；界面要从应用里开（0.6.9 审计 195-G.6）
-  log(`claude-apk 网关 v3 已启动  http://127.0.0.1:${CFG.port}（界面请从 agycodroid 应用里打开）`);
+  log(`agycodroid 网关 v3 已启动  http://127.0.0.1:${CFG.port}（界面请从 agycodroid 应用里打开）`);
   log(`  运行时 ${CFG.runtime}`);
   log(`  工作区 ${CFG.workspace}`);
   log(`  前端   ${PATHS.web}  存在=${fs.existsSync(PATHS.web)}`);
   log(`  密钥   ${API_KEY ? "已配置" : "缺失"}`);
   log(`  模型   ${SETTINGS.model}   权限 ${SETTINGS.permissionMode}`);
-  if (!fs.existsSync(PATHS.claude)) log(`  ⚠️ 未找到 claude: ${PATHS.claude}`);
   if (!fs.existsSync(PATHS.loader)) log(`  ⚠️ 未找到 glibc loader: ${PATHS.loader}`);
   if (process.env.AGAPP_EXEC === "loader") {
     // 经加载器（targetSdk 36）：APK 里的 ld.so 必须和工具包里的 libc 同版本，不同就是 APK 先升了、工具包还没跟上

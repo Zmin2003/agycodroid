@@ -9,14 +9,14 @@ import { NEXT, readBody, sendJson } from "./http.mjs";
 import { readSmallFile } from "./saferead.mjs";
 
 const FILE = path.join(CFG.home, "agyapp-ui.json");
-export const UI_KEYS = ["topbar", "navPins", "accent", "msgActs", "extImg", "gcPaper"];
+const UI_KEYS = ["topbar", "navPins", "accent", "msgActs", "extImg", "gcPaper"];
 const MAX = 16 * 1024;
 
-export function readUi() {
+function readUi() {
   try { const raw = readSmallFile(FILE, 64 << 10); if (raw != null) { const j = JSON.parse(raw); if (j && typeof j === "object" && !Array.isArray(j)) return j; } } catch {}
   return {};
 }
-export function patchUi(patch) {
+function patchUi(patch) {
   const cur = readUi();
   for (const [k, v] of Object.entries(patch || {})) {
     if (!UI_KEYS.includes(k)) continue;
