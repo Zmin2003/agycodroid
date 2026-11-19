@@ -31,12 +31,14 @@ test("低-1 /api/file/stat 对私有目录也返回 403，工作区目录照常"
   assert.equal(w.body.dir, true);
 });
 
-test("低-2 插件 / 市场 / MCP 的名字以横线开头直接拒，不交给 claude", async () => {
+test("低-2 插件 / 市场 / MCP 的名字以横线开头直接拒，不交给 agy", async () => {
+  // 移植：插件路由整个返回 400 不支持（extensions.mjs unsupported），
+  // 名字校验根本不会跑到，更不会把名字交去执行
   for (const [p, b] of [["/api/ext/plugins/install", { id: "--help" }], ["/api/ext/plugins/install", { id: "x@y", accept: "-a" }],
     ["/api/ext/plugins/uninstall", { id: "-x" }], ["/api/ext/plugins/enable", { id: "a\nb" }]]) {
     const r = await post(p, b);
     assert.equal(r.body.ok, false, p);
-    assert.match(r.body.message, /名字格式不对|Invalid name/);
+    assert.match(r.body.error || "", /Claude Code 专属/);
   }
 });
 

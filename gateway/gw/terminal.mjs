@@ -5,11 +5,11 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { CFG, HERE, PATHS, PREFIX, log, tz } from "./config.mjs";
-import { claudeEnv, ensureShell, killTree, termKeyFile } from "./claude.mjs";
+import { agyEnv, ensureShell, killTree } from "./agy.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 
 // ── 应用内终端 ────────────────────────────────────────────────────────
-// node 没有 pty：cccodroid 自带原生小程序 ptyhost（APK 原生库目录里的 libccptyhost.so，经 CCAPP_PTYHOST 交来；源码 android/native/ptyhost.c）；
+// node 没有 pty：agycodroid 自带原生小程序 ptyhost（APK 原生库目录里的 libccptyhost.so，经 AGAPP_PTYHOST 交来；源码 android/native/ptyhost.c）；
 // 开发端没有 lib/，退回到同一协议的 python3 pty 版。协议：
 //   ptyhost <rows> <cols> <程序> [参数…]；stdin→pty，pty→stdout，fd 3 一行 "rows cols" 改窗口大小。
 // 输出留一段环形缓冲：界面重开 / 断线重连时先回放，再接着推实时输出（SSE）。
@@ -63,7 +63,7 @@ sys.exit(os.waitstatus_to_exitcode(st) if hasattr(os,"waitstatus_to_exitcode") e
 `;
 
 function ptyCommand() {
-  const own = process.env.CCAPP_PTYHOST || path.join(HERE, "lib", "ptyhost");
+  const own = process.env.AGAPP_PTYHOST || path.join(HERE, "lib", "ptyhost");
   if (fs.existsSync(own)) return [own];
   const py = [PREFIX && path.join(PREFIX, "bin", "python3"), path.join(CFG.runtime, "..", "devbin", "python3")]
     .find((p) => p && fs.existsSync(p));
@@ -72,9 +72,9 @@ function ptyCommand() {
 
 // ── 应用内终端：新开 / 读写 / 关闭 ──────────────────────────────────
 export function termEnv() {
-  const env = claudeEnv();
-  delete env.CCAPP_NODUMP;     // 终端里的东西是机主自己的，不设不可转储（见 claude.mjs claudeEnv）
-  for (const k of ["CI", "NO_COLOR", "CLAUDE_CODE_SHELL", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CCAPP_RUN"]) delete env[k];   // 终端里用户自己起的东西不算 claude 运行，网关重启时别当孤儿清
+  const env = agyEnv();
+  delete env.AGAPP_NODUMP;     // 终端里的东西是机主自己的，不设不可转储（见 agy.mjs agyEnv）
+  for (const k of ["CI", "NO_COLOR", "AGAPP_RUN"]) delete env[k];   // 终端里用户自己起的东西不算 agy 运行，网关重启时别当孤儿清
   env.TERM = "xterm-256color";
   env.COLORTERM = "truecolor";
   // C.UTF-8 是 glibc 内建的（开发端的 bash 是 glibc 版，没带 locale 数据）；不设的话 readline 把中文显示成 \344\270…
@@ -82,12 +82,11 @@ export function termEnv() {
   // …而它在哪儿找 locale 是编译期写死的：开发端的 locale 数据在工具链的 glibc 目录里，得用 LOCPATH 指过去
   const loc = path.join(PATHS.toolchain, "dshtc", "prefix", "glibc", "lib", "locale");
   if (!PREFIX && !env.LOCPATH && fs.existsSync(loc)) env.LOCPATH = loc;
-  env.CCAPP_TERMINAL = "1";
-  // 终端里直接敲 claude 也用应用配的这家：claudeEnv 不带密钥（防 env 泄漏），这里只给钥匙文件的路径，见 termKeyFile
-  const kf = termKeyFile();
-  if (kf) env.CCAPP_KEY_FILE = kf; else delete env.CCAPP_KEY_FILE;
-  // 经加载器：claudeEnv 摘掉了 LD_PRELOAD（给 glibc 用的），终端这边全是 bionic，得挂回 termux-exec，ptyhost 才拉得起 shell
-  if (process.env.CCAPP_BIONIC_PRELOAD) env.LD_PRELOAD = process.env.CCAPP_BIONIC_PRELOAD;
+  env.AGAPP_TERMINAL = "1";
+  // 终端里直接敲 agy 也用应用配的这家：gemini 模式时 agyEnv 已经把 GEMINI_API_KEY 写进来了
+  // （终端是用户自己的 shell，暴露程度和用户自己在终端里 export 是一样的）；
+  // Google 登录模式下 agyEnv 不写 key，agy 用它缓存的登录态。
+  // LD_PRELOAD（termux-exec）agyEnv 已经留着了，终端这边全是 bionic，不用另挂。
   return env;
 }
 
@@ -121,18 +120,18 @@ function termNew({ cols, rows, login, cwd: want } = {}) {
   const shell = ensureShell();
   // want：从项目页「在终端打开」带来的目录；不是目录就退到工作区（工作区也不可用再退 home），落哪儿会说一声
   const { cwd, note: cwdNote } = resolveTermCwd(want);
-  // login：给手动登录用的终端。环境和账户登录一样清掉第三方厂商的地址 / 密钥 / 模型，
-  // 开好后替用户敲下 claude auth login —— 授权码由用户贴给 claude 自己的提示，网关只当字节通道
+  // login：给手动登录用的终端。环境里清掉 API Key（别让登录终端带着它），
+  // 开好后替用户敲下 agy —— 授权在浏览器里完成，网关只当字节通道
   const env = termEnv();
-  if (login) for (const k of Object.keys(env)) if (/^ANTHROPIC_|^CCAPP_KEY_FILE$/.test(k)) delete env[k];
+  if (login) for (const k of Object.keys(env)) if (/^GEMINI_API_KEY$/.test(k)) delete env[k];
   const seq = nextTermSeq();
   const id = seq.toString(36) + crypto.randomBytes(8).toString("hex");   // 别靠 Math.random 那 20 来位（审查 低20）
   // 终端里的每个进程都带着这个标记：关闭终端时按它把 setsid 跑掉的后代也找出来（200-4.04）
-  env.CCAPP_TERM_ID = id;
+  env.AGAPP_TERM_ID = id;
   const child = spawn(pc[0], [...pc.slice(1), String(rows), String(cols), shell], {
     cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"],
   });
-  if (login) setTimeout(() => { try { child.stdin.write("claude auth login" + (login === "console" ? " --console" : "") + "\r"); } catch {} }, 400);
+  if (login) setTimeout(() => { try { child.stdin.write("agy\r"); } catch {} }, 400);
   const t = {
     id, title: `${path.basename(shell) === "bash" ? "bash" : "sh"} ${seq}`, cols, rows,
     created: Date.now(), alive: true, code: null, child,
@@ -177,7 +176,7 @@ function sseSend(res, ev, data, t) {
   } catch {}
 }
 
-/** 这个终端名下还活着的进程（含自己 setsid 跑掉的）：按环境里的 CCAPP_TERM_ID 找。
+/** 这个终端名下还活着的进程（含自己 setsid 跑掉的）：按环境里的 AGAPP_TERM_ID 找。
  *  关闭终端后扫一次，别让 ✕ 只关掉前台、后台还留着一条会话（200-4.04）。只在杀终端时跑，平时不扫 */
 function killTermProcs(id) {
   let pids = [];
@@ -186,7 +185,7 @@ function killTermProcs(id) {
       if (!/^\d+$/.test(d) || +d === process.pid) continue;
       let env = "";
       try { env = fs.readFileSync(`/proc/${d}/environ`, "latin1"); } catch { continue; }   // 同 uid 才读得到
-      if (env.split("\0").includes("CCAPP_TERM_ID=" + id)) pids.push(+d);
+      if (env.split("\0").includes("AGAPP_TERM_ID=" + id)) pids.push(+d);
     }
   } catch {}
   for (const p of pids) { try { process.kill(p, "SIGKILL"); } catch {} }

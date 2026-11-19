@@ -1,9 +1,9 @@
 // ── 定时任务 ──────────────────────────────────────────────────────────
-// 到点在指定目录里跑一次 Claude（和用户发消息走同一条队列），没人看着：要确认的一律拒绝。
+// 到点在指定目录里跑一次 Antigravity（和用户发消息走同一条队列），没人看着：要确认的一律拒绝。
 // 跑完按设置通知、记运行记录，结果存成一个对话（列表里带时钟标记）。
 // 计时在网关里：应用活着（前台或后台常驻）就准点。另外把最近一次的时刻报给外壳（事件 sched_next + 文件
-// ccapp-sched-next），外壳定一个系统闹钟：到点叫醒应用、没在跑就拉起服务，再调 /api/sched/tick 立刻查一遍。
-// 闹钟也没叫醒（被强行停止、厂商拦截）而错过的，下次启动按每个任务的「错过了」处理，不偷偷补跑。存储：home/ccapp-sched.json（任务 + 设置）、home/ccapp-sched-runs.json（运行记录，留最近 500 条）。
+// agyapp-sched-next），外壳定一个系统闹钟：到点叫醒应用、没在跑就拉起服务，再调 /api/sched/tick 立刻查一遍。
+// 闹钟也没叫醒（被强行停止、厂商拦截）而错过的，下次启动按每个任务的「错过了」处理，不偷偷补跑。存储：home/agyapp-sched.json（任务 + 设置）、home/agyapp-sched-runs.json（运行记录，留最近 500 条）。
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -43,8 +43,8 @@ function followSysTz(now) {
   for (const t of DB.tasks) if (t.on && t.nextAt != null && t.nextAt > now) refreshNext(t, now);   // 已到点的照常跑，跑完自然按新时区排
 }
 
-const FILE = path.join(CFG.home, "ccapp-sched.json");
-const RUNS_FILE = path.join(CFG.home, "ccapp-sched-runs.json");
+const FILE = path.join(CFG.home, "agyapp-sched.json");
+const RUNS_FILE = path.join(CFG.home, "agyapp-sched-runs.json");
 const schedDefault = () => ({ tasks: [], dailyBudget: 0, missed: [], sids: [], lastTick: 0, allowLogin: false, spent: {}, monthly: {}, monthlySeeded: false });   // dailyBudget：美元，0 = 不限
 // allowLogin：用订阅账户（官方登录态）跑定时任务。默认关——无人值守使用以 Anthropic 条款为准，要用户自己确认后打开
 // tasks 必须是数组：是 {} / 字符串时 tick 每 30 秒抛一次，5 秒后启动的那次就把网关带走，重启再崩（P1-11）
@@ -84,7 +84,7 @@ export function clearFollowingTaskModels() {
   return n;
 }
 // 最近一次要跑的时刻（毫秒，0 = 没有）→ 外壳的系统闹钟。只在变了的时候报
-const NEXT_FILE = path.join(CFG.home, "ccapp-sched-next");
+const NEXT_FILE = path.join(CFG.home, "agyapp-sched-next");
 let lastNext = -1;   // 上一次真正写进文件的值
 let lastPub = -1;    // 上一次报给外壳的值（写失败也照报：在线的外壳先定上，落盘下次 save 再试）
 function pushNext() {

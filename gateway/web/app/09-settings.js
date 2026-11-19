@@ -10,8 +10,8 @@
   // 状态里的当前接口名：同上规则（旧网关没有 providerLabelEn 就用中文名）
   const provName = (s) => (s && ((provEn() && s.providerLabelEn) || s.providerLabel || s.provider)) || "";
   const pHint = (x) => (provEn() && x.hintEn) || x.hint || "";
-  const GROUP_NAME = provEn() ? { claude: "Claude", third: "Third-party (just add a key)", local: "On-device", custom: "Custom endpoints" }
-    : { claude: "Claude", third: t("第三方（填 Key 即用）"), local: t("端侧（本机运行）"), custom: t("自定义接口") };
+  const GROUP_NAME = provEn() ? { claude: "Antigravity", third: "Third-party (just add a key)", local: "On-device", custom: "Custom endpoints" }
+    : { claude: "Antigravity", third: t("第三方（填 Key 即用）"), local: t("端侧（本机运行）"), custom: t("自定义接口") };
   const post = (p, body) => api(p, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}),
   });
@@ -113,7 +113,7 @@
     const gb = (n) => (n / 1073741824).toFixed(1) + " GB";
     const ok = (b) => b ? "✓" : "✗";
     const sv = j.server || {}, cu = j.custom || {};
-    const cmdText = t("请阅读 {skill}，帮我给端侧小模型配置一个自定义模式。", { skill: (cu.skill || "~/.claude/skills/local-model-mode/SKILL.md") });
+    const cmdText = t("请帮我给端侧小模型配置一个自定义模式（指定工具、系统提示、llama-server 参数）。");
     const svText = sv.state === "ready" ? t("已加载 {name}（{min} 分钟不用自动卸载）", { name: sv.model, min: Math.round(sv.idleMs / 60000) })
       : sv.state === "loading" ? t("正在加载 {name}…", { name: sv.model })
       : sv.state === "error" ? t("上次没起来：{msg}", { msg: sv.err || "?" })
@@ -136,7 +136,7 @@
         ${cu.have && !cu.ok ? `<div class="tiny err">${t("配置文件有误，已按聊天模式跑：{msg}", { msg: esc(cu.err) })}</div>` : ""}
       </div>
       <div class="local-custom tiny dim">
-        ${t("手机算力有限，小模型干不了活，所以只内置聊天。想自己折腾的话，可以写 {file} 开一个自定义模式（指定工具、系统提示、llama-server 参数）。最省事的办法：切到云端模型，把下面这句发给它：", { file: "<code>" + esc(cu.path || "~/.cccodroid/local-mode.json") + "</code>" })}
+        ${t("手机算力有限，小模型干不了活，所以只内置聊天。想自己折腾的话，可以写 {file} 开一个自定义模式（指定工具、系统提示、llama-server 参数）。最省事的办法：切到云端模型，把下面这句发给它：", { file: "<code>" + esc(cu.path || "~/.agycodroid/local-mode.json") + "</code>" })}
         <div class="local-copy"><code>${esc(cmdText)}</code><button class="btn sm ghost" data-act="copy">${t("复制")}</button></div>
       </div>
       <div class="prov-state">${esc(svText)}${sv.loadMs ? ` · ${t("加载用了 {s} 秒", { s: (sv.loadMs / 1000).toFixed(1) })}` : ""}</div>
@@ -193,8 +193,7 @@
     if (st.loggedIn) {
       el.className = "prov-state ok";
             el.innerHTML = (st.email ? t("✓ 已登录：<b>{email}</b>", { email: esc(st.email) }) : t("✓ 已登录")) +
-        (st.plan ? ` · ${esc(st.plan)}` : "") + (st.org ? `<br><span class="tiny">${esc(st.org)}</span>` : "") +
-        quotaHtml(st.limits) + staleNote;
+        (st.plan ? ` · ${esc(st.plan)}` : "") + (st.org ? `<br><span class="tiny">${esc(st.org)}</span>` : "") + staleNote;
     } else {
       el.className = "prov-state warn";
       el.textContent = st.pending ? t("等待浏览器里完成授权…") : st.unknown ? t("查询失败：{msg}", { msg: st.error || "" }) : t("未登录");
@@ -202,83 +201,50 @@
     }
     $("login-actions").innerHTML = (st.pending
       ? `<button class="btn sm ghost" data-act="cancel">${t("取消登录")}</button>`
-      : `<button class="btn sm" data-act="login">${st.loggedIn ? t("换个账户登录") : t("登录 Claude 账户")}</button>` +
-        `<button class="btn sm ghost" data-act="login-console">${t("用 Console 账户")}</button>` +
+      : `<button class="btn sm" data-act="login">${st.loggedIn ? t("换个账户登录") : t("登录 Google 账户")}</button>` +
+        `<button class="btn sm ghost" data-act="login-apikey">${t("用 Gemini API Key 登录")}</button>` +
         (st.loggedIn ? `<button class="btn sm ghost danger" data-act="logout">${t("退出登录")}</button>` : "")) +
       (st.loggedIn ? useBtn(p) : "");
     $("login-actions").onclick = (e) => {
       const act = e.target.dataset && e.target.dataset.act;
-      if (act === "login") startLogin(p, "claudeai");
-      else if (act === "login-console") startLogin(p, "console");
+      if (act === "login") startLogin(p, "google");
+      else if (act === "login-apikey") startLogin(p, "apikey");
       else if (act === "cancel") post("/api/login/cancel").then(() => renderProvCard());
       else if (act === "logout") logout(p);
       else if (act === "use") useProvider(p);
     };
   }
-  /** 额度窗口列表：5 小时、每周，再加分模型的周窗口（只在它成了最紧的那个窗口时报过，见 gw/stream.mjs noteRateLimit） */
-  function quotaWins(l) {
-    const mw = (l && l.modelWeek) || {}, now = Date.now() / 1000;
-    const ws = [["5h", t("5 小时"), l && l.fiveHour], ["wk", t("每周"), l && l.sevenDay]];
-    for (const [k, name] of [["opus", "Opus"], ["sonnet", "Sonnet"]])
-      if (mw[k] && (!mw[k].resetsAt || mw[k].resetsAt > now)) ws.push(["wk-" + k, t("每周 · {model}", { model: name }), mw[k]]);
-    return ws.filter((x) => x[2]);
+  /** agy 用量：usage 字段（input / output / thinking / cache_read / total tokens） */
+  function usageHtml(u) {
+    if (!u) return `<div class="quota tiny">${t("用量：发一条消息后显示（input / output / thinking / cache_read）")}</div>`;
+    const num = (v) => Number.isFinite(+v) ? compact(+v) : "—";
+    return `<div class="quota tiny">${t("输入 {i} · 输出 {o} · 思考 {th} · 缓存读取 {c} · 合计 {t}",
+      { i: num(u.input), o: num(u.output), th: num(u.thinking), c: num(u.cache_read), t: num(u.total) })}</div>`;
   }
-  /** 订阅额度：claude 每轮回报一次，网关记下最近一次（不另外查接口） */
-  function quotaHtml(l) {
-    if (!l) return `<div class="quota tiny">${t("额度：发一条消息后显示（5 小时 / 每周）")}</div>`;
-    const when = (sec) => {
-      if (!sec) return "";
-      const d = new Date(sec * 1000), now = new Date();
-      const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString([], { month: "numeric", day: "numeric" }) + " " + hm;
-    };
-    const row = (label, w) => {
-      if (!w) return "";
-      // 网关给的已经是百分数，超额度时大于 100：数字如实显示，只把条子画满（197-5.7）
-      const pct = Math.round(Math.max(0, +w.used || 0)), bar = Math.min(100, pct);
-      const cls = pct >= 90 ? " hot" : pct >= 70 ? " warm" : "";
-      return `<div class="quota-row"><span class="quota-l">${label}</span>
-        <span class="quota-bar"><i class="${cls.trim()}" style="width:${bar}%"></i></span>
-        <span class="quota-v">${pct}%</span>
-        <span class="tiny">${w.resetsAt ? t("{time} 重置", { time: esc(when(w.resetsAt)) }) : ""}</span></div>`;
-    };
-    const ago = Math.max(0, Math.round((Date.now() - l.at) / 60000));
-    return `<div class="quota">${quotaWins(l).map(([, label, w]) => row(label, w)).join("")}
-      <div class="tiny">${ago < 1 ? t("额度刚刚更新") : t("额度更新于 {n} 分钟前（每轮对话后刷新）", { n: ago })}</div></div>`;
+  function usageBrief(u) {
+    if (!u) return { text: "", lvl: 0 };
+    const num = (v) => Number.isFinite(+v) ? compact(+v) : "—";
+    return { text: t("输入 {i} · 输出 {o} · 合计 {t}", { i: num(u.input), o: num(u.output), t: num(u.total) }), lvl: 0 };
   }
-  /** 用量页的额度面板：只有用 Claude 账户登录时才显示，大数字 + 进度条 + 重置时间 */
+  /** 用量面板：agy 的 usage 字段（input / output / thinking / cache_read / total tokens），没有 Anthropic 官方账户的周额度这一说 */
   async function loadQuota() {
     let st = null;
     try { st = await api("/api/login/status"); } catch {}
-    const box = $("quota-field"), l = st && st.loggedIn !== false && st.limits;
+    const box = $("quota-field");
     box.classList.toggle("hidden", !(st && st.loggedIn));
-    if (!l) {
-      $("quota-tiles").innerHTML = ""; $("quota-note").textContent = t("额度：发一条消息后显示（5 小时 / 每周）");
-      // 退出 / 换了个还没额度数据的账户：用量看板和设置摘要里的周额度也得撤掉，别挂着上一个账户的数（#144-2）
-      if (usDash.quota) { usDash.quota = null; usPaint(); paintSetUsage(); }
-      return;
+    const u = st && st.usage;
+    if (u) {
+      $("quota-tiles").innerHTML = usageHtml(u);
+      $("quota-note").textContent = t("用量来自 agy 的 usage 字段");
+    } else {
+      $("quota-tiles").innerHTML = "";
+      $("quota-note").textContent = t("用量：发一条消息后显示（input / output / thinking / cache_read）");
     }
-    const tile = (label, w) => {
-      if (!w) return "";
-      // 超额度时数字如实显示（可能大于 100），条子只画满（197-5.7）
-      const pct = Math.round(Math.max(0, +w.used || 0)), bar = Math.min(100, pct);
-      const cls = pct >= 90 ? "hot" : pct >= 70 ? "warm" : "";
-      const at = w.resetsAt ? new Date(w.resetsAt * 1000) : null;
-      const reset = at ? t("{time} 重置", { time: esc(at.toDateString() === new Date().toDateString()
-        ? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : at.toLocaleDateString([], { month: "numeric", day: "numeric" }) + " " + at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })) }) : "";
-      return `<div class="q-tile ${cls}"><span class="q-l">${label}</span><b>${pct}<small>%</small></b>
-        <span class="quota-bar"><i class="${cls}" style="width:${bar}%"></i></span><span class="q-r">${reset}</span></div>`;
-    };
-    $("quota-tiles").innerHTML = quotaWins(l).map(([, label, w]) => tile(label, w)).join("");
-    const lq = $("login-state") && $("login-state").querySelector(".quota");   // 设置里登录卡片上的那两条
-    if (lq) lq.outerHTML = quotaHtml(l);
-    usDash.quota = l.sevenDay || null; usPaint(); paintSetUsage();
-    const ago = Math.max(0, Math.round((Date.now() - l.at) / 60000));
-    $("quota-note").textContent = ago < 1 ? t("额度刚刚更新") : t("额度更新于 {n} 分钟前（每轮对话后刷新）", { n: ago });
+    // 用量看板和设置摘要跟着这份 usage 走；没用量就撤掉，别挂着上一个账户的数
+    usDash.quota = u || null; usPaint(); paintSetUsage();
   }
-  // 额度看得见的地方（用量页、设置里的用量行 / 登录卡片、第三方的余额卡片）只在打开时拉过一次，
-  // 之后要切页面才更新。现在：网关记下新额度时推 quota、每轮跑完、回到前台，都把看得见的那几处重画一遍
+  // 用量看得见的地方（用量页、设置里的用量行 / 登录卡片、第三方的余额卡片）只在打开时拉过一次，
+  // 之后要切页面才更新。现在：网关记下新用量时推 quota、每轮跑完、回到前台，都把看得见的那几处重画一遍
   let quotaT = 0;
   function refreshQuota() {
     clearTimeout(quotaT);
@@ -293,7 +259,7 @@
   /** 交给系统浏览器：安卓壳把非本机地址都转给外部浏览器（WebView 里登录会被 Google 等拦） */
   function openExternal(url) {
     if (!/^https?:\/\//i.test(String(url || ""))) return;     // 只交 http(s)：别的协议（javascript: 之类）一律不开（审查 v0.5.5 W-L1）
-    if (window.CCApp && window.CCApp.openUrl) return window.CCApp.openUrl(url);
+    if (window.AGApp && window.AGApp.openUrl) return window.AGApp.openUrl(url);
     const a = document.createElement("a");
     a.href = url; a.target = "_blank"; a.rel = "noopener";
     document.body.appendChild(a); a.click(); a.remove();
@@ -310,14 +276,14 @@
         ${t("没自动打开？")}<a href="${esc(webUrl(url))}" target="_blank" rel="noopener">${t("点这里打开")}</a></div>`
       : `<div class="tiny">${t("登录还在进行，拿到授权地址后会自动打开。")}</div>`) +
       `<div class="prov-manual">
-        <div class="tiny">${t("浏览器没跳回来（或在别的设备上授权）？在终端里登录：授权码由你直接贴给 claude，本应用不经手。")}</div>
+        <div class="tiny">${t("浏览器没跳回来（或在别的设备上授权）？在终端里运行 agy，按提示完成认证（授权码由你直接贴给 agy，本应用不经手）。")}</div>
         <button class="btn sm" id="btn-login-term">${t("在终端里登录")}</button>
       </div>`;
     $("btn-login-term").onclick = async () => {
       await post("/api/login/cancel").catch(() => {});
       clearInterval(state.loginTimer);
       closeSettings();       // 终端窗格在设置模态下面，不关设置就点不着（审查 P2-6）
-      openLoginTerm(method === "console" ? "console" : "claudeai");
+      openLoginTerm(method);
     };
   }
   async function startLogin(p, method) {
@@ -359,15 +325,15 @@
     }, 2000);
   }
   async function logout(p) {
-    if (!confirm(t("退出这台设备上的 Claude 账户登录？"))) return;
+    if (!confirm(t("退出这台设备上的 Antigravity 账户登录？"))) return;
     const r = await post("/api/login/logout").catch((e) => ({ ok: false, output: e.message }));
     toast(r.ok ? t("已退出登录") : t("退出失败：{msg}", { msg: r.output || r.message || "" }), !r.ok);
     renderProvCard();
-    // 退出成功后顶栏 / 用量页的额度要跟着撤掉，不能留着上一个账户的数（195-O.9）
+    // 退出成功后顶栏 / 用量页的用量要跟着撤掉，不能留着上一个账户的数（195-O.9）
     if (r.ok) { refreshStatus(); qbLoad(); loadQuota().catch(() => {}); }
   }
 
-  // ── 密钥卡（Claude API Key 与第三方厂商）──
+  // ── 密钥卡（Antigravity API Key 与第三方厂商）──
   // ── 余额与消费（密钥卡底部）──
   // 余额问平台；消费是网关按余额变化自己记的（平台都不给账单接口）；token 每轮结束记。
   // 显示货币跟界面语言走：中文用人民币，其余用美元；账户币种不同就按汇率换算，标「≈」
@@ -471,10 +437,10 @@
       <div class="bill-big${br.lvl === 2 ? " hot" : ""}">${esc(br.text || "—")}</div>`;
   }
 
-  // ── 额度与余额速览 ──
-  // 顶栏细条（上下文用量）后半段写当前接口还剩多少：账户登录 → 5 小时 / 每周已用；能查余额的厂商 → 余额；
-  // 智谱套餐 → 各窗口已用；都查不了 → 今天的 token。点细条弹速览卡，卡里「查看用量」去用量页的「额度与消费」。
-  // 数据：账户额度是 claude 每轮回报的（网关记着，不另查）；余额走 /api/billing（网关缓存 60 秒；
+  // ── 用量与余额速览 ──
+  // 顶栏细条（上下文用量）后半段写当前接口的用量：账户登录 → agy 的 usage（input / output / thinking / cache_read / total tokens）；能查余额的厂商 → 余额；
+  // 智谱套餐 → 各窗口已用；都查不了 → 今天的 token。点细条弹速览卡，卡里「查看用量」去用量页的「用量与消费」。
+  // 数据：账户用量是 agy 每轮回报的（网关记着，不另查）；余额走 /api/billing（网关缓存 60 秒；
   // 跑完一轮会在 30 秒 / 3 分钟 / 10 分钟补查并推 billing 事件），所以常驻显示不会多打厂商接口。
   // 速览卡的交互（以前在弹层上翻过车，照这几条来）：
   //   - 只在对话这一栏里摆（colRect）：右侧浏览器是原生视图，摆出栏外会被它盖住
@@ -485,14 +451,11 @@
     try { return { quota: true, bal: 0, ...JSON.parse(localStorage.getItem("cc.qbWarn") || "{}") }; }
     catch { return { quota: true, bal: 0 }; }
   }
-  function loginBrief(l) {
-    if (!l) return { text: "", lvl: 0 };
-    const ws = quotaWins(l).map(([, label, w]) => [label, w]);
-    const top = Math.max(0, ...ws.map((x) => +x[1].used || 0));
-    return { text: ws.map((x) => x[0] + " " + Math.round(x[1].used) + "%").join(" · "), lvl: top >= 90 ? 2 : top >= 70 ? 1 : 0 };
+  function loginBrief(u) {
+    return usageBrief(u);
   }
-  const qbBrief = (c) => (!c ? { text: "", lvl: 0 } : c.login ? loginBrief(c.limits) : billBrief(c.bill));
-  /** 拉当前接口的额度 / 余额，画到细条上；速览卡、用量页开着就一起重画 */
+  const qbBrief = (c) => (!c ? { text: "", lvl: 0 } : c.login ? loginBrief(c.usage) : billBrief(c.bill));
+  /** 拉当前接口的用量 / 余额，画到细条上；速览卡、用量页开着就一起重画 */
   async function qbLoad(force) {
     const s = state.serverStatus;
     if (!s || !s.provider) return null;
@@ -503,9 +466,9 @@
     if (cur.login) {
       let st = null, failed = false;
       try { st = await api("/api/login/status"); } catch { failed = true; }
-      // 查询失败（网络/网关忙）别把已经显示的已登录额度清掉；只有接口明确回“没登录”才撤（195-O.9）
+      // 查询失败（网络/网关忙）别把已经显示的已登录用量清掉；只有接口明确回“没登录”才撤（195-O.9）
       if (failed && QB.cur && QB.cur.id === cur.id) return QB.cur;
-      cur.limits = st && st.loggedIn ? st.limits || null : null;
+      cur.usage = st && st.loggedIn ? st.usage || null : null;
     } else {
       cur.bill = await api(`/api/billing?id=${encodeURIComponent(cur.id)}${force ? "&refresh=1" : ""}`).catch(() => null);
       if (cur.bill && cur.bill.error) cur.bill = null;
@@ -533,7 +496,7 @@
   }
   const qbLast = (() => { try { return JSON.parse(localStorage.getItem("cc.qbLast") || "null"); } catch { return null; } })();
   if (qbLast && qbLast.text) qbPaint(qbLast);
-  // 快用完时提醒：5 小时 / 每周（或套餐窗口）过 80%、95% 各提醒一次（按重置时间区分窗口）；余额低于设定值每天一次
+  // 快用完时提醒：套餐窗口过 80%、95% 各提醒一次（按重置时间区分窗口）；余额低于设定值每天一次。agy 的 usage 没有“已用百分之几”这一说，登录账户不做用量提醒
   function qbRemind(c) {
     const cfg = qbWarnCfg();
     let warned = {};
@@ -550,10 +513,6 @@
       warned[key] = lv;
       say.push(t("{win}额度已用 {n}%", { win: label, n: Math.round(pct) }) + (resetMs ? " · " + t("{time} 重置", { time: when(resetMs) }) : ""));
     };
-    if (cfg.quota && c.login && c.limits) {
-      const l = c.limits;
-      for (const [k, label, w] of quotaWins(l)) win(k + ":" + (w.resetsAt || 0), label, +w.used || 0, w.resetsAt * 1000);
-    }
     const b = c.bill;
     if (cfg.quota && b && Array.isArray(b.plan)) {
       const W = { "5h": t("5 小时"), week: t("每周"), month: t("每月") };
@@ -582,7 +541,7 @@
     const el = qcEl = document.createElement("div");
     el.className = "qcard";
     el.setAttribute("role", "dialog");
-    el.setAttribute("aria-label", t("额度速览"));   // 不抢焦点的浮卡，不是模态，不加 aria-modal
+    el.setAttribute("aria-label", t("用量速览"));   // 不抢焦点的浮卡，不是模态，不加 aria-modal
     OV.open(el, { anchor: ctxBar, place: qcPlace, keep: true, onClose: () => { if (qcEl === el) qcEl = null; } });
     el.addEventListener("click", (e) => {
       const a = e.target.closest("[data-qc]");
@@ -597,9 +556,9 @@
     if (!qcOpen()) return;
     const c = QB.cur;
     const body = !c ? `<div class="tiny">${t("读取中…")}</div>`
-      : c.login ? quotaHtml(c.limits)
+      : c.login ? usageHtml(c.usage)
       : c.bill ? billRows(c.bill, { id: c.id }, true)
-      : `<div class="tiny">${t("查不到这个接口的额度")}</div>`;
+      : `<div class="tiny">${t("查不到这个接口的用量")}</div>`;
     qcEl.innerHTML = `<div class="qc-h"><b>${esc(c ? c.name : "")}</b><span class="grow"></span>
       <button class="btn sm ghost" data-qc="refresh">${t("刷新")}</button></div>
       <div class="qc-body">${body}</div>
@@ -617,16 +576,16 @@
   }
   ctxBar.addEventListener("click", qcToggle);
 
-  // 用量页「额度与消费」：当前接口的明细 + 其他配过的接口各一行（点开看明细）+ 提醒设置
-  const usOther = new Map();   // id → { login, limits } / { bill }
-  const usBrief = (id) => { const x = usOther.get(id); if (!x) return ""; const br = x.login ? loginBrief(x.limits) : billBrief(x.bill); return br.text || (x.login ? t("发一条消息后显示") : "—"); };
+  // 用量页「用量与消费」：当前接口的明细 + 其他配过的接口各一行（点开看明细）+ 提醒设置
+  const usOther = new Map();   // id → { login, usage } / { bill }
+  const usBrief = (id) => { const x = usOther.get(id); if (!x) return ""; const br = x.login ? loginBrief(x.usage) : billBrief(x.bill); return br.text || (x.login ? t("发一条消息后显示") : "—"); };
   async function loadAcctCard(force) {
     if (!$("us-acct")) return;
     const cur = await qbLoad(force);
     if (curPage !== "usage") return;
     $("us-acct-name").textContent = cur ? cur.name : "";
-    $("us-acct-cur").innerHTML = !cur ? "" : cur.login ? quotaHtml(cur.limits)
-      : cur.bill ? billRows(cur.bill, { id: cur.id }) : `<div class="tiny">${t("查不到这个接口的额度")}</div>`;
+    $("us-acct-cur").innerHTML = !cur ? "" : cur.login ? usageHtml(cur.usage)
+      : cur.bill ? billRows(cur.bill, { id: cur.id }) : `<div class="tiny">${t("查不到这个接口的用量")}</div>`;
     let list = [];
     try { list = (await api("/api/providers")).providers || []; } catch {}
     // 官方账户先问清登没登录再决定列不列：先列「读取中…」再删掉，行数一变下面的卡片就往上跳（#38）
@@ -641,13 +600,13 @@
     const fill = (d) => {
       const x = usOther.get(d.dataset.id), det = d.querySelector(".qb-detail");
       if (!x) return;
-      det.innerHTML = x.login ? quotaHtml(x.limits) : x.bill ? billRows(x.bill, { id: d.dataset.id }) : "";
+      det.innerHTML = x.login ? usageHtml(x.usage) : x.bill ? billRows(x.bill, { id: d.dataset.id }) : "";
     };
     box.querySelectorAll("details").forEach((d) => d.addEventListener("toggle", () => { if (d.open) fill(d); }));
     await Promise.all(others.map(async (p) => {
       let x;
       if (p.login) {
-        x = { login: true, limits: lst.limits || null };
+        x = { login: true, usage: lst.usage || null };
       } else {
         const b = await api(`/api/billing?id=${encodeURIComponent(p.id)}${force ? "&refresh=1" : ""}`).catch(() => null);
         x = { bill: b && !b.error ? b : null };
@@ -655,7 +614,7 @@
       usOther.set(p.id, x);
       const d = box.querySelector(`details[data-id="${CSS.escape(p.id)}"]`);
       if (!d) return;
-      const br = x.login ? loginBrief(x.limits) : billBrief(x.bill);
+      const br = x.login ? loginBrief(x.usage) : billBrief(x.bill);
       const el = d.querySelector(".qb-brief");
       el.textContent = br.text || (x.login ? t("发一条消息后显示") : "—");
       el.classList.toggle("hot", br.lvl === 2);
@@ -702,7 +661,7 @@
       <div class="prov-state" id="pc-result"></div>
       <div class="tiny">${t("端点")} <code>${esc(p.baseUrl)}</code>${p.defaultModel ? ` · ${t("默认模型")} <code>${esc(p.defaultModel)}</code>` : ""}
         ${webUrl(p.keyUrl) ? `<br><a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">${t("去官网创建 Key ↗")}</a>` : ""}
-        <br>${esc(pHint(p) || t("Key 只存在本机应用私有目录，由 claude 的 apiKeyHelper 按需读取（不进环境变量），直连厂商的 Anthropic 兼容端点。"))}
+        <br>${esc(pHint(p) || t("Key 只存在本机应用私有目录，由 agy 按需读取（不进环境变量）。"))}
         <br>${t("建议到厂商控制台设个单日消费上限和余额提醒；怀疑 Key 泄漏了，就在那里作废、换个新的。")}</div>
       ${p.hasKey ? `<div id="pc-bill" class="bill"></div>` : ""}`;
     if (p.hasKey) loadBill(p);
@@ -950,7 +909,7 @@
   // 换外观 / 深浅时色块跟着重算（theme.js 只改 html 属性，不发事件）
   new MutationObserver(() => renderAccent()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-skin"] });
 
-  // ── 构成浅色的纸色（0.6.2）：拖动只预览，松手存进 ccapp-ui.json 的 gcPaper（50 = 默认，存成 null） ──
+  // ── 构成浅色的纸色（0.6.2）：拖动只预览，松手存进 agyapp-ui.json 的 gcPaper（50 = 默认，存成 null） ──
   function renderPaper() {
     const rg = $("gp-range"); if (!rg || !window.Theme || !Theme.gcPaperPref) return;
     const v = Theme.gcPaperPref();
@@ -968,7 +927,7 @@
   function renderMsgActs() {
     const box = $("ma-list"); if (!box) return;
     const h = msgActsHidden();
-    box.innerHTML = [["user", t("你的消息")], ["bot", t("Claude 的回复")]].map(([w, lab]) => `<div class="ma-line"><span class="ma-who">${esc(lab)}</span>`
+    box.innerHTML = [["user", t("你的消息")], ["bot", t("Antigravity 的回复")]].map(([w, lab]) => `<div class="ma-line"><span class="ma-who">${esc(lab)}</span>`
       + ACTS[w].map((k) => `<button type="button" class="ma-chip${h[w].includes(k) ? "" : " on"}" data-w="${w}" data-k="${k}" aria-pressed="${!h[w].includes(k)}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${esc(t(ACT_NAME[k]))}</span></button>`).join("") + "</div>").join("");
   }
   $("ma-list")?.addEventListener("click", (e) => {

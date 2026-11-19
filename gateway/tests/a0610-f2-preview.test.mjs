@@ -40,8 +40,8 @@ test("200-3-06 预览内置脚本必须带这张凭证的令牌，别的 24 位�
   const j = await g.json();
   const cap = new URL(j.url).pathname.split("/").filter(Boolean)[0];
   assert.match(cap, /^[0-9a-f]{24}$/);
-  let r = await fetch(`http://${new URL(j.url).host}/__cc/${cap}/eruda.js`);
+  let r = await fetch(`http://${new URL(j.url).host}/__agy/${cap}/eruda.js`);
   assert.equal(r.status, 200);
-  r = await fetch(`http://${new URL(j.url).host}/__cc/${"0".repeat(24)}/eruda.js`);
+  r = await fetch(`http://${new URL(j.url).host}/__agy/${"0".repeat(24)}/eruda.js`);
   assert.equal(r.status, 404);
 });

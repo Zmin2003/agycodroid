@@ -1,20 +1,17 @@
-// 自定义接口另加型号（11-07 群友：第三方端口加好之后只有默认那一个型号，想再加几个）
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
+// Gemini 接口卡另加型号（11-07 群友：第三方端口加好之后只有默认那一个型号，想再加几个）
+// agy 的模型清单是静态的：文档示例 gemini-3.8-flash-medium + 接口卡里用户自己加的 extraModels，
+// defaultModel 不自动进清单；agyEnv 不再下发 ANTHROPIC_MODEL / CLAUDE_CODE_MAX_CONTEXT_TOKENS。
+import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withConfigured, extraModelsOf, cachedModels, fetchModels } from "../gw/models.mjs";
+import { extraModelsOf, cachedModels, fetchModels } from "../gw/models.mjs";
 import { upsertProvider, providerById } from "../gw/providers.mjs";
-import { claudeEnv } from "../gw/claude.mjs";
+import { agyEnv } from "../gw/agy.mjs";
 
-const P = (o) => ({ id: "custom-xm", custom: true, baseUrl: "http://127.0.0.1:1", apiKey: "fixture-only", defaultModel: "m-a", ...o });
-
-test("另加的型号接在后面；同名不重复；没写窗口的按这家声明的窗口", () => {
-  const p = P({ contextWindow: 1048576, extraModels: [{ id: "m-b", contextWindow: 256000 }, { id: "m-c" }, { id: "m-a" }, { id: "m-b" }] });
-  assert.deepEqual(withConfigured([], p).map((m) => [m.id, m.context_window]), [["m-a", 1048576], ["m-b", 256000], ["m-c", 1048576]]);
-  // 上游清单拉到了：清单里没有的才补
-  assert.deepEqual(withConfigured([{ id: "up-1", context_window: 0 }, { id: "m-c", context_window: 64000 }], p).map((m) => m.id), ["up-1", "m-c", "m-b", "m-a"]);   // m-a 也写在另加里，清单没有就补
-  // 预置厂商、端侧不吃这个字段
-  assert.deepEqual(withConfigured([{ id: "x" }], { ...p, custom: false }).map((m) => m.id), ["x"]);
+test("另加的型号接在示例后面；同名不重复；没写窗口的按 0", () => {
+  const p = { id: "gemini", extraModels: [{ id: "m-b", contextWindow: 256000 }, { id: "m-c" }, { id: "gemini-3.8-flash-medium" }, { id: "m-b" }] };
+  assert.deepEqual(cachedModels(p).map((m) => [m.id, m.context_window]),
+    [["gemini-3.8-flash-medium", 0], ["m-b", 256000], ["m-c", 0]]);
 });
 
 test("配置能分享导入、也能手改：形状不对的丢掉，最多 64 个", () => {
@@ -25,29 +22,31 @@ test("配置能分享导入、也能手改：形状不对的丢掉，最多 64 �
 });
 
 test("型号名可以是中文、带方括号；空格 / 逗号 / 控制字符仍拒收", () => {
-  const id = "中转的中转:[特价C]claude-fable-5";
+  const id = "中转的中转:[特价C]gemini-特价";
   assert.deepEqual(extraModelsOf({ extraModels: [{ id }] }), [{ id, contextWindow: 0 }]);
   assert.deepEqual(extraModelsOf({ extraModels: [{ id: "带逗号,不行" }] }), []);
   assert.deepEqual(extraModelsOf({ extraModels: [{ id: "带\n换行" }] }), []);
-  const r = upsertProvider("", { label: "中转", baseUrl: "http://127.0.0.1:1", defaultModel: id, extraModels: [{ id }] });
+  const r = upsertProvider("gemini", { defaultModel: id, extraModels: [{ id }] });
   assert.ok(r.ok, JSON.stringify(r));
   assert.equal(r.provider.extraModels[0].id, id);
+  upsertProvider("gemini", { defaultModel: "", extraModels: [] });
 });
 
-test("接口卡保存：存进配置、清单里出现、选它时下发它的窗口；空数组清掉；坏名字拒收", async () => {
-  const r = upsertProvider("", { label: "第三方端口", baseUrl: "http://127.0.0.1:1", defaultModel: "m-a", contextWindow: 1048576,
-    extraModels: [{ id: "m-b", contextWindow: 256000 }, { id: "m-c", contextWindow: 0 }] });
+test("接口卡保存：存进配置、清单里出现、defaultModel 不自动进清单；空数组清掉；坏名字拒收", async () => {
+  const r = upsertProvider("gemini", { defaultModel: "m-a", extraModels: [{ id: "m-b", contextWindow: 256000 }, { id: "m-c", contextWindow: 0 }] });
   assert.ok(r.ok, JSON.stringify(r));
   assert.deepEqual(r.provider.extraModels, [{ id: "m-b", contextWindow: 256000 }, { id: "m-c", contextWindow: 0 }]);
-  const p = providerById(r.id);
-  assert.deepEqual((await fetchModels(true, p)).map((m) => m.id), ["m-a", "m-b", "m-c"]);
-  assert.deepEqual(cachedModels(p).map((m) => m.id), ["m-a", "m-b", "m-c"]);
-  const env = claudeEnv({ model: "m-b", provider: p });
-  assert.equal(env.ANTHROPIC_MODEL, "m-b");
-  assert.equal(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, "256000");
-  assert.equal(upsertProvider(r.id, { extraModels: [{ id: "a b" }] }).error, "bad_extra_models");
-  assert.equal(upsertProvider(r.id, { extraModels: [{ id: "m-d", contextWindow: 5 }] }).error, "bad_context_window");
-  assert.ok(upsertProvider(r.id, { extraModels: [] }).ok);
-  assert.equal(providerById(r.id).extraModels, undefined);
-  assert.deepEqual((await fetchModels(true, providerById(r.id))).map((m) => m.id), ["m-a"]);
+  const p = providerById("gemini");
+  assert.deepEqual((await fetchModels(true, p)).map((m) => m.id), ["gemini-3.8-flash-medium", "m-b", "m-c"]);
+  assert.deepEqual(cachedModels(p).map((m) => m.id), ["gemini-3.8-flash-medium", "m-b", "m-c"]);
+  assert.deepEqual((await fetchModels(true, p)).map((m) => m.context_window), [0, 256000, 0]);
+  const env = agyEnv({ model: "m-b", provider: p });
+  assert.equal(env.ANTHROPIC_MODEL, undefined);
+  assert.equal(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, undefined);
+  assert.equal(upsertProvider("gemini", { extraModels: [{ id: "a b" }] }).error, "bad_extra_models");
+  assert.equal(upsertProvider("gemini", { extraModels: [{ id: "m-d", contextWindow: 5 }] }).error, "bad_context_window");
+  assert.ok(upsertProvider("gemini", { extraModels: [] }).ok);
+  assert.equal(providerById("gemini").extraModels, undefined);
+  assert.deepEqual((await fetchModels(true, providerById("gemini"))).map((m) => m.id), ["gemini-3.8-flash-medium"]);
+  upsertProvider("gemini", { defaultModel: "" });
 });

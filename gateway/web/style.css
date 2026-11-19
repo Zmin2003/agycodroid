@@ -1,4 +1,4 @@
-/* Claude CLI · 图形化入口 */
+/* Antigravity CLI · 图形化入口 */
 
 /* PDF 使用现有底部面板和主题；文件名、完整路径在窄屏也能换行。 */
 #pdf-tools{position:fixed;inset:0;z-index:90;background:var(--scrim);display:flex;align-items:flex-end}
@@ -26,7 +26,7 @@
    字重 300–700 可变。按 OFL 保留字名的要求，衍生版改名 CC Mono；许可证见 fonts/OFL-CCMono.txt */
 @font-face{font-family:"CC Mono";src:url("/fonts/ccmono.woff") format("woff");font-weight:300 700;font-style:normal;font-display:swap}
 
-/* 配色：暖中性色（和内置浏览器窗格、Claude 自家的底色一个路子），强调色是 Claude 的陶土橙 */
+/* 配色：暖中性色（和内置浏览器窗格、Antigravity 自家的底色一个路子），强调色是 Antigravity 的陶土橙 */
 :root{
   --bg:#1f1e1d; --bg2:#262624; --bg3:#2f2e2b; --bg4:#383732; --line:#3a3935;
   --fg:#ece9e1; --fg2:#aaa59b; --fg3:#7f7a70;
@@ -177,7 +177,7 @@ html[data-skin="zhuyue"] #ctxbar:not(.warn):not(.danger) #ctxfill{background:lin
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);
   padding:11px 13px;word-break:break-word;overflow-wrap:anywhere;
 }
-/* Claude 的回复不套气泡，直接铺在底色上（长回复、代码块、表格都更舒展）；你的消息是靠右的浅色圆角块 */
+/* Antigravity 的回复不套气泡，直接铺在底色上（长回复、代码块、表格都更舒展）；你的消息是靠右的浅色圆角块 */
 .msg.bot .bubble{background:none;border:0;border-radius:0;padding:0 1px}
 .msg.user{display:flex;flex-direction:column;align-items:flex-end}
 .msg.user .who{display:none}
@@ -887,7 +887,7 @@ a.weblink{overflow-wrap:anywhere}
   .inline-img img{max-height:460px}
 }
 
-/* ── 待发队列：排在对话末尾，样子像一条还没送达的用户消息（照 Claude Desktop）── */
+/* ── 待发队列：排在对话末尾，样子像一条还没送达的用户消息（照 Antigravity Desktop）── */
 #queued{display:flex;flex-direction:column;gap:2px}
 /* 队列是 flex 列，消息不能被左右 auto margin 压成内容最小宽度。 */
 #queued > .msg.user{width:100%}
@@ -985,7 +985,7 @@ html[dir="rtl"] .bubble code,html[dir="rtl"] .bubble pre,html[dir="rtl"] .mono{d
 .rc-head > .tiny{flex:1 1 12em;min-width:0}
 .rc-act{display:flex;justify-content:flex-end;margin-top:6px}
 .item .it-title.wrap{white-space:normal;overflow-wrap:anywhere}
-/* 核对记录的长路径（比如没装 Claude Code 时展示的程序路径）没有空格，不折行会撑出设置弹窗 */
+/* 核对记录的长路径（比如没装 Antigravity CLI 时展示的程序路径）没有空格，不折行会撑出设置弹窗 */
 .item.ledger .tiny{overflow-wrap:anywhere}
 .item.ledger .tiny.mono{word-break:break-all}
 #tab-ext > .tiny:first-child{margin-bottom:10px}
@@ -2590,7 +2590,7 @@ html:not(.dock-l) .drawer-panel{border-start-end-radius:var(--g4);border-end-end
 /* 设置卡片是模态：遮罩盖住整个窗口（侧栏、右侧窗格一起压暗），卡片浮在所有窗格之上、居中；
    之前 z 56 低于窗格的 70，宽屏开着终端时卡片被窗格切掉一截 */
 #set-ov{z-index:80}
-/* Claude Code 版本选单是从设置里开的，得压在设置卡片（80）之上；原先 56，打开了却被设置挡在下面，像是选不了 */
+/* Antigravity CLI 版本选单是从设置里开的，得压在设置卡片（80）之上；原先 56，打开了却被设置挡在下面，像是选不了 */
 #ccv-pick,#arc-dlg{z-index:90}
 .pj-card{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 
@@ -2630,7 +2630,7 @@ button,input,select,textarea,optgroup{font-family:inherit}
 #chat{font-size:var(--fs-chat)}
 #input{font-size:calc(var(--fs-chat) + .5px)}
 .bubble h1{font-size:1.27em} .bubble h2{font-size:1.17em} .bubble h3{font-size:1.07em} .bubble h4{font-size:1em}
-/* Claude 的回复用回复字体；代码、工具卡仍是等宽 */
+/* Antigravity 的回复用回复字体；代码、工具卡仍是等宽 */
 .msg.bot .bubble{font-family:var(--font-read)}
 html:not([data-readfont="sans"]) .msg.bot .bubble{line-height:1.78;letter-spacing:.01em}
 html:not([data-readfont="sans"]) .msg.bot .bubble :is(h1,h2,h3,h4,strong){font-weight:600}

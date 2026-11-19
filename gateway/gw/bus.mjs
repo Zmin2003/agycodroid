@@ -5,7 +5,7 @@ import { flushPend, snapshot } from "./queue.mjs";
 import { onTamper, tamperAck, tamperPending } from "./tamper.mjs";
 
 // ── 事件总线 ──────────────────────────────────────────────────────────
-// Claude Desktop 的做法：一次生成（run）属于网关，不属于哪个 HTTP 请求。
+// Antigravity Desktop 的做法：一次生成（run）属于网关，不属于哪个 HTTP 请求。
 // 前端只是订阅者 —— 断线、切后台、热替换界面、甚至开两个窗口，都不影响生成本身；
 // 连回来时按 Last-Event-ID 从环形缓冲续上，续不上就把当前这一轮从头重放。
 //

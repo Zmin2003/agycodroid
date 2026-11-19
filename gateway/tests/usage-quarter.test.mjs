@@ -9,7 +9,7 @@ import { CFG, PATHS } from "../gw/config.mjs";
 test("旧整点与新刻钟共存，重复补算和清除跨月边界不重复计数", async () => {
   const since = Date.parse("2001-05-31T18:40:00Z"), hour = Math.floor(since / 3600e3);
   const slot = (iso) => Math.floor(Date.parse(iso) / 900e3);
-  const file = path.join(CFG.home, "ccapp-usage.json");
+  const file = path.join(CFG.home, "agyapp-usage.json");
   const backup = fs.existsSync(file) ? fs.readFileSync(file) : null;
   const old = { m: 4, i: 139, xi: { m: 1, i: 9 } };
   fs.mkdirSync(PATHS.projects, { recursive: true });

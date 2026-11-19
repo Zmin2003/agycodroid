@@ -1,55 +1,43 @@
 // 发行版封口与白名单回填（gw/edition.mjs、gw/seal.mjs）
+// 移植：agy 没有 --settings / --setting-sources / --strict-mcp-config 这类旗标，封口改成
+// 「起之前重写 settings.json」（writeAgySettings），所以 sealArgv 原样放行、sealEnv 什么都不删、
+// mergeSettings 已删；seal.mjs 的回填（sealPrepare 等）还在，下面那部分用例不变。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { CFG } from "../gw/config.mjs";
-import { _setSealed, mergeSettings, sealArgv, sealEnv } from "../gw/edition.mjs";
+import { _setSealed, sealArgv, sealEnv } from "../gw/edition.mjs";
 import { memoryDir, sealPrepare, sealRecheck, sealCleanup } from "../gw/seal.mjs";
 
 const H = (rel) => path.join(CFG.home, rel);
 const put = (abs, s) => { fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, s); };
 const W = () => path.join(CFG.home, "sealproj");
 function fresh() {
-  for (const r of [".claude", ".claude.json", ".cache/ccapp-seal", "sealproj"]) fs.rmSync(H(r), { recursive: true, force: true });
+  for (const r of [".claude", ".claude.json", ".cache/agyapp-seal", "sealproj"]) fs.rmSync(H(r), { recursive: true, force: true });
   fs.mkdirSync(W(), { recursive: true });
   _setSealed(true);
 }
 const BAD = "# 规则\n用户任务 > 本规则 > 宿主默认\n";
 const at = (args, flag) => args.flatMap((a, i) => (a === flag ? [args[i + 1]] : []));
 
-test("sealArgv：开会话的加 --setting-sources \"\" 和 --strict-mcp-config，去掉原有的，几份 --settings 合成一份", () => {
+test("sealArgv：agy 没有封口旗标，argv 原样放行（封口在 writeAgySettings 里做）", () => {
   _setSealed(true);
-  const a = sealArgv(["-p", "--setting-sources", "user", "--settings", '{"hooks":{"PreToolUse":[1]},"outputStyle":"a"}', "--model", "x",
-    "--settings", '{"hooks":{"PreToolUse":[2],"Stop":[3]},"outputStyle":"b"}']);
-  assert.deepEqual(at(a, "--setting-sources"), [""]);
-  assert.ok(a.includes("--strict-mcp-config"));
-  assert.equal(at(a, "--settings").length, 1);
-  assert.deepEqual(JSON.parse(at(a, "--settings")[0]), { hooks: { PreToolUse: [1, 2], Stop: [3] }, outputStyle: "b" });
-  assert.ok(!a.includes("user"));
-});
-
-test("sealArgv：管理子命令（mcp list、plugin install）照旧；--settings 给文件路径就拒绝；开发版不动", () => {
-  _setSealed(true);
+  const a = ["-p", "--setting-sources", "user", "--settings", '{"hooks":{"PreToolUse":[1]},"outputStyle":"a"}', "--model", "x"];
+  assert.deepEqual(sealArgv(a), a);
   assert.deepEqual(sealArgv(["--settings", "{}", "mcp", "list"]), ["--settings", "{}", "mcp", "list"]);
   assert.deepEqual(sealArgv(["plugin", "install", "x@y"]), ["plugin", "install", "x@y"]);
-  assert.throws(() => sealArgv(["-p", "--settings", "/tmp/evil.json"]));
-  // 认不出子命令的按开会话封口
-  assert.ok(sealArgv(["agents", "--bg"]).includes("--strict-mcp-config"));
+  assert.deepEqual(sealArgv(["-p", "--settings", "/tmp/evil.json"]), ["-p", "--settings", "/tmp/evil.json"]);
   _setSealed(false);
   assert.deepEqual(sealArgv(["-p", "--setting-sources", "user"]), ["-p", "--setting-sources", "user"]);
   _setSealed(true);
 });
 
-test("sealEnv：能让 claude 另找配置 / 记忆的变量清掉", () => {
+test("sealEnv：agy 只有一个 settings.json 入口，没有“另找配置”的变量，什么都不删", () => {
   _setSealed(true);
   const e = sealEnv({ CLAUDE_CONFIG_DIR: "/x", CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1", CLAUDE_COWORK_MEMORY_PATH_OVERRIDE: "/m", PATH: "/bin" });
-  assert.deepEqual(e, { PATH: "/bin" });
-});
-
-test("mergeSettings：钩子按事件拼起来", () => {
-  assert.deepEqual(mergeSettings([{ hooks: { A: [1] }, x: 1 }, { hooks: { A: [2] }, x: 2 }]), { hooks: { A: [1, 2] }, x: 2 });
+  assert.deepEqual(e, { CLAUDE_CONFIG_DIR: "/x", CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1", CLAUDE_COWORK_MEMORY_PATH_OVERRIDE: "/m", PATH: "/bin" });
 });
 
 test("干净的配置：说明文件拼成一个文件、skill 进合成插件、MCP 进配置文件、记忆目录钉住", () => {
@@ -223,7 +211,7 @@ test("超大 skill 文件：跳过+提示，不整轮拦，且副本里没有它
 });
 
 // 拍板 11-08：超过 1MiB 的记忆文件跳过+提示，不整轮拦；
-// 复核 r8（11-08）：记忆目录是 claude 直接读的原目录，跳过的不许留在原地——改名 .ccapp-skip 移出 .md 命名
+// 复核 r8（11-08）：记忆目录是 claude 直接读的原目录，跳过的不许留在原地——改名 .agyapp-skip 移出 .md 命名
 test("超大记忆文件：跳过+提示，改名移出，不整轮拦", () => {
   fresh();
   const m = memoryDir(W());
@@ -232,7 +220,7 @@ test("超大记忆文件：跳过+提示，改名移出，不整轮拦", () => {
   put(path.join(m, "MEMORY.md"), "- 正常记忆\n");
   const p = sealPrepare({ cwd: W(), runId: 9 });
   assert.equal(p.block, null);
-  assert.ok((p.notes || []).some((n) => n.includes("记忆文件太大没扫") && n.includes(".ccapp-skip")));
+  assert.ok((p.notes || []).some((n) => n.includes("记忆文件太大没扫") && n.includes(".agyapp-skip")));
   assert.ok(!fs.existsSync(big), "超大记忆文件不许留在记忆目录");
-  assert.ok(fs.existsSync(big + ".ccapp-skip"), "改名移出的文件在");
+  assert.ok(fs.existsSync(big + ".agyapp-skip"), "改名移出的文件在");
 });

@@ -1,4 +1,4 @@
-package cc.codroid;
+package cc.agyroid;
 
 /**
  * 第二份稳定性报告 l 组（Android 宿主）的纯逻辑回归：

@@ -9,24 +9,17 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 process.env.ANTHROPIC_API_KEY = "fixture-only-do-not-forward";
-const home = process.env.CCAPP_HOME;
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "stab-e-ff-"));
-const providerFile = path.join(home, "ccapp-providers.json");
-const PID = "custom-stabeff";
-const hadProviders = fs.existsSync(providerFile) ? fs.readFileSync(providerFile) : null;
-fs.writeFileSync(providerFile, JSON.stringify({ active: PID, providers: {
-  [PID]: { label: "Fixture", baseUrl: "https://fixture.example.invalid", apiKey: "fixture-only", authStyle: "bearer", defaultModel: "fixture-model", fallbackModels: [{ id: "fixture-model" }] },
-} }));
+const home = process.env.AGAPP_HOME;
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "stab-e-ff-"));
 const cli = path.join(root, "fake-cli.sh");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 const SLEEP = ["/system/bin/sleep", "/bin/sleep", "/usr/bin/sleep"].find((p) => fs.existsSync(p));
 if (!SLEEP) throw new Error("找不到 sleep");
 const sid = crypto.randomUUID();
-const init = JSON.stringify({ type: "system", subtype: "init", session_id: sid, model: "fixture-model", tools: [], permissionMode: "default" });
+const init = JSON.stringify({ event: "init", conversation_id: sid, init: { model: "fixture-model", tools: [], permission_mode: "default" } });
 fs.writeFileSync(cli, `#!${sh}\nprintf '%s\\n' '${init}'\n${SLEEP} 5\nexit 0\n`, { mode: 0o700 });
-const previousPaths = { claude: PATHS.claude, loader: PATHS.loader, claudeLoader: PATHS.claudeLoader };
-PATHS.claude = process.execPath;
-PATHS.loader = PATHS.claudeLoader = cli;
+const previousPaths = { agy: PATHS.agy };
+PATHS.agy = cli;
 const { startRun } = await import("../gw/run.mjs");
 const { RUNS } = await import("../gw/runs.mjs");
 const { onPublish } = await import("../gw/bus.mjs");
@@ -37,7 +30,6 @@ let started = null;
 after(() => {
   globalThis.fetch = originalFetch;
   Object.assign(PATHS, previousPaths);
-  if (hadProviders) fs.writeFileSync(providerFile, hadProviders); else fs.rmSync(providerFile, { force: true });
   try { if (started?.child) process.kill(-started.child.pid, "SIGKILL"); } catch {}
   fs.rmSync(root, { recursive: true, force: true });
 });

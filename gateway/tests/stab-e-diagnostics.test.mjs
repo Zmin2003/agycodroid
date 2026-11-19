@@ -27,7 +27,9 @@ test("FIND-046：起一轮、插话的日志都改走 promptLogLine", () => {
   assert.equal(/message\.trim\(\)\.slice\(0, 60\)/.test(src), false, "提问日志还在写正文");
   assert.equal(/item\.message\.trim\(\)\.slice\(0, (40|60)\)/.test(src), false, "插话日志还在写正文");
   assert.match(src, /promptLogLine\(message, isCmd\)/);
-  assert.match(src, /promptLogLine\(item\.message, true\)/);
+  // 移植：斜杠插话分支随 idle 复用一起没了，插话统一走 promptLogLine(item.message, false)
+  // （只记字数，不记命令名也不记正文）
+  assert.equal(/promptLogLine\(item\.message, true\)/.test(src), false, "斜杠插话分支已删");
   assert.match(src, /promptLogLine\(item\.message, false\)/);
 });
 

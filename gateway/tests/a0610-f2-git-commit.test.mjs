@@ -25,7 +25,7 @@ async function serve(...routes) {
   };
 }
 const gitGo = await serve(routeGit);
-{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
   if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
 
 function repo(name) {

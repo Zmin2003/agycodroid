@@ -1,0 +1,710 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "agycodroid runtime architecture",
+  "output": "agycodroid-architecture.en.html",
+  "quality_profile": "showcase",
+  "locale": "en",
+  "repository": {
+   "url": "https://github.com/greyoak111/cccodroid",
+   "provider": "github",
+   "link_mode": "web",
+   "revision": "bff420821970149c7bf40a3c967858840288936e"
+  }
+ },
+ "components": [
+  {
+   "id": "user",
+   "type": "external",
+   "label": "User",
+   "sublabel": "phone / tablet",
+   "pos": [
+    20,
+    200
+   ],
+   "size": [
+    120,
+    64
+   ]
+  },
+  {
+   "id": "ui",
+   "type": "frontend",
+   "label": "UI",
+   "sublabel": "WebView · web/app, 27 parts",
+   "tag": "10 languages",
+   "pos": [
+    220,
+    196
+   ],
+   "size": [
+    160,
+    72
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/MainActivity.java",
+     "line": 1897,
+     "end_line": 1897
+    },
+    {
+     "path": "gateway/gw/http.mjs",
+     "line": 100,
+     "end_line": 101
+    }
+   ]
+  },
+  {
+   "id": "svc",
+   "type": "backend",
+   "label": "GatewayService",
+   "sublabel": "foreground service · freeze watch",
+   "pos": [
+    460,
+    40
+   ],
+   "size": [
+    170,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/GatewayService.java",
+     "line": 68,
+     "end_line": 69
+    }
+   ]
+  },
+  {
+   "id": "gwrt",
+   "type": "security",
+   "label": "Gateway runtime",
+   "sublabel": "files/gw · Node · glibc",
+   "tag": "pinned to the APK",
+   "pos": [
+    220,
+    40
+   ],
+   "size": [
+    170,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/GwRuntime.java",
+     "line": 18,
+     "end_line": 24
+    },
+    {
+     "path": "gateway/gw/gwpin.mjs",
+     "line": 1,
+     "end_line": 5
+    }
+   ]
+  },
+  {
+   "id": "gw",
+   "type": "backend",
+   "label": "Gateway",
+   "sublabel": "server.mjs + gw/ modules",
+   "tag": "token · signed requests · bus",
+   "pos": [
+    460,
+    196
+   ],
+   "size": [
+    170,
+    72
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/access.mjs",
+     "line": 11,
+     "end_line": 12
+    },
+    {
+     "path": "gateway/gw/access.mjs",
+     "line": 55,
+     "end_line": 58
+    },
+    {
+     "path": "gateway/gw/bus.mjs",
+     "line": 33,
+     "end_line": 33
+    }
+   ]
+  },
+  {
+   "id": "claude",
+   "type": "backend",
+   "label": "Antigravity CLI",
+   "sublabel": "official binary, unmodified",
+   "tag": "signed manifest · seccomp shim",
+   "pos": [
+    740,
+    196
+   ],
+   "size": [
+    160,
+    72
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/run.mjs",
+     "line": 454,
+     "end_line": 454
+    },
+    {
+     "path": "gateway/gw/stream.mjs",
+     "line": 126,
+     "end_line": 126
+    },
+    {
+     "path": "gateway/gw/claudeseal.mjs",
+     "line": 1,
+     "end_line": 9
+    }
+   ]
+  },
+  {
+   "id": "seal",
+   "type": "security",
+   "label": "Config check",
+   "sublabel": "jailbreak scan · allow-list",
+   "pos": [
+    990,
+    124
+   ],
+   "size": [
+    180,
+    56
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/seal.mjs",
+     "line": 1,
+     "end_line": 11
+    },
+    {
+     "path": "gateway/gw/breach.mjs",
+     "line": 1,
+     "end_line": 6
+    },
+    {
+     "path": "gateway/gw/edition.mjs",
+     "line": 1,
+     "end_line": 6
+    }
+   ]
+  },
+  {
+   "id": "api",
+   "type": "cloud",
+   "label": "Model APIs",
+   "sublabel": "Antigravity account · DeepSeek · Kimi…",
+   "tag": "per conversation",
+   "pos": [
+    1250,
+    196
+   ],
+   "size": [
+    210,
+    72
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/providers.mjs",
+     "line": 12,
+     "end_line": 14
+    },
+    {
+     "path": "gateway/gw/sessmodel.mjs",
+     "line": 32,
+     "end_line": 44
+    }
+   ]
+  },
+  {
+   "id": "upd",
+   "type": "backend",
+   "label": "Updater / Installer",
+   "sublabel": "APK 28/36 · toolkit modules",
+   "pos": [
+    740,
+    40
+   ],
+   "size": [
+    160,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/Updater.java",
+     "line": 28,
+     "end_line": 38
+    },
+    {
+     "path": "android/java/cc/codroid/Updater.java",
+     "line": 175,
+     "end_line": 178
+    },
+    {
+     "path": "android/java/cc/codroid/Installer.java",
+     "line": 21,
+     "end_line": 21
+    }
+   ]
+  },
+  {
+   "id": "dl",
+   "type": "cloud",
+   "label": "Releases & mirrors",
+   "sublabel": "GitHub · cccodroid.net · official",
+   "pos": [
+    1250,
+    40
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/Updater.java",
+     "line": 34,
+     "end_line": 34
+    },
+    {
+     "path": "android/java/cc/codroid/Updater.java",
+     "line": 45,
+     "end_line": 45
+    }
+   ]
+  },
+  {
+   "id": "shz",
+   "type": "external",
+   "label": "Shizuku",
+   "sublabel": "shell identity, uid 2000",
+   "pos": [
+    20,
+    380
+   ],
+   "size": [
+    160,
+    60
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/ShizukuSetup.java",
+     "line": 50,
+     "end_line": 50
+    }
+   ]
+  },
+  {
+   "id": "priv",
+   "type": "security",
+   "label": "Priv relay",
+   "sublabel": "private file socket · peer uid",
+   "pos": [
+    220,
+    380
+   ],
+   "size": [
+    160,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/Priv.java",
+     "line": 31,
+     "end_line": 37
+    },
+    {
+     "path": "android/java/cc/codroid/Priv.java",
+     "line": 322,
+     "end_line": 322
+    }
+   ]
+  },
+  {
+   "id": "home",
+   "type": "database",
+   "label": "home/",
+   "sublabel": "sessions · settings · token",
+   "pos": [
+    470,
+    380
+   ],
+   "size": [
+    150,
+    64
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/config.mjs",
+     "line": 21,
+     "end_line": 21
+    },
+    {
+     "path": "gateway/gw/sessions.mjs",
+     "line": 96,
+     "end_line": 96
+    }
+   ]
+  },
+  {
+   "id": "devkit",
+   "type": "database",
+   "label": "devkit toolchain",
+   "sublabel": "base + optional modules",
+   "tag": "Termux, equal-length prefix",
+   "pos": [
+    740,
+    380
+   ],
+   "size": [
+    160,
+    64
+   ],
+   "sources": [
+    {
+     "path": "devkit/devkit.mjs",
+     "line": 1,
+     "end_line": 16
+    },
+    {
+     "path": "gateway/gw/modules.mjs",
+     "line": 23,
+     "end_line": 40
+    }
+   ]
+  },
+  {
+   "id": "loader",
+   "type": "security",
+   "label": "Loader in the APK",
+   "sublabel": "libldlinux.so · exec shim",
+   "tag": "targetSdk 36",
+   "pos": [
+    990,
+    380
+   ],
+   "size": [
+    180,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/java/cc/codroid/Env.java",
+     "line": 345,
+     "end_line": 345
+    },
+    {
+     "path": "android/native/exec-shim.c",
+     "line": 5,
+     "end_line": 11
+    },
+    {
+     "path": "android/prebuilt/glibc/ld.json",
+     "line": 1,
+     "end_line": 5
+    }
+   ]
+  },
+  {
+   "id": "mcp",
+   "type": "backend",
+   "label": "Device tools MCP",
+   "sublabel": "notify · clipboard · share · a11y",
+   "tag": "an MCP server for Antigravity",
+   "pos": [
+    220,
+    540
+   ],
+   "size": [
+    160,
+    64
+   ],
+   "sources": [
+    {
+     "path": "android/assets/bin/device-mcp.mjs",
+     "line": 5,
+     "end_line": 5
+    },
+    {
+     "path": "android/java/cc/codroid/DeviceTools.java",
+     "line": 54,
+     "end_line": 54
+    }
+   ]
+  },
+  {
+   "id": "skills",
+   "type": "database",
+   "label": "~/.claude/skills",
+   "sublabel": "skills from components",
+   "pos": [
+    470,
+    540
+   ],
+   "size": [
+    150,
+    64
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/components.mjs",
+     "line": 460,
+     "end_line": 460
+    }
+   ]
+  },
+  {
+   "id": "comp",
+   "type": "backend",
+   "label": "Components",
+   "sublabel": "verify · install · clean up",
+   "tag": "ed25519",
+   "pos": [
+    740,
+    540
+   ],
+   "size": [
+    160,
+    64
+   ],
+   "sources": [
+    {
+     "path": "gateway/gw/components.mjs",
+     "line": 35,
+     "end_line": 35
+    },
+    {
+     "path": "gateway/gw/components.mjs",
+     "line": 106,
+     "end_line": 106
+    }
+   ]
+  },
+  {
+   "id": "market",
+   "type": "cloud",
+   "label": "Component market",
+   "sublabel": "recipe → CI audit → signed index",
+   "pos": [
+    1250,
+    540
+   ],
+   "size": [
+    190,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "cc.agyroid app sandbox (writes only its private dirs)",
+   "wraps": [
+    "ui",
+    "svc",
+    "gwrt",
+    "gw",
+    "seal",
+    "claude",
+    "upd",
+    "priv",
+    "home",
+    "devkit",
+    "loader",
+    "mcp",
+    "comp",
+    "skills"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "touch",
+   "from": "user",
+   "to": "ui",
+   "label": "uses",
+   "variant": "emphasis"
+  },
+  {
+   "id": "ui-gw",
+   "from": "ui",
+   "to": "gw",
+   "label": "HTTP+SSE",
+   "variant": "emphasis"
+  },
+  {
+   "id": "gw-claude",
+   "from": "gw",
+   "to": "claude",
+   "label": "stream-json",
+   "variant": "emphasis"
+  },
+  {
+   "id": "claude-api",
+   "from": "claude",
+   "to": "api",
+   "label": "HTTPS",
+   "variant": "emphasis"
+  },
+  {
+   "id": "svc-gw",
+   "from": "svc",
+   "to": "gw",
+   "label": "starts · restarts"
+  },
+  {
+   "id": "gwrt-gw",
+   "from": "gwrt",
+   "to": "gw",
+   "label": "runs the gateway",
+   "variant": "security"
+  },
+  {
+   "id": "gw-seal",
+   "from": "gw",
+   "to": "seal",
+   "label": "before each run",
+   "variant": "security"
+  },
+  {
+   "id": "seal-claude",
+   "from": "seal",
+   "to": "claude",
+   "label": "hands over checked config",
+   "variant": "security"
+  },
+  {
+   "id": "upd-dl",
+   "from": "upd",
+   "to": "dl",
+   "label": "download · hash",
+   "variant": "dashed"
+  },
+  {
+   "id": "upd-claude",
+   "from": "upd",
+   "to": "claude",
+   "label": "install / update"
+  },
+  {
+   "id": "gw-home",
+   "from": "gw",
+   "to": "home",
+   "label": "reads / writes"
+  },
+  {
+   "id": "claude-devkit",
+   "from": "claude",
+   "to": "devkit",
+   "label": "Bash tool"
+  },
+  {
+   "id": "loader-devkit",
+   "from": "loader",
+   "to": "devkit",
+   "label": "rewrites exec"
+  },
+  {
+   "id": "gw-priv",
+   "from": "gw",
+   "to": "priv",
+   "label": "local socket",
+   "variant": "security"
+  },
+  {
+   "id": "priv-shz",
+   "from": "priv",
+   "to": "shz",
+   "label": "binder",
+   "variant": "security"
+  },
+  {
+   "id": "mcp-priv",
+   "from": "mcp",
+   "to": "priv",
+   "label": "local socket",
+   "variant": "security"
+  },
+  {
+   "id": "gw-comp",
+   "from": "gw",
+   "to": "comp",
+   "label": "/api/components"
+  },
+  {
+   "id": "comp-market",
+   "from": "comp",
+   "to": "market",
+   "label": "index + packages · verify",
+   "variant": "dashed"
+  },
+  {
+   "id": "comp-devkit",
+   "from": "comp",
+   "to": "devkit",
+   "label": "into $PREFIX"
+  },
+  {
+   "id": "comp-skills",
+   "from": "comp",
+   "to": "skills",
+   "label": "copy skills"
+  },
+  {
+   "id": "claude-skills",
+   "from": "claude",
+   "to": "skills",
+   "label": "learns new tools",
+   "variant": "emphasis"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "emerald",
+   "title": "Main path",
+   "items": [
+    "The UI only subscribes: runs belong to the gateway, so refreshing or backgrounding never cuts them",
+    "Each conversation can use its own model and provider, running side by side",
+    "Antigravity CLI is the official build, not a byte changed",
+    "Tool calls that need approval show a card: ask each time by default, as upstream does"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Security",
+   "items": [
+    "The UI lives on a dedicated 127.0.0.2; the app signs every request with HMAC, so the token never leaves the private dir",
+    "Antigravity CLI is checked against Anthropic's signed manifest every run; the gateway runs on its own runtime, checked against the APK",
+    "Config handed to Antigravity CLI is scanned for jailbreak patterns; self-running config and leftover background programs are shown to you first",
+    "priv accepts only this app's uid; device tools are off by default; sign-in codes never pass through the gateway"
+   ]
+  },
+  {
+   "dot": "cyan",
+   "title": "Toolchain & packages",
+   "items": [
+    "devkit is assembled from the official Termux repos and relocated with equal-length prefixes; extras install as modules",
+    "Two APKs, targetSdk 28 and 36 — same version and signature, either installs over the other",
+    "The 36 build can't exec files in its data dir: programs start via the APK's own ld.so or linker64"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "Components",
+   "items": [
+    "One component = new commands + a skill: Antigravity learns to use them on its own",
+    "Community recipes may only use official Termux packages or upstream files pinned by sha256",
+    "The app only trusts an ed25519-signed index, which lists every package's sha256"
+   ]
+  }
+ ]
+}

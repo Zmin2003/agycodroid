@@ -2,7 +2,7 @@
  * seccomp-enosys.so —— 把"被安卓 seccomp 拦下的系统调用"从"进程被 SIGSYS 打死"改成"返回 ENOSYS"。
  *
  * 为什么需要：安卓给应用进程装的 seccomp 过滤器用 SECCOMP_RET_TRAP 处理白名单外的调用 ——
- * 内核跳过这次调用并发 SIGSYS。官方 Claude Code（Bun）没有 SIGSYS 处理函数，于是直接死掉。
+ * 内核跳过这次调用并发 SIGSYS。官方 Antigravity CLI（Bun）没有 SIGSYS 处理函数，于是直接死掉。
  * 实测 Android 14 不放行 epoll_pwait2（Android 15 放行）：claude 在 Android 14 上一跑就 "Bad system call"。
  * 而 Bun 本来就会在 ENOSYS 时退回老的 epoll_pwait —— 只是没机会走到那一步。
  *

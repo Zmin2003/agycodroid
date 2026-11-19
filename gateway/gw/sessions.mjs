@@ -43,7 +43,7 @@ export function saveNames() {
   return ok;
 }
 // 置顶表：会话号 → 置顶时刻
-const PINS_FILE = path.join(CFG.home, "ccapp-session-pins.json");
+const PINS_FILE = path.join(CFG.home, "agyapp-session-pins.json");
 const pinsShape = (j) => {
   if (!isObj(j)) return undefined;
   const out = {};
@@ -61,7 +61,7 @@ export function savePins() {
 // ── 会话（claude 的 transcript 文件）─────────────────────────────────
 /** 项目目录名 → 真实 cwd（从 jsonl 里读，目录名本身不可逆） */
 export const PEEK_CACHE = new Map();   // 标题/cwd 取自文件开头，写进去就不变了，没必要每次列表都重读
-// Claude Code 自己的 /resume 只滤 sessionKind=daemon / daemon-worker（后台守护进程开的会话，不是用户
+// Antigravity CLI 自己的 /resume 只滤 sessionKind=daemon / daemon-worker（后台守护进程开的会话，不是用户
 // 开的那条对话）；bg 是用户自己甩到后台的会话，在 /resume 里带「bg」标记照常显示，这里不能一起藏掉。
 // 同样不按 isSidechain / 标题猜：用户从工具调用里接出来的会话、被复用成任务的会话都不能因此消失。
 const HIDDEN_KINDS = new Set(["daemon", "daemon-worker"]);
@@ -72,7 +72,7 @@ function sessionKindOf(file, st) {
   let kind = "", fd = null;
   try {
     fd = fs.openSync(file, "r");
-    // 和 Claude Code 读 /resume 元数据一样：只看文件开头 64 KB 里第一条带 parentUuid 的记录。sessionKind
+    // 和 Antigravity CLI 读 /resume 元数据一样：只看文件开头 64 KB 里第一条带 parentUuid 的记录。sessionKind
     // 就在这条记录上；不整份读，免得几千个会话时列表被磁盘拖住。找不到就当普通会话（宁可多显示，不误藏）。
     const buf = Buffer.alloc(65536);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
@@ -212,7 +212,7 @@ const SEARCH_IDX = new Map();   // file → { off, text, lower, skip }
 // 搜得全但内存有顶（审查 中5）。单个会话另设上限：超了不建索引、查询时流式扫，避免一个 32 MB 的中文会话把 RSS 顶到几百 MB（195-Q.3）
 const SEARCH_KEEP_CHARS = 16e6;
 const SEARCH_FILE_KEEP = 4e6;
-const SEARCH_STREAM_SIZE = Number(process.env.CCAPP_SEARCH_STREAM_SIZE) || (12 << 20);
+const SEARCH_STREAM_SIZE = Number(process.env.AGAPP_SEARCH_STREAM_SIZE) || (12 << 20);
 const normText = (s) => String(s).normalize("NFKC").toLowerCase();
 function searchText(line) {
   if (line.length > 4e6 || !(line.includes('"user"') || line.includes('"assistant"'))) return "";
@@ -391,6 +391,26 @@ export function findSessionFile(id, cwd) {
   return null;
 }
 
+/** 网关自己写会话记录（agy 不写 transcript，见 run.mjs）。
+ *  文件位置和 Claude 的一样：~/agyapp-sessions/<projEnc(cwd)>/<conversation_id>.jsonl，
+ *  一行一条 Claude-jsonl 形状的记录（type / message / uuid / timestamp / cwd / sessionId），
+ *  所以 list/search/page/fork/trash/export/import/delete-message 照常工作。
+ *  文件不存在就新建（新会话的第一条用户消息就是这么落盘的）。 */
+export function appendSessionRecord(sessionId, cwd, rec) {
+  if (!SID_RE.test(String(sessionId || ""))) return;
+  const id = String(sessionId);
+  let file = null;
+  const found = findSessionFile(id, cwd);
+  if (found) file = found.file;
+  else {
+    let dir = cwd && typeof cwd === "string" ? cwd : CFG.workspace;
+    try { dir = fs.realpathSync(dir); } catch { dir = path.resolve(dir); }
+    file = path.join(PATHS.projects, projEnc(dir), id + ".jsonl");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  }
+  fs.appendFileSync(file, JSON.stringify(rec) + "\n");
+}
+
 // ── 路由：/api/sessions/search /api/sessions /api/sessions/trash /api/trash /api/trash/restore /api/trash/purge /api/sessions/export /api/sessions/import /api/session/ ──
 /** 只剩后台任务的 idle 轮：先结束它、等它收尾，再删 / 回退 / 删消息（195-A.3）。
  *  真正在生成的返回 false（调用方回 409）。复用 queue.abortRun（和「排队消息要槽位时结束空闲轮」同一口径）；
@@ -458,7 +478,7 @@ export async function routeSessions(req, res, u, p) {
     try {
       const r = await exportSessions(ids);
       log(`导出 ${r.count} 个会话 → ${r.file}`);
-      return sendJson(res, 200, { ok: true, ...r, shared: !!process.env.CCAPP_SHARED && r.file.startsWith(process.env.CCAPP_SHARED) });
+      return sendJson(res, 200, { ok: true, ...r, shared: !!process.env.AGAPP_SHARED && r.file.startsWith(process.env.AGAPP_SHARED) });
     } catch (e) { return sendJson(res, 400, { ok: false, message: e.message }); }
   }
   if (req.method === "POST" && p === "/api/sessions/import") {
@@ -632,7 +652,7 @@ export async function routeSessions(req, res, u, p) {
       return sendJson(res, 200, { ok: true, files: fx, fork });
     }
 
-    // 删一条消息（which: user = 这一轮的提问；bot = 这一轮 Claude 的整条回复），可撤销最近一次
+    // 删一条消息（which: user = 这一轮的提问；bot = 这一轮 Antigravity 的整条回复），可撤销最近一次
     if (req.method === "POST" && (action === "delmsg" || action === "undodel")) {
       const b = JSON.parse((await readBody(req)) || "{}");
       // 只剩后台任务的 idle 轮：先结束它（否则永远 409），真正在生成的仍拒绝（195-A.3）

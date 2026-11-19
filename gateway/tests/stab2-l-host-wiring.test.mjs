@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const read = (p) => fs.readFileSync(new URL(`../../android/java/cc/codroid/${p}`, import.meta.url), "utf8");
+const read = (p) => fs.readFileSync(new URL(`../../android/java/cc/agyroid/${p}`, import.meta.url), "utf8");
 const gw = read("GatewayService.java");
 const notify = read("Notify.java");
 const dev = read("DeviceTools.java");

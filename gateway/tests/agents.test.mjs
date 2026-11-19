@@ -12,7 +12,7 @@ const FIX = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const load = (name) => fs.readFileSync(path.join(FIX, name), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
 function play(evs) {
-  const cwd = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "ag-"));
+  const cwd = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "ag-"));
   const run = { sessionId: "4a591756-e2e7", cwd }, out = [];
   const b = agentBook(run, { emit: (e) => out.push(e) });
   for (const ev of evs) b.feed(ev);
@@ -28,7 +28,7 @@ test("派出、孙代理层级、交代落盘", () => {
   // 交代用 Agent 工具调用里的完整 prompt
   assert.match(fs.readFileSync(sp[0].file, "utf8"), /你的名字是 alpha/);
   assert.match(sp[1].file, /\/02-beta_[^/]*\/brief\.md$/, sp[1].file);
-  assert.ok(fs.existsSync(path.join(cwd, ".cccodroid", ".gitignore")));
+  assert.ok(fs.existsSync(path.join(cwd, ".agycodroid", ".gitignore")));
   assert.equal(readAgentIndex(cwd, run.sessionId).length, out.length);
 });
 
@@ -54,7 +54,7 @@ test("结束：汇报落盘，两个都完了才汇总，给主会话留话（�
   const sm = out.filter((e) => e.k === "summary");
   assert.equal(sm.length, 1);
   const note = takeAgentNote(cwd, run.sessionId);
-  assert.match(note, /^<cccodroid-agents>/);
+  assert.match(note, /^<agycodroid-agents>/);
   assert.ok(note.includes(sm[0].file));
   assert.ok(note.includes("report.md"));
   assert.equal(takeAgentNote(cwd, run.sessionId), "");
@@ -101,8 +101,8 @@ test("叫醒已结束的代理：重新算在跑，每次结束都记汇报，�
 test("共享存储上的项目：联络簿改放 home 私有目录", () => {
   assert.equal(onShared("/sdcard/proj"), true);
   assert.equal(onShared("/storage/emulated/0/proj"), true);
-  assert.equal(onShared(process.env.CCAPP_TMP), false);
-  assert.ok(agentsDir("/sdcard/proj", "abcdef0123").startsWith(path.join(process.env.CCAPP_HOME, ".cccodroid", "agents") + path.sep));
+  assert.equal(onShared(process.env.AGAPP_TMP), false);
+  assert.ok(agentsDir("/sdcard/proj", "abcdef0123").startsWith(path.join(process.env.AGAPP_HOME, ".agycodroid", "agents") + path.sep));
   assert.ok(agentsDir("/sdcard/proj", "abcdef0123").endsWith(path.sep + "abcdef01"));
-  assert.equal(agentsDir("/data/x/proj", "abcdef0123"), path.join("/data/x/proj", ".cccodroid", "agents", "abcdef01"));
+  assert.equal(agentsDir("/data/x/proj", "abcdef0123"), path.join("/data/x/proj", ".agycodroid", "agents", "abcdef01"));
 });

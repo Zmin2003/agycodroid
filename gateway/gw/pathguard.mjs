@@ -12,10 +12,10 @@ import { CFG, PREFIX } from "./config.mjs";
 
 const ALIAS_RE = /^\/data\/(?:data|user(?:_de)?\/\d+)\/([^/]+)$/;
 
-/** 应用数据目录（/data/user/0/<包名>）及它的别名。外壳交 CCAPP_DATA_DIR；老外壳没交时按运行时目录（files/）的上一级推 */
+/** 应用数据目录（/data/user/0/<包名>）及它的别名。外壳交 AGAPP_DATA_DIR；老外壳没交时按运行时目录（files/）的上一级推 */
 export function dataRoots() {
   const out = new Set();
-  let d = process.env.CCAPP_DATA_DIR || (PREFIX && process.env.CCAPP_RUNTIME ? path.dirname(process.env.CCAPP_RUNTIME) : "");
+  let d = process.env.AGAPP_DATA_DIR || (PREFIX && process.env.AGAPP_RUNTIME ? path.dirname(process.env.AGAPP_RUNTIME) : "");
   if (!d) return [];
   try { d = fs.realpathSync(d); } catch {}
   out.add(d);

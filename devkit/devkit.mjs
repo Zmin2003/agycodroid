@@ -20,9 +20,9 @@
 //
 //  用法: node devkit.mjs build --target li.dsh.dkt [--groups core,build] [--out DIR]
 //        node devkit.mjs resolve [--groups ...]          只列闭包和体积
-//        node devkit.mjs component <id> --target cc.codroid --base <工具包的 devkit.lock.json>
-//        node devkit.mjs component --recipe <配方目录> --target cc.codroid --base <…>
-//            外部配方（cccodroid-components 仓库的 recipes/<id>/recipe.json），见那边的 docs/recipe.md
+//        node devkit.mjs component <id> --target cc.agyroid --base <工具包的 devkit.lock.json>
+//        node devkit.mjs component --recipe <配方目录> --target cc.agyroid --base <…>
+//            外部配方（agycodroid-components 仓库的 recipes/<id>/recipe.json），见那边的 docs/recipe.md
 //            可选组件（见 devkit.json 的 components）：只打底座里没有的包，产出 out/component-<id>-<包名>.tar.gz
 // ─────────────────────────────────────────────────────────────────────
 import fs from "node:fs";
@@ -75,7 +75,7 @@ function fetchUrl(url) {
 }
 
 // ── 索引 ─────────────────────────────────────────────────────────────
-// 多个仓库：termux-main 优先，其次 termux-glibc（给官方 Claude Code 的 glibc 版二进制提供运行库）
+// 多个仓库：termux-main 优先，其次 termux-glibc（给官方 Antigravity CLI 的 glibc 版二进制提供运行库）
 const REPOS = MAN.repos || [MAN.repo];
 async function loadIndex(repos = REPOS) {
   const pkgs = new Map(), provides = new Map(), dates = [];
@@ -90,7 +90,7 @@ async function loadIndex(repos = REPOS) {
 
 async function loadRepo(repo) {
   const { dist, component, arch } = repo;
-  // Release 先验 Termux 自动构建钥的签名再用：清单签的是「cccodroid 打的包」，这一步保证包确实出自 Termux（审查 10-29 M4）。
+  // Release 先验 Termux 自动构建钥的签名再用：清单签的是「agycodroid 打的包」，这一步保证包确实出自 Termux（审查 10-29 M4）。
   // 和设备上 pkg.mjs 用同一份钥匙与验签代码（打 APK 时 build.sh 把 pgp.mjs 拷进 app/bin）；按需导入，开发端只拷了 devkit.mjs 也能加载。
   // Release 和 Release.gpg 要从同一个源成对取、验不过就换下一个源：CDN 镜像在 Termux 发版窗口会
   // 把新的 Release 和旧的 Release.gpg 搭在一起（2026-11-16 实测 packages-cf.termux.dev），
@@ -636,7 +636,7 @@ const COMP_ID = COMP ? (RECIPE_DIR ? COMP.id : args[1]) : null;
 if (cmd === "component" && !COMP) throw new Error("devkit.json 的 components 里没有: " + args[1]);
 const COMP_BASE = RECIPE_DIR || HERE;          // files 的 src 相对它找
 
-/** 外部配方：recipe.json + 可选的 skill/ 目录（自动装到 usr/share/cccodroid/components/<id>/skill/） */
+/** 外部配方：recipe.json + 可选的 skill/ 目录（自动装到 usr/share/agycodroid/components/<id>/skill/） */
 function loadRecipe(dir) {
   const r = JSON.parse(fs.readFileSync(path.join(dir, "recipe.json"), "utf8"));
   if (r.schema !== 1) throw new Error("配方 schema 必须是 1");
@@ -686,7 +686,7 @@ function loadRecipe(dir) {
   }
   const sk = path.join(dir, "skill");
   if (fs.existsSync(path.join(sk, "SKILL.md"))) {
-    r.skill = `usr/share/cccodroid/components/${r.id}/skill`;
+    r.skill = `usr/share/agycodroid/components/${r.id}/skill`;
     for (const f of fs.readdirSync(sk)) r.files[`${r.skill}/${f}`] = { src: path.join("skill", f) };
   }
   return r;
@@ -1248,7 +1248,7 @@ if (cmd === "build" || cmd === "component") {
         } else put(`${sp}/${e.name}`, e.data, 0o644);
         n++;
       }
-      put(`${sp}/${diDir}/INSTALLER`, Buffer.from("cccodroid-devkit\n"), 0o644);
+      put(`${sp}/${diDir}/INSTALLER`, Buffer.from("agycodroid-devkit\n"), 0o644);
       // console_scripts → 入口脚本（与 pip 生成的等价）
       const ep = ents.find((e) => e.name === diDir + "/entry_points.txt");
       let sec = "";
@@ -1305,7 +1305,7 @@ if (cmd === "build" || cmd === "component") {
     fs.rmSync(w, { recursive: true, force: true });
     console.log(`  npm：${lock.filter((l) => l.source === "npm").length} 个包、${nfiles} 个文件`);
   }
-  // 组件自带的文件（入口包装、给 Claude 的 skill）：{{PREFIX}} 换成本应用的前缀
+  // 组件自带的文件（入口包装、给 Antigravity 的 skill）：{{PREFIX}} 换成本应用的前缀
   for (const [p, f] of Object.entries((COMP && COMP.files) || {})) {
     const src = fs.realpathSync(path.resolve(COMP_BASE, f.src));     // 跟过软链再比：配方目录里放个指向外面的链接也不行
     if (!src.startsWith(fs.realpathSync(COMP_BASE) + path.sep)) throw new Error("files 的 src 出了配方目录: " + f.src);

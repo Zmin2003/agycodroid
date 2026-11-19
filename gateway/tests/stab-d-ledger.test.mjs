@@ -8,7 +8,7 @@ import { CFG } from "../gw/config.mjs";
 import * as Q from "../gw/queue.mjs";
 import { RUNS } from "../gw/runs.mjs";
 
-const MARK = path.join(CFG.home, "ccapp-run-mark.json"), INTR = path.join(CFG.home, "ccapp-interrupted.json");
+const MARK = path.join(CFG.home, "agyapp-run-mark.json"), INTR = path.join(CFG.home, "agyapp-interrupted.json");
 const reset = () => { RUNS.clear(); Q.QUEUE.length = 0; fs.rmSync(INTR, { recursive: true, force: true }); fs.rmSync(MARK, { recursive: true, force: true }); Q.setInterrupted([]); };
 after(reset);
 

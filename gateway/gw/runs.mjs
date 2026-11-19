@@ -18,7 +18,7 @@ export const runOfSession = (sid) => (sid && runList().find((r) => r.sessionId =
 // 同时跑几轮：每个 claude 进程要占几百 MB 内存，开多大由用户自己把握
 export const MAX_PARALLEL_CAP = 16;
 export const maxParallel = () => Math.max(1, Math.min(MAX_PARALLEL_CAP, Math.round(Number(SETTINGS.maxParallel)) || 3));
-// 有任务在跑时落一个标记文件：cccodroid 的冻结检测只把「跑任务时被冻」算数 ——
+// 有任务在跑时落一个标记文件：agycodroid 的冻结检测只把「跑任务时被冻」算数 ——
 // 空闲时被厂商冻结器冻住无害，以前每次都记，设置页的提醒就老是弹
 const RUN_FLAG = path.join(CFG.home, ".run-active");
 const RUN_PID = String(process.pid);
@@ -68,7 +68,7 @@ export const runFlag = (on) => {
 runFlag(false);
 
 // 最近真正跑过的会话。落盘保存 —— 网关重启（热替换/重开 App）后前端还能接回原来的对话。
-const LAST_SESSION_FILE = path.join(CFG.home, "ccapp-last-session.json");
+const LAST_SESSION_FILE = path.join(CFG.home, "agyapp-last-session.json");
 export let LAST_SESSION = (() => {
   try {
     const j = JSON.parse(fs.readFileSync(LAST_SESSION_FILE, "utf8"));

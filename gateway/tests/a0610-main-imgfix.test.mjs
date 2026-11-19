@@ -15,7 +15,7 @@ function call(buf, name) {
   const u = new URL("http://x/api/upload?name=" + encodeURIComponent(name));
   return routeFiles(req, res, u, u.pathname).then(() => res);
 }
-const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "imgfix-"));
+const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "imgfix-"));
 const make = (fmt) => { const f = path.join(dir, "x." + fmt); try { execFileSync("magick", ["-size", "8x8", "xc:red", f], { stdio: "ignore" }); return fs.readFileSync(f); } catch { return null; } };
 
 test("内容是 WebP / JPEG、名字叫 .png → 扩展名改成真实的；对得上的不动；不是图片的不管", async (t) => {

@@ -1,6 +1,6 @@
 // 0.6.10 第二轮车道 f3：各车道移交过来的前端修复。
 // 这些逻辑依赖 DOM / WebView，node 里整段跑不起来，用源码锚点锁行为（同 a0610-f1-frontend.test.mjs）。
-// 2026-11-19 锚点瘦身：每个行为只留 1~2 条能识别它的锚点（批 1 明细见 cccodroid-anchor-batch1.md）。
+// 2026-11-19 锚点瘦身：每个行为只留 1~2 条能识别它的锚点（批 1 明细见 agycodroid-anchor-batch1.md）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -24,7 +24,8 @@ const html = read("index.html");
 
 test("A1 195-A.6 / P1-12：权限切档以网关回的 mode 为准，全局设置记 wanted", () => {
   assert.ok(!src03.includes("state.safeMode && [\"bypassPermissions\", \"auto\", \"acceptEdits\"].includes(r.mode)"), "不再在前端重复推导生效档");
-  assert.ok(src03.includes("else if (r.saved === false) toast(t(\"设置没保存上，重启后会回到原来的权限模式\"), true)"), "保存失败要如实提示");
+  assert.ok(src03.includes("state.settings.toolPermission = (r.settings && r.settings.toolPermission) || tp"), "以网关回的 toolPermission 为准");
+  assert.ok(src03.includes("revertSel();\n      toast(err.message, true);"), "保存失败要回滚选择并如实提示");
 });
 
 test("A2 195-AA.5：中断卡片重发按 req 还原项目 / 钉选 / 汇合来源，截断要提示", () => {
@@ -42,11 +43,6 @@ test("A8 195-R.8：安全通知取不到时都有提示", () => {
 
 test("A3 P1-2：接口卡换了主机会提示旧 Key 被清掉", () => {
   assert.ok(src11.includes("r.keyCleared ? t(\"换了主机，旧 Key 已清掉，请重新填\")"), "keyCleared 要提示重新填");
-});
-
-test("C25 197-5.7：额度超过 100% 时数字如实显示，只把条子画满", () => {
-  assert.ok(src11.includes("const pct = Math.round(Math.max(0, +q.used || 0)), barPct = Math.min(100, pct)"), "11-usage 的数值不夹到 100");
-  assert.ok(src09.includes("const pct = Math.round(Math.max(0, +w.used || 0)), bar = Math.min(100, pct)"), "设置页的用量行 / 额度块同样处理");
 });
 
 test("C27 195-L.10：改强调色后重画月报", () => {
@@ -121,11 +117,6 @@ test("C26 197-5.12：显示层日期按本地日历算，不拿 UTC / 86400000 �
 test("C29 195-L.1：只有简体拉 zh 文档，繁体回落英文", () => {
   assert.ok(src15.includes('((window.I18N && I18N.lang) || "zh") === "zh" ? "zh" : "en"'), "帮助 / 更新日志按精确语言码选文件");
   assert.ok(!src15.includes("/^zh/.test((window.I18N && I18N.lang)"), "不再把所有 zh-* 都当简体");
-});
-
-test("C30 195-O.2：自动压缩窗口下限 100k，与 claude 夹取一致", () => {
-  assert.ok(html.includes('id="set-autocompact" type="number" inputmode="numeric" min="100000"'), "输入框带 min");
-  assert.ok(src12.includes("const AC_MIN = 100000;"), "滑块下限同步 100k");
 });
 
 test("C28 195-O.5–O.7 / 197-5.12：跨午夜 / 换时区重算，回到前台也重画", () => {

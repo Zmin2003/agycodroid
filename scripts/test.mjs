@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // 网关测试：node scripts/test.mjs [文件名片段 …]
 //
-// 每次在一个新建的临时目录里跑：CCAPP_HOME / HOME / CCAPP_WORKSPACE 指过去，假 $PREFIX 里放系统 curl 链接与受控 toybox兼容 flock fixture，
-// CCAPP_TEST=1 让网关模块导入时不做任何启动动作（见 gw/config.mjs 的 LIVE）。所以在开发机上跑也碰不到真数据。
+// 每次在一个新建的临时目录里跑：AGAPP_HOME / HOME / AGAPP_WORKSPACE 指过去，假 $PREFIX 里放系统 curl 链接与受控 toybox兼容 flock fixture，
+// AGAPP_TEST=1 让网关模块导入时不做任何启动动作（见 gw/config.mjs 的 LIVE）。所以在开发机上跑也碰不到真数据。
 // 临时目录要能建软链：安卓上别放 /sdcard（没设 TMPDIR 时自动用 ~/.cache）。
 //
-// 分池并行（test-value 清理后的默认）：按下方实测墙钟贪心把文件分进 N 个池（N = min(4, 核数)，CCAPP_TEST_POOLS 覆盖，=1 即原串行）。
+// 分池并行（test-value 清理后的默认）：按下方实测墙钟贪心把文件分进 N 个池（N = min(4, 核数)，AGAPP_TEST_POOLS 覆盖，=1 即原串行）。
 // 每池独立临时 home / PREFIX / workspace / 端口（8799+i），池内串行（--test-concurrency=1）、文件按字母序，与单进程串行的相对顺序一致。
 // 池输出各自写日志，任一池失败则整体失败，并打印失败池尾部。
 import fs from "node:fs";
@@ -44,9 +44,9 @@ const MS = {
 };
 
 const cores = os.availableParallelism ? os.availableParallelism() : (os.cpus().length || 1);
-const POOLS = Math.max(1, Math.min(8, +(process.env.CCAPP_TEST_POOLS || Math.min(4, cores)) || 1));
+const POOLS = Math.max(1, Math.min(8, +(process.env.AGAPP_TEST_POOLS || Math.min(4, cores)) || 1));
 // 覆盖率报告要汇总看，分池会散进各池日志 → 体检模式强制串行
-const poolCount = process.env.CCAPP_TEST_COVERAGE ? 1 : Math.min(POOLS, files.length);
+const poolCount = process.env.AGAPP_TEST_COVERAGE ? 1 : Math.min(POOLS, files.length);
 const buckets = Array.from({ length: poolCount }, () => ({ sum: 0, files: [] }));
 for (const f of [...files].sort((a, b) => (MS[b] || 1000) - (MS[a] || 1000))) {
   buckets.sort((a, b) => a.sum - b.sum);
@@ -54,7 +54,7 @@ for (const f of [...files].sort((a, b) => (MS[b] || 1000) - (MS[a] || 1000))) {
   buckets[0].sum += MS[f] || 1000;
 }
 const pools = buckets.map((b) => b.files.sort()); // 池内字母序 = 与串行相对顺序一致
-if (poolCount > 1) console.error(`分 ${poolCount} 池并行（CCAPP_TEST_POOLS 可覆盖，=1 串行）`);
+if (poolCount > 1) console.error(`分 ${poolCount} 池并行（AGAPP_TEST_POOLS 可覆盖，=1 串行）`);
 
 const curl = spawnSync("sh", ["-c", "command -v curl"], { encoding: "utf8" }).stdout.trim();
 if (!curl) { console.error("找不到 curl"); process.exit(1); }
@@ -63,21 +63,21 @@ if (!curl) { console.error("找不到 curl"); process.exit(1); }
 const writable = (d) => { try { fs.accessSync(d, fs.constants.W_OK); return true; } catch { return false; } };
 const base = process.env.TMPDIR || (writable(os.tmpdir()) ? os.tmpdir() : path.join(os.homedir(), ".cache"));
 fs.mkdirSync(base, { recursive: true });
-const tmpRoot = fs.mkdtempSync(path.join(base, "cccodroid-test-")); // 只放各池日志
-const poolTmps = []; // 每池一个平级 cccodroid-test-*（registry-flock fixture 要求 basename 以此开头）
+const tmpRoot = fs.mkdtempSync(path.join(base, "agycodroid-test-")); // 只放各池日志
+const poolTmps = []; // 每池一个平级 agycodroid-test-*（registry-flock fixture 要求 basename 以此开头）
 
-// 网关给子进程的 PATH 只有假 $PREFIX/bin、$CCAPP_BIN、/system/bin（见 gw/claude.mjs 的 claudeEnv）。
+// 网关给子进程的 PATH 只有假 $PREFIX/bin、$AGAPP_BIN、/system/bin（见 gw/claude.mjs 的 claudeEnv）。
 // 真机上 sleep / mkdir / cat / gzip 这些由 /system/bin 的 toybox 兜底；CI 的 Ubuntu 没有 /system/bin，
 // 测试里的假脚本（soffice、假 CLI、自检…）就会报「命令找不到」，失败信息还看着像被测代码坏了。
 // 在假前缀里补一份基础命令，造出与真机前缀相近的环境。tar / sh / git / curl / flock 由各测试自己链接，不放这里。
 const BASIC = ["awk","basename","cat","chmod","cp","cut","date","df","dirname","du","env","find","grep","gzip","head","id","ln","ls","mkdir","mktemp","mv","readlink","realpath","rm","sed","seq","sleep","sort","stat","tail","tee","touch","tr","uname","uniq","wc","xargs","zcat"];
 
-// 在 cccodroid 里跑时环境里有二十几个 CCAPP_* 指着真数据：一个不留全删，再只设测试要的（审查 L18）。
+// 在 agycodroid 里跑时环境里有二十几个 AGAPP_* 指着真数据：一个不留全删，再只设测试要的（审查 L18）。
 // 网关给 claude 注入的 CLAUDE_CODE_* / ANTHROPIC_*（上下文窗口、接口地址…）也会漏进被测的 claudeEnv，一并去掉（11-01 独立审查）
-const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(CCAPP_|CLAUDE_CODE_|ANTHROPIC_)/.test(k)));
+const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(AGAPP_|CLAUDE_CODE_|ANTHROPIC_)/.test(k)));
 
 function setupEnv(i) {
-  const tmp = fs.mkdtempSync(path.join(base, "cccodroid-test-"));
+  const tmp = fs.mkdtempSync(path.join(base, "agycodroid-test-"));
   poolTmps.push(tmp);
   const home = path.join(tmp, "home"), prefix = path.join(tmp, "usr"), workspace = path.join(tmp, "workspace");
   fs.mkdirSync(home, { recursive: true });
@@ -92,14 +92,14 @@ function setupEnv(i) {
     // dash 对 printf / true 这类内建返回的是名字而不是路径，别拿它建软链
     if (path.isAbsolute(real)) fs.symlinkSync(real, dst);
   }
-  return { tmp, env: { ...clean, CCAPP_TEST: "1", CCAPP_HOME: home, HOME: home, CCAPP_WORKSPACE: workspace, CCAPP_PREFIX: prefix, CCAPP_PORT: String(8799 + i), CCAPP_LOG: path.join(tmp, "gateway.log"), CCAPP_TMP: tmp } };
+  return { tmp, env: { ...clean, AGAPP_TEST: "1", AGAPP_HOME: home, HOME: home, AGAPP_WORKSPACE: workspace, AGAPP_PREFIX: prefix, AGAPP_PORT: String(8799 + i), AGAPP_LOG: path.join(tmp, "gateway.log"), AGAPP_TMP: tmp } };
 }
 
 // 异步起：被 timeout / Ctrl-C / 关终端打断时也要删掉临时目录（以前用 spawnSync，信号一来整个进程直接没了，4 天攒下 29 个，D10）。
 // 收到信号先转给测试进程，等它退出再删；SIGKILL 接不住，留给存储的自动清理（$TMPDIR 里 7 天没动的）
-// CCAPP_TEST_COVERAGE=1 时给子进程加覆盖率旗标：体检测试套件用（哪些行/分支从没被断言摸过）
+// AGAPP_TEST_COVERAGE=1 时给子进程加覆盖率旗标：体检测试套件用（哪些行/分支从没被断言摸过）
 const args = ["--test", "--test-concurrency=1"];
-if (process.env.CCAPP_TEST_COVERAGE) args.push("--experimental-test-coverage");
+if (process.env.AGAPP_TEST_COVERAGE) args.push("--experimental-test-coverage");
 
 const summary = (log) => {
   try {

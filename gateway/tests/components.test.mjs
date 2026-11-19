@@ -1,5 +1,5 @@
 // 组件索引（gw/components.mjs 的 compIndex）：磁盘缓存、先出旧列表后台再拉、换镜像与一天后回主地址。
-// 本机起一个服务当四个地址（官方 / 社区 × 主地址 / 镜像）；索引不签名，靠 CCAPP_COMPONENTS_ALLOW_UNSIGNED=1 放行
+// 本机起一个服务当四个地址（官方 / 社区 × 主地址 / 镜像）；索引不签名，靠 AGAPP_COMPONENTS_ALLOW_UNSIGNED=1 放行
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -7,11 +7,11 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 
-const COMP_DIR = path.join(path.dirname(process.env.CCAPP_PREFIX), "components");
+const COMP_DIR = path.join(path.dirname(process.env.AGAPP_PREFIX), "components");
 const CACHE = path.join(COMP_DIR, "index.cache");
 fs.mkdirSync(COMP_DIR, { recursive: true });
 fs.rmSync(CACHE, { force: true });   // 「第一次」要从空缓存开始：同一进程里前面的测试可能留过一份
-process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
+process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
 
 const hits = { preset: 0, presetMirror: 0, community: 0, communityMirror: 0 };
 const S = { presetDown: false, ver: 1 };
@@ -27,8 +27,8 @@ const server = http.createServer((req, res) => {
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const B = `http://127.0.0.1:${server.address().port}`;
 Object.assign(process.env, {
-  CCAPP_COMPONENTS_INDEX: B + "/preset.json", CCAPP_COMPONENTS_INDEX_MIRROR: B + "/preset-m.json",
-  CCAPP_COMPONENTS_COMMUNITY_INDEX: B + "/community.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/community-m.json",
+  AGAPP_COMPONENTS_INDEX: B + "/preset.json", AGAPP_COMPONENTS_INDEX_MIRROR: B + "/preset-m.json",
+  AGAPP_COMPONENTS_COMMUNITY_INDEX: B + "/community.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/community-m.json",
 });
 let n = 0;
 const fresh = () => import("../gw/components.mjs?i=" + ++n);   // 新的模块实例 = 重开一次 App（内存缓存是空的）

@@ -1,4 +1,6 @@
-// 0.6.10 第二轮车道移交给主会话的三处后端：额度换算（197-5.7）、中文名技能可删（195-J.5）、队列快照带 sched（197-5.4）
+// 0.6.10 第二轮车道移交给主会话的后端：中文名技能可删（195-J.5）、队列快照带 sched（197-5.4）
+// 「订阅额度换算（197-5.7）」和「分模型周额度」两条已删：RATE_LIMITS 随 Claude 的 rate_limit_event 一起没了，
+// agy 的 stream 只有 init/step_update/result，没有额度事件，网关不再算订阅额度。
 import "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
@@ -9,41 +11,27 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { NEXT } from "../gw/http.mjs";
 
-const stream = await import("../gw/stream.mjs");
 const { SKILLS_DIR, routeExtensions } = await import("../gw/extensions.mjs");
 const { QUEUE, RUN_LANE, enqueue, snapshot } = await import("../gw/queue.mjs");
 const { RUNS, maxParallel } = await import("../gw/runs.mjs");
-
-test("订阅额度：utilization 一律按比例换成百分数，超额度显示 120 而不是 1.2", () => {
-  const ev = (u5, u7) => ({ type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows: {
-    five_hour: { utilization: u5, resetsAt: 1 }, seven_day: { utilization: u7, resetsAt: 2 } } } });
-  const opts = { sse() {}, onInit() {}, onResult() {}, flags: {}, provider: { id: "anthropic", login: true } };
-  stream.translate(ev(0.46, 1.2), opts);
-  assert.equal(stream.RATE_LIMITS.fiveHour.used, 46);
-  assert.equal(stream.RATE_LIMITS.sevenDay.used, 120);
-  stream.clearRateLimits();
-});
 
 const srv = http.createServer(async (req, res) => { const u = new URL(req.url, "http://x"); if ((await routeExtensions(req, res, u, u.pathname)) === NEXT) res.writeHead(404).end(); });
 await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
 after(() => srv.close());
 const del = async (dir) => (await fetch(`http://127.0.0.1:${srv.address().port}/api/ext/skills/delete`, { method: "POST", body: JSON.stringify({ dir }) })).json();
 
-test("技能：中文 / 带空格的目录名能删；列表里没有的、路径穿越的不删", async () => {
+test("技能：Claude Code 专属，Antigravity CLI 没有——删除接口直接拒绝，目录原样不动", async () => {
   const name = "我的 技能-" + crypto.randomBytes(3).toString("hex");
   const d = path.join(SKILLS_DIR, name);
   fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(path.join(d, "SKILL.md"), `---\nname: x\ndescription: y\n---\n`);
-  const outside = path.join(path.dirname(SKILLS_DIR), "keep-" + crypto.randomBytes(3).toString("hex"));
-  fs.mkdirSync(outside, { recursive: true });
   try {
-    assert.equal((await del("../" + path.basename(outside))).ok, false);
-    assert.ok(fs.existsSync(outside));
-    assert.equal((await del("不存在的技能")).ok, false);
     const r = await del(name);
-    assert.equal(r.ok, true, JSON.stringify(r));
-    assert.ok(!fs.existsSync(d));
-  } finally { fs.rmSync(d, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+    assert.equal(r.ok, false, JSON.stringify(r));
+    assert.match(r.error, /Claude Code 专属/);
+    assert.ok(fs.existsSync(d), "拒绝删除：目录还在");
+    assert.equal((await del("不存在的技能")).ok, false);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 
 test("队列快照：定时任务条目带 sched，普通消息不带", () => {
@@ -76,23 +64,3 @@ test("前端跟上：第三方不计花费提示、线路失配 / 明文 http �
   assert.match(s04, /it\.sched \? t\("定时任务"\)/);
 });
 
-test("分模型周额度：成为最紧窗口时记下，之后的事件不报它也留着，过了重置时间才丢", () => {
-  const opts = { sse() {}, onInit() {}, onResult() {}, flags: {}, provider: { id: "anthropic", login: true } };
-  const fut = Math.floor(Date.now() / 1000) + 86400, past = Math.floor(Date.now() / 1000) - 10;
-  const ev = (top) => ({ type: "rate_limit_event", rate_limit_info: { status: "allowed_warning", ...top, unifiedWindows: {
-    five_hour: { utilization: 0.1, resetsAt: fut }, seven_day: { utilization: 0.5, resetsAt: fut } } } });
-  stream.clearRateLimits();
-  stream.translate(ev({ rateLimitType: "seven_day_opus", utilization: 0.92, resetsAt: fut }), opts);
-  assert.deepEqual(stream.RATE_LIMITS.modelWeek, { opus: { used: 92, resetsAt: fut } });
-  stream.translate(ev({ rateLimitType: "five_hour", utilization: 0.1, resetsAt: fut }), opts);
-  assert.equal(stream.RATE_LIMITS.modelWeek.opus.used, 92, "不报它的事件里照样留着");
-  stream.translate(ev({ rateLimitType: "seven_day_sonnet", utilization: 0.81, resetsAt: past }), opts);
-  stream.translate(ev({ rateLimitType: "seven_day", utilization: 0.5, resetsAt: fut }), opts);
-  assert.deepEqual(Object.keys(stream.RATE_LIMITS.modelWeek), ["opus"], "过了重置时间的丢掉");
-  stream.clearRateLimits();
-  stream.translate(ev({ rateLimitType: "seven_day", utilization: 0.5, resetsAt: fut }), opts);
-  assert.equal(stream.RATE_LIMITS.modelWeek, undefined, "没报过就没有这个字段");
-  stream.clearRateLimits();
-  const s09 = fs.readFileSync(new URL("../web/app/09-settings.js", import.meta.url), "utf8");
-  assert.equal((s09.match(/quotaWins\(l\)/g) || []).length, 5, "定义 + 四处额度显示都列出分模型窗口");
-});

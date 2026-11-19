@@ -11,7 +11,7 @@ const ts = (i) => new Date(Date.UTC(2026, 10, 1, 0, 0, i)).toISOString();
 const J = JSON.stringify;
 
 test("正向翻页：一轮里上千次工具调用也封顶 limit*4，且能接着翻完（#70）", async () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "fwd-")), file = path.join(dir, "s.jsonl");
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "fwd-")), file = path.join(dir, "s.jsonl");
   const rows = [J({ type: "user", uuid: "u0", timestamp: ts(0), message: { role: "user", content: "开始" } })];
   for (let i = 0; i < 1500; i++) {
     rows.push(J({ type: "assistant", uuid: "a" + i, timestamp: ts(1), message: { role: "assistant", content: [{ type: "tool_use", id: "t" + i, name: "Read", input: { file_path: "/x" + i } }] } }));
@@ -33,7 +33,7 @@ test("正向翻页：一轮里上千次工具调用也封顶 limit*4，且能接
 });
 
 test("旧代理会话现推联络簿：大工具结果不解析、结果按文件缓存、改了重算（#72）", () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "bf-")), file = path.join(dir, "s.jsonl"), sub = path.join(dir, "s", "subagents");
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "bf-")), file = path.join(dir, "s.jsonl"), sub = path.join(dir, "s", "subagents");
   fs.mkdirSync(sub, { recursive: true });
   const big = (i) => J({ type: "user", timestamp: ts(i), message: { content: [{ type: "tool_result", tool_use_id: "big" + i, content: '\\"type\\":\\"assistant\\" SendMessage ' + "x".repeat(20000) }] } });
   const send = (i, id, to) => J({ type: "assistant", timestamp: ts(i), message: { content: [{ type: "tool_use", id, name: "SendMessage", input: { to, message: "进度", summary: "汇报" + i } }] } });
@@ -55,7 +55,7 @@ test("旧代理会话现推联络簿：大工具结果不解析、结果按文�
 });
 
 test("子代理过程从尾部倒读：给最近约 400 项、以最后一步收尾、标明前面还有（#71）", async () => {
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "sub-")), file = path.join(dir, "agent-x.jsonl");
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "sub-")), file = path.join(dir, "agent-x.jsonl");
   const rows = [J({ type: "user", isSidechain: true, timestamp: ts(0), message: { role: "user", content: "主代理给的提示" } })];
   for (let i = 0; i < 700; i++) {
     rows.push(J({ type: "assistant", isSidechain: true, timestamp: ts(1), message: { role: "assistant", content: [{ type: "tool_use", id: "t" + i, name: "Read", input: { file_path: "/x" + i } }] } }));

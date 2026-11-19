@@ -8,8 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 
-delete process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED;
-const COMP_DIR = path.join(path.dirname(process.env.CCAPP_PREFIX), "components");
+delete process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED;
+const COMP_DIR = path.join(path.dirname(process.env.AGAPP_PREFIX), "components");
 fs.mkdirSync(COMP_DIR, { recursive: true });
 const FIX = new URL("./fixtures/components-index/", import.meta.url);
 const BODY = fs.readFileSync(new URL("components.json", FIX));
@@ -27,16 +27,16 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const B = `http://127.0.0.1:${server.address().port}`;
-for (const k of ["CCAPP_COMPONENTS_INDEX", "CCAPP_COMPONENTS_INDEX_MIRROR", "CCAPP_COMPONENTS_COMMUNITY_INDEX", "CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR"]) ENV0[k] = process.env[k];
+for (const k of ["AGAPP_COMPONENTS_INDEX", "AGAPP_COMPONENTS_INDEX_MIRROR", "AGAPP_COMPONENTS_COMMUNITY_INDEX", "AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR"]) ENV0[k] = process.env[k];
 Object.assign(process.env, {
-  CCAPP_COMPONENTS_INDEX: B + "/main/components.json", CCAPP_COMPONENTS_INDEX_MIRROR: B + "/mirror/components.json",
-  CCAPP_COMPONENTS_COMMUNITY_INDEX: B + "/none/c.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/none/cm.json",
+  AGAPP_COMPONENTS_INDEX: B + "/main/components.json", AGAPP_COMPONENTS_INDEX_MIRROR: B + "/mirror/components.json",
+  AGAPP_COMPONENTS_COMMUNITY_INDEX: B + "/none/c.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/none/cm.json",
 });
 // 收尾：别把真索引的缓存和改过的地址留给同一进程里后面的测试（components.test 一开头就读磁盘缓存）
 after(() => {
   server.close();
   fs.rmSync(path.join(COMP_DIR, "index.cache"), { force: true });
-  for (const k of ["CCAPP_COMPONENTS_INDEX", "CCAPP_COMPONENTS_INDEX_MIRROR", "CCAPP_COMPONENTS_COMMUNITY_INDEX", "CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR"]) if (ENV0[k] === undefined) delete process.env[k]; else process.env[k] = ENV0[k];
+  for (const k of ["AGAPP_COMPONENTS_INDEX", "AGAPP_COMPONENTS_INDEX_MIRROR", "AGAPP_COMPONENTS_COMMUNITY_INDEX", "AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR"]) if (ENV0[k] === undefined) delete process.env[k]; else process.env[k] = ENV0[k];
 });
 
 let n = 0;

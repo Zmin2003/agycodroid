@@ -47,7 +47,7 @@ class CDP {
   }
 }
 function browserSetup() {
-  localStorage.setItem("ccapp.lang", "zh"); localStorage.setItem("cc.motion", "off");
+  localStorage.setItem("agyapp.lang", "zh"); localStorage.setItem("cc.motion", "off");
   window.__fixtureErrors = [];
   addEventListener("error", e => __fixtureErrors.push(Date.now() + ":" + e.message));
   addEventListener("unhandledrejection", e => __fixtureErrors.push(Date.now() + ":" + String(e.reason?.message || e.reason)));
@@ -62,7 +62,7 @@ function browserSetup() {
 
 const base = process.env.TMPDIR || path.join(os.homedir(), ".cache");
 await fs.mkdir(base, { recursive: true });
-const lock = path.join(base, "cccodroid-managed-ui-chromium.lock");
+const lock = path.join(base, "agycodroid-managed-ui-chromium.lock");
 try { await fs.mkdir(lock); } catch (e) { if (e.code === "EEXIST") throw new Error("Another optional Chromium acceptance holds " + lock); throw e; }
 const tmp = await fs.mkdtemp(path.join(base, "fp-"));
 let fixture, browser, cdp, stderr = "", launchError, loads = 0;
@@ -76,12 +76,12 @@ const check = (name, value, detail = {}) => { assert.ok(value, name + " " + JSON
 const evaluate = fn => cdp.eval("(" + fn.toString() + ")()");
 const click = selector => cdp.eval("document.querySelector(" + JSON.stringify(selector) + ").click()");
 async function openSession(sid, expected) {
-  await cdp.eval("__cc.openSession(" + JSON.stringify(sid) + ")");
+  await cdp.eval("__agy.openSession(" + JSON.stringify(sid) + ")");
   await until(() => cdp.eval("document.querySelector('#hist .tg-head')?.textContent.includes(" + JSON.stringify(String(expected)) + ")"), "history " + sid);
 }
 try {
   fixture = await startFrontendPerfServer();
-  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(CCAPP_|CLAUDE_CODE_|ANTHROPIC_)/.test(k)));
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(AGAPP_|CLAUDE_CODE_|ANTHROPIC_)/.test(k)));
   const profile = path.join(tmp, "p");
   browser = spawn(process.env.CHROMIUM_BIN || "chromium-headless", [
     "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-zygote",
@@ -111,8 +111,8 @@ try {
   await cdp.call("Emulation.setDeviceMetricsOverride", { width: 1365, height: 900, deviceScaleFactor: 1, mobile: false });
   await cdp.call("Page.addScriptToEvaluateOnNewDocument", { source: "(" + browserSetup.toString() + ")();" });
   await navigate(fixture.origin + "/");
-  await until(() => cdp.eval("!!(window.__cc?.srv.connected && __cc.state.sessions.length)"), "real app boot");
-  const booted = await cdp.eval("!!(window.__cc?.srv.connected && __cc.state.sessions.length)");
+  await until(() => cdp.eval("!!(window.__agy?.srv.connected && __agy.state.sessions.length)"), "real app boot");
+  const booted = await cdp.eval("!!(window.__agy?.srv.connected && __agy.state.sessions.length)");
   check("real app boots using only synthetic loopback APIs", booted && blocked.length === 0, { chromium: await cdp.eval("navigator.userAgent.match(/Chrome\\/([\\d.]+)/)?.[1]"), blocked });
 
   await openSession("synthetic-tools", 760);
@@ -129,39 +129,39 @@ try {
   });
   check("all 760 steps remain reachable with forty-card windows", history.reachable === 760 && history.maxCards === 40, history);
   const live = await evaluate(() => {
-    __cc.bus({ type: "run_start", runId: "synthetic-run", sessionId: "synthetic-tools", startedAt: Date.now(), text: "Synthetic live" });
-    __cc.bus({ type: "tool_result", runId: "synthetic-run", id: "pre-result", ok: false, text: "Result before invocation" });
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "pre-result", name: "Read", input: { path: "/synthetic/first" } });
+    __agy.bus({ type: "run_start", runId: "synthetic-run", sessionId: "synthetic-tools", startedAt: Date.now(), text: "Synthetic live" });
+    __agy.bus({ type: "tool_result", runId: "synthetic-run", id: "pre-result", ok: false, text: "Result before invocation" });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "pre-result", name: "Read", input: { path: "/synthetic/first" } });
     for (let i = 0; i < 180; i++) {
-      __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "live-" + i, name: "Read", input: { path: "/synthetic/" + i } });
-      __cc.bus({ type: "tool_result", runId: "synthetic-run", id: "live-" + i, ok: true, text: "Done" });
+      __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "live-" + i, name: "Read", input: { path: "/synthetic/" + i } });
+      __agy.bus({ type: "tool_result", runId: "synthetic-run", id: "live-" + i, ok: true, text: "Done" });
     }
     return [...document.querySelectorAll("#live .tool.open .tool-body")].some(el => el.textContent.includes("Result before invocation") && el.getClientRects().length);
   });
   check("result-before-invocation failure remains exposed after group growth", live);
   await evaluate(() => {
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "parent", name: "Agent", input: { prompt: "Synthetic" } });
-    for (let i = 0; i < 80; i++) __cc.bus({ type: "tool_use", runId: "synthetic-run", parent: "parent", id: "nested-" + i, name: "Read", input: { path: "/synthetic/child-" + i } });
-    __cc.bus({ type: "perm_request", runId: "synthetic-run", id: "old-child-perm", toolUseId: "nested-5", tool: "Read", input: { path: "/synthetic/old-child-confirm" } });
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", parent: "parent", id: "new-child", name: "Read", input: { path: "/synthetic/new-child" } });
-    __cc.bus({ type: "perm_request", runId: "synthetic-run", id: "new-child-perm", toolUseId: "new-child", tool: "Read", input: { path: "/synthetic/new-child-confirm" } });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "parent", name: "Agent", input: { prompt: "Synthetic" } });
+    for (let i = 0; i < 80; i++) __agy.bus({ type: "tool_use", runId: "synthetic-run", parent: "parent", id: "nested-" + i, name: "Read", input: { path: "/synthetic/child-" + i } });
+    __agy.bus({ type: "perm_request", runId: "synthetic-run", id: "old-child-perm", toolUseId: "nested-5", tool: "Read", input: { path: "/synthetic/old-child-confirm" } });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", parent: "parent", id: "new-child", name: "Read", input: { path: "/synthetic/new-child" } });
+    __agy.bus({ type: "perm_request", runId: "synthetic-run", id: "new-child-perm", toolUseId: "new-child", tool: "Read", input: { path: "/synthetic/new-child-confirm" } });
   });
   const nested = await evaluate(() => [...document.querySelectorAll("#live .tool-sub .perm")].filter(el => el.getClientRects().length).length);
   check("old and newly-created nested permission cards reveal their exact steps", nested === 2, { nested });
   const lateChild = await evaluate(() => {
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "late-parent", name: "Agent", input: { prompt: "Synthetic late child parent" } });
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", parent: "late-parent", id: "late-child", name: "Read", input: { path: "/synthetic/late-child" } });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "late-parent", name: "Agent", input: { prompt: "Synthetic late child parent" } });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", parent: "late-parent", id: "late-child", name: "Read", input: { path: "/synthetic/late-child" } });
     const group = document.querySelector("#live .tgroup"), newer = [...group.querySelectorAll(".tg-page")].at(-1);
     for (let i = 0; i < 10 && !newer.hidden; i++) newer.click();
     const parent = [...document.querySelectorAll("#live .tool")].find(el => el.querySelector(".tool-arg")?.textContent === "Synthetic late child parent");
     parent.querySelector(".ts-head").click();
     const child = parent.querySelector(".tool-sub .tool");
-    for (let i = 0; i < 60; i++) __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "after-child-" + i, name: "Read", input: { path: "/synthetic/after-child-" + i } });
+    for (let i = 0; i < 60; i++) __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "after-child-" + i, name: "Read", input: { path: "/synthetic/after-child-" + i } });
     const parked = !parent.isConnected && !child.isConnected;
-    __cc.bus({ type: "tool_result", runId: "synthetic-run", id: "late-child", ok: false, text: "Synthetic late child failure" });
+    __agy.bus({ type: "tool_result", runId: "synthetic-run", id: "late-child", ok: false, text: "Synthetic late child failure" });
     const visible = child.isConnected && !!child.querySelector(".tool-body").getClientRects().length && child.textContent.includes("Synthetic late child failure");
     child.querySelector(".tool-head").click();
-    __cc.bus({ type: "tool_use", runId: "synthetic-run", id: "after-dismiss", name: "Read", input: {} });
+    __agy.bus({ type: "tool_use", runId: "synthetic-run", id: "after-dismiss", name: "Read", input: {} });
     return { parked, visible, released: !parent.isConnected };
   });
   check("late nested failure remounts a parked parent and dismissing it releases the page exception", lateChild.parked && lateChild.visible && lateChild.released, lateChild);
@@ -192,27 +192,27 @@ try {
   await evaluate(() => { const g = document.querySelector("#hist .tgroup"); if (!g.classList.contains("open")) g.querySelector(".tg-head").click(); g.querySelector(".ts-head").click(); });
   await until(() => fixture.state.agentCalls > disposeCalls && cdp.eval("document.querySelector('#hist .ts-now')?.textContent.includes('加载中')"), "disposed agent request starts");
   const disposeReplies = fixture.state.agentReplies;
-  await cdp.eval("__cc.openSession('synthetic-replacement')");
-  await until(() => cdp.eval("__cc.view.sessionId === 'synthetic-replacement' && __cc.view.histOk === true"), "replacement session history reset");
+  await cdp.eval("__agy.openSession('synthetic-replacement')");
+  await until(() => cdp.eval("__agy.view.sessionId === 'synthetic-replacement' && __agy.view.histOk === true"), "replacement session history reset");
   fixture.releaseAgents();
   await until(() => fixture.state.agentReplies > disposeReplies, "late agent response delivered");
   await evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   check("late agent response cannot revive a reset history tree", await cdp.eval("!document.querySelector('#hist .tool-sub .tool')"));
   fixture.state.agentHold = false;
 
-  await cdp.eval("__cc.openPage('sessions')");
+  await cdp.eval("__agy.openPage('sessions')");
   await until(() => cdp.eval("document.querySelectorAll('#session-list .srow-sess').length === 150"), "visible session rows");
   const hidden = await evaluate(() => {
-    __cc.openSession("synthetic-replacement");
+    __agy.openSession("synthetic-replacement");
     const list = document.getElementById("session-list"), node = list.firstElementChild;
-    for (let i = 0; i < 6; i++) __cc.bus({ type: "state", runs: [], queue: [], interrupted: [] });
+    for (let i = 0; i < 6; i++) __agy.bus({ type: "state", runs: [], queue: [], interrupted: [] });
     return { same: node === list.firstElementChild, hidden: !list.getClientRects().length };
   });
   check("hidden session-page updates retain the original DOM", hidden.same && hidden.hidden, hidden);
 
   const excel = await evaluate(async () => {
     let ticks = 0; const beat = setInterval(() => ticks++, 16);
-    const at = performance.now(); await __cc.openViewer("/synthetic/100k.xlsx", "sheet", 0); clearInterval(beat);
+    const at = performance.now(); await __agy.openViewer("/synthetic/100k.xlsx", "sheet", 0); clearInterval(beat);
     return { ticks, openMs: performance.now() - at, cells: document.querySelectorAll(".vw-grid td").length, mainXLSX: typeof window.XLSX, stats: structuredClone(__sheetStats) };
   });
   check("100k-cell workbook parses in a real Worker without loading XLSX on the page", excel.ticks > 0 && excel.mainXLSX === "undefined" && excel.stats.detached.at(-1) === 0, excel);
@@ -226,7 +226,7 @@ try {
   // 关闭取消下载：下载挂在服务端不放行，先证 Worker 真的建了、请求真的在途，再点关闭等 abort 事件，不靠 sleep。
   const closeBefore = await cdp.eval("({ ...__sheetStats })"), closeAborts = fixture.state.fileAborts, closeScripts = fixture.state.officeScripts;
   fixture.state.fileHold = true;
-  await evaluate(() => { __cc.openViewer("/synthetic/100k.xlsx", "sheet", 0); });
+  await evaluate(() => { __agy.openViewer("/synthetic/100k.xlsx", "sheet", 0); });
   await until(() => fixture.state.held.length === 1 && fixture.state.filePending === 1, "held workbook download in flight");
   await until(() => cdp.eval("__sheetStats.created === " + (closeBefore.created + 1) + " && __sheetStats.active === 1"), "delayed workbook worker start");
   // Worker 的三个脚本全部送达才算就绪；脚本加载中被 close 截断会报 NetworkError（Worker 内 importScripts 失败）
@@ -241,13 +241,13 @@ try {
   // 迟到响应：旧下载挂在服务端，替换文档正常完成，再放行旧响应。服务器必须观察到真实 abort，屏幕上的必须是替换文档。
   const lateBefore = await cdp.eval("({ ...__sheetStats })"), lateScripts = fixture.state.officeScripts;
   fixture.state.fileHold = true;
-  await evaluate(() => { __cc.openViewer("/synthetic/100k.xlsx", "sheet", 0); });
+  await evaluate(() => { __agy.openViewer("/synthetic/100k.xlsx", "sheet", 0); });
   await until(() => fixture.state.held.length === 1 && fixture.state.filePending === 1, "old workbook download held");
   await until(() => cdp.eval("__sheetStats.created === " + (lateBefore.created + 1) + " && __sheetStats.active === 1"), "old workbook worker start");
   // 替换文档会 terminate 旧 Worker：等旧 Worker 脚本全部送达后再换，避免截断在途 importScripts
   await until(() => fixture.state.officeScripts >= lateScripts + 3, "old workbook worker scripts delivered");
   fixture.state.fileHold = false;
-  await evaluate(() => { __cc.openViewer("/synthetic/replacement.xlsx", "sheet", 0); });
+  await evaluate(() => { __agy.openViewer("/synthetic/replacement.xlsx", "sheet", 0); });
   await until(() => cdp.eval("document.querySelector('.vw-grid')?.textContent.includes('Replacement workbook')"), "replacement workbook");
   await until(() => fixture.state.held[0]?.aborted, "old workbook request aborted by replacement open");
   await until(() => cdp.eval("__sheetStats.active === 1 && __sheetStats.terminated === " + (lateBefore.terminated + 1)), "only replacement workbook worker remains");
@@ -270,7 +270,7 @@ try {
   const repeatBefore = await cdp.eval("({ ...__sheetStats })");
   for (let i = 0; i < 3; i++) {
     const before = await cdp.eval("({ ...__sheetStats })");
-    await evaluate(() => __cc.openViewer("/synthetic/replacement.xlsx", "sheet", 0));
+    await evaluate(() => __agy.openViewer("/synthetic/replacement.xlsx", "sheet", 0));
     await until(() => cdp.eval("__sheetStats.created === " + (before.created + 1) + " && __sheetStats.active === 1"), "repeated workbook worker start " + i);
     // 等到 Worker 真的 postMessage(load)：脚本和 importScripts 都已加载完，close 才不会截断在途脚本加载
     await until(() => cdp.eval("__sheetStats.detached.length === " + (before.detached.length + 1)), "repeated workbook worker load posted " + i);

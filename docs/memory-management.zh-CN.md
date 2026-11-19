@@ -59,7 +59,7 @@ priv 'logcat -d -b events' | grep -E 'killinfo|am_mem_factor|am_kill'
 
 这是实测踩出来的。安卓停掉一个包时，**会连带杀掉所有加载过这个包的进程**：
 
-- 停了 WebView 这个包，所有用 WebView 显示界面的应用都被杀了，包括 cccodroid 自己；
+- 停了 WebView 这个包，所有用 WebView 显示界面的应用都被杀了，包括 agycodroid 自己；
 - 停了联想日历，系统的分屏服务也跟着死了，因为它加载了日历的组件。
 
 还有一类：一个应用通过 ContentProvider 稳定地连着另一个应用的数据，提供方一死，安卓会把连着它的客户端一起杀掉。

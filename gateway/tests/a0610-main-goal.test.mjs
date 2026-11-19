@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { goalStateOf } from "../gw/goal.mjs";
 
-const dir = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "a0610-goal-"));
+const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "a0610-goal-"));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const J = (o) => JSON.stringify(o) + "\n";
 const T0 = "2026-11-08T01:00:00.000Z";

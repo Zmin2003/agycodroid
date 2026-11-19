@@ -1,4 +1,4 @@
-package cc.codroid;
+package cc.agyroid;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -33,18 +33,18 @@ public class InstallerCarryTest {
     /** 造一套「组件经 pkg 装了一个包」的旧 usr：清单里有组件的文件，也有一条底座包自己的清单 */
     static void componentOld(File old) throws Exception {
         put(old, "var/lib/dpkg/info/comp.list",
-            "/data/data/cc.codroid/files/usr\n/data/data/cc.codroid/files/usr/bin\n"
-            + "/data/data/cc.codroid/files/usr/bin/comp-tool\n/data/data/cc.codroid/files/usr/share/comp/data\n");
+            "/data/data/cc.agyroid/files/usr\n/data/data/cc.agyroid/files/usr/bin\n"
+            + "/data/data/cc.agyroid/files/usr/bin/comp-tool\n/data/data/cc.agyroid/files/usr/share/comp/data\n");
         put(old, "bin/comp-tool", "tool");
         put(old, "share/comp/data", "data");
         put(old, "libexec/devkit/components/comp/MANIFEST",
             "x 4 bin/comp-tool\nx 4 share/comp/data\nx 64 var/lib/dpkg/info/comp.list\n");
-        put(old, "var/lib/dpkg/info/base.list", "/data/data/cc.codroid/files/usr/bin/base-tool\n");
+        put(old, "var/lib/dpkg/info/base.list", "/data/data/cc.agyroid/files/usr/bin/base-tool\n");
         put(old, "bin/base-tool", "base");
     }
 
     public static void main(String[] args) throws Exception {
-        Path tmp = Files.createTempDirectory("cccodroid-carry-test-");
+        Path tmp = Files.createTempDirectory("agycodroid-carry-test-");
         try {
             File files = new File(tmp.toFile(), "files");
             new File(files, "components").mkdirs();

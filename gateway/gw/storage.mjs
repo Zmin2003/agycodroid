@@ -26,17 +26,17 @@ const WALK_MAX = 200000;               // 一个条目里最多数这么多个�
 export const AUTO_EVERY = { day: DAY, week: 7 * DAY, month: 30 * DAY };
 
 const H = (...r) => path.join(CFG.home, ...r);
-const DATA = () => process.env.CCAPP_DATA_DIR || "";
+const DATA = () => process.env.AGAPP_DATA_DIR || "";
 const FILES_DIR = () => (PREFIX ? path.dirname(PREFIX) : "");
 const TMP = () => (PREFIX ? path.join(PREFIX, "tmp") : "");
 const CLAUDE_TMP = () => (TMP() ? path.join(TMP(), "claude-" + process.getuid()) : "");
-const STATE_FILE = () => H("ccapp-storage.json");
+const STATE_FILE = () => H("agyapp-storage.json");
 
 // ── 永不碰：设置与状态、密钥、技能、插件、记忆、说明文件、审计与网关日志（落在这些下面的一律不删，哪怕规则算错了） ──
 const NEVER = () => [H(".keys"), H(".ssh"), H(".gateway-token"), H(".bldtools"), H(".claude", "skills"), H(".claude", "plugins"),
   H(".claude", "projects"), H(".claude", "CLAUDE.md"), H(".claude", "settings.json"), H(".claude", ".credentials.json"), H(".claude.json"),
-  H(".cache", "ccapp-login"), H(".cache", "llama-api-key"), H("priv-audit.jsonl"), H("gateway.log"), H(".ccapp-userconf"), H(".config")];
-const NEVER_NAME = /^(ccapp-key.*|\.gateway-token|.*\.pem|id_[a-z0-9]+(\.pub)?|known_hosts|hosts\.yml)$/;
+  H(".cache", "agyapp-login"), H(".cache", "llama-api-key"), H("priv-audit.jsonl"), H("gateway.log"), H(".agyapp-userconf"), H(".config")];
+const NEVER_NAME = /^(agyapp-key.*|\.gateway-token|.*\.pem|id_[a-z0-9]+(\.pub)?|known_hosts|hosts\.yml)$/;
 
 /** 真实路径：最后一级是软链的不跟（删的是链接本身） */
 function realOf(p) {
@@ -114,7 +114,7 @@ export function cacheDirs() {
     { id: "gh", dir: H(".cache", "gh") },
     { id: "pkg", dir: f && path.join(f, "pkg", "cache") },
     { id: "apt", dir: PREFIX && path.join(PREFIX, "var", "cache", "apt") },
-    { id: "lineage", file: H(".cache", "ccapp-lineage-index.json") },
+    { id: "lineage", file: H(".cache", "agyapp-lineage-index.json") },
   ].filter((x) => x.dir || x.file);
 }
 /** 缓存目录里能删的文件（目录结构留着：apt 少了 archives/partial 会报错） */
@@ -233,11 +233,11 @@ function pkgSizes() {
 }
 async function programs() {
   const f = FILES_DIR();
-  const claudeDir = H(".local", "share", "cccodroid", "claude");
+  const claudeDir = H(".local", "share", "agycodroid", "claude");
   let cur = ""; try { cur = path.basename(fs.realpathSync(path.join(claudeDir, "current"))); } catch {}
   const versions = [];
   try { for (const v of fs.readdirSync(claudeDir)) if (v !== "current" && fs.lstatSync(path.join(claudeDir, v)).isDirectory()) versions.push({ version: v, current: v === cur, bytes: await du(path.join(claudeDir, v)) }); } catch {}
-  const known = new Set([".claude", ".cache", ".npm", ".local", ".ccapp-trash", ".cccodroid", path.basename(CFG.workspace)]);
+  const known = new Set([".claude", ".cache", ".npm", ".local", ".agyapp-trash", ".agycodroid", path.basename(CFG.workspace)]);
   const homeDirs = [];
   try {
     for (const n of fs.readdirSync(CFG.home)) {
@@ -251,11 +251,11 @@ async function programs() {
   return {
     toolkit: PREFIX ? await du(PREFIX) : null,
     components: f ? await du(path.join(f, "components")) : null,
-    compData: await du(H(".cccodroid")),
+    compData: await du(H(".agycodroid")),
     pkgs: pkgSizes(),
     claude: versions,
     workspace: await du(CFG.workspace),
-    shared: process.env.CCAPP_SHARED ? await du(process.env.CCAPP_SHARED) : null,
+    shared: process.env.AGAPP_SHARED ? await du(process.env.AGAPP_SHARED) : null,
     home: homeDirs.slice(0, 12),
   };
 }
@@ -270,7 +270,7 @@ async function entries() {
     out.orphans = { count, bytes };
   } catch {}
   try { const { compLeftovers } = await import("./components.mjs"); const l = await compLeftovers(); out.compData = { count: l.length, bytes: l.reduce((a, x) => a + x.bytes, 0), items: l }; } catch {}
-  try { out.usage = { bytes: fs.statSync(H("ccapp-usage.json")).size }; } catch { out.usage = { bytes: 0 }; }
+  try { out.usage = { bytes: fs.statSync(H("agyapp-usage.json")).size }; } catch { out.usage = { bytes: 0 }; }
   return out;
 }
 

@@ -1,6 +1,6 @@
 // 0.6.10 审计车道 f1 的回归测试：Markdown 路径 / 围栏用真渲染器跑，
 // 其余是网页端修复的源码锚点（这些逻辑依赖 DOM / WebView，无法在 node 里整段跑）。
-// 2026-11-19 锚点瘦身：每个行为只留 1~2 条能识别它的锚点（批 1 明细见 cccodroid-anchor-batch1.md）。
+// 2026-11-19 锚点瘦身：每个行为只留 1~2 条能识别它的锚点（批 1 明细见 agycodroid-anchor-batch1.md）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -81,24 +81,14 @@ test("前端注入：图片地址白名单、同源接口不带 Cookie、项目�
 
 test("权限卡：缺 input 不再卡死；生效模式以网关回的 mode 为准", () => {
   assert.ok(src03.includes('if (!ev.input || typeof ev.input !== "object" || Array.isArray(ev.input)) ev = Object.assign({}, ev, { input: {} });'));
-  assert.ok(src03.includes("const eff = r.mode || r.wanted || mode"));
+  assert.ok(src03.includes("state.settings.toolPermission = (r.settings && r.settings.toolPermission) || tp"), "生效模式以网关回的 toolPermission 为准");
 });
 
-test("底部确认条：单张敏感卡带风险说明给「允许」，配置类与计划/提问不给，「全部允许」不含敏感卡（用户 11-09）", () => {
-  const line = (re) => { const m = src03.match(re); assert.ok(m, String(re)); return m[0]; };
-  const simpleSrc = line(/simple = \(it\) => [^;]+;/), quickSrc = line(/const quick = \(it\) => [^;]+;/);
-  const quick = new Function(`const ${simpleSrc} ${quickSrc} return quick;`)();
-  const P = (tool, guard) => ({ p: { tool, guard, input: {} } });
-  assert.equal(quick(P("Bash")), true);
-  assert.equal(quick(P("mcp__device__clipboard_read", { cat: "device:clipboard", what: "" })), true);
-  assert.equal(quick(P("Read", { cat: "secret", what: "key: ~/.ssh/id_ed25519" })), true);
-  assert.equal(quick(P("Bash", { cat: "userconf", what: "~/.claude" })), false);
-  assert.equal(quick(P("Bash", { cat: "project", what: "/w" })), false);
-  assert.equal(quick(P("ExitPlanMode")), false);
-  assert.equal(quick(P("AskUserQuestion")), false);
-  // 条上要有卡片同一句风险说明；「全部允许」仍按 simple（不含敏感卡）
-  assert.ok(src03.includes('quick(list[0]) ? `<b>${t("敏感操作")}</b> ${esc(permGuardWhat(f.guard, f.input))}`'));
-  assert.ok(src03.includes('${list.every(simple) ? `<button class="pb-all">'));
+test("底部确认条：首张卡给「允许」，多张时才有「全部允许」（agy 没有 guard 敏感分类，不再区分）", () => {
+  assert.ok(src03.includes('<button class="pb-allow primary"'), "首张卡有允许按钮");
+  assert.ok(src03.includes('list.length > 1 ? `<div class="pb-more">'), "只有多张时才显示全部允许");
+  assert.ok(src03.includes('if (b.classList.contains("pb-all")) list.forEach((it) => permAnswer(it.p.id, { behavior: "allow" }))'), "全部允许放行所有待确认卡");
+  assert.ok(!src03.includes("permGuardWhat"), "agy 没有 guard 风险说明");
 });
 
 test("复制失败不再假报成功（两处调用点都看返回值）", () => {

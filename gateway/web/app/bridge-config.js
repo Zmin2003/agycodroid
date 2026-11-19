@@ -919,8 +919,8 @@
       return el && !el.classList.contains("hidden") && !el._moLeave && !(id === "drawer" && window.CCLayout && window.CCLayout.docked());
     }) || [...document.querySelectorAll(".pop-menu, [aria-modal='true']")].some((el) => el.getClientRects().length && !el.closest(".hidden"));
   }
-  const back = window.__ccBack;
-  if (typeof back === "function") window.__ccBack = function () {
+  const back = window.__agyBack;
+  if (typeof back === "function") window.__agyBack = function () {
     if (visible() && !covered()) { if (!busy) close(); return true; }
     return back.apply(this, arguments);
   };

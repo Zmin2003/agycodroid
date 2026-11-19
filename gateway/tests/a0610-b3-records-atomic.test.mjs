@@ -51,7 +51,7 @@ test("compRecordInfo：共享清单大的记录（>1MB，melt 实测 1.1MB）要
   fs.mkdirSync(COMP_DIR, { recursive: true });
   // 19k 条共享路径，模拟 melt 的 x11 闭包（2026-11-16 真机验证：记录 1,096,028 字节，超 1MB 默认上限被判坏）
   const shared = [];
-  for (let i = 0; i < 19000; i++) shared.push(`share/cccodroid/base/file-${String(i).padStart(5, "0")}-with-a-long-ish-name.txt`);
+  for (let i = 0; i < 19000; i++) shared.push(`share/agycodroid/base/file-${String(i).padStart(5, "0")}-with-a-long-ish-name.txt`);
   assert.equal(compWriteRecord("b3-big", { id: "b3-big", state: "ok", shared }), true);
   assert.ok(fs.statSync(rec("b3-big")).size > 1 << 20, "测试前提：记录确实超过 1 MB");
   const info = compRecordInfo("b3-big");
@@ -65,10 +65,10 @@ test("customRecords：坏记录 / 装到一半的记录照样列出来（damaged
   const bad = path.join(CUSTOM_DIR, "b3-bad-cust");
   const half = path.join(CUSTOM_DIR, "b3-half");
   for (const d of [good, bad, half]) fs.mkdirSync(path.join(d, "app"), { recursive: true });
-  fs.writeFileSync(path.join(good, "cccodroid-custom.json"), JSON.stringify({
+  fs.writeFileSync(path.join(good, "agycodroid-custom.json"), JSON.stringify({
     id: "b3-good", name: "好组件", at: 1, entries: [{ cmd: "b3good", kind: "static" }], libs: [], deps: [], unresolved: [],
   }));
-  fs.writeFileSync(path.join(bad, "cccodroid-custom.json"), "{坏了");
+  fs.writeFileSync(path.join(bad, "agycodroid-custom.json"), "{坏了");
   // half：记录没写上的半截安装（装到一半被杀）
 
   const byId = new Map(customRecords().map((r) => [r.id, r]));
@@ -78,7 +78,7 @@ test("customRecords：坏记录 / 装到一半的记录照样列出来（damaged
   assert.deepEqual(byId.get("b3-bad-cust").entries, []);
   assert.equal(byId.get("b3-half").damaged, true, "装了一半的目录也要能清掉");
   // 坏记录留底（loadState 的 keepBad），原位置不再有记录
-  assert.ok(fs.readdirSync(bad).some((n) => n.startsWith("cccodroid-custom.json.bad-")), "坏记录要留底");
+  assert.ok(fs.readdirSync(bad).some((n) => n.startsWith("agycodroid-custom.json.bad-")), "坏记录要留底");
   // 第二次读：原文件已经改名，仍靠 app/ 认出这个组件
   assert.equal(new Map(customRecords().map((r) => [r.id, r])).get("b3-bad-cust")?.damaged, true);
 });

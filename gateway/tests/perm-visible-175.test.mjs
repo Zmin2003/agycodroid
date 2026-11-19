@@ -17,7 +17,7 @@ test("整页盖着时来了确认请求：提醒一次，点「查看」打开�
   box.f([{ id: "p1", runId: "r1" }]);
   box.f([{ id: "p1", runId: "r1" }]);
   assert.equal(acts.length, 1, "同一个请求只提醒一次");
-  assert.equal(acts[0][0], "Claude 在等你确认");
+  assert.equal(acts[0][0], "Antigravity 在等你确认");
   acts[0][1]();
   assert.deepEqual(opened, ["B"]);
 });
@@ -25,34 +25,39 @@ test("整页盖着时来了确认请求：提醒一次，点「查看」打开�
 test("perm_mode 事件：在跑轮次的模式快照跟着改，并重排等着的计划卡", () => {
   const body = take(flow, '      case "perm_mode":', '      case "perm_request":');
   let refreshed = 0;
-  const box = { state: { settings: {} }, setPermChip() {}, $: () => null, srv: { runs: [{ permMode: "default" }, { permMode: null }] }, refreshPlanActs: () => refreshed++ };
+  const box = { state: { settings: {} }, setPermChip() {}, $: () => null, srv: { runs: [{ permMode: "request-review" }, { permMode: null }] }, refreshPlanActs: () => refreshed++ };
   vm.runInNewContext(`globalThis.f = (ev) => { switch (ev.type) { ${body} } };`, box);
-  box.f({ type: "perm_mode", mode: "auto" });
-  assert.equal(box.srv.runs[0].permMode, "auto");
+  box.f({ type: "perm_mode", mode: "always-proceed" });
+  assert.equal(box.srv.runs[0].permMode, "always-proceed");
   assert.equal(box.srv.runs[1].permMode, null);
   assert.equal(refreshed, 1);
-  // 计划卡按钮按新模式生成：auto 时有「按当前模式执行」
-  const b2 = { srv: box.srv, state: { permissionMode: "auto" }, t: T, esc: (s) => s, modeLabel: (m) => m, permRules: () => [], permSuggestsEdits: () => false };
-  vm.runInNewContext(take(src, "  const runMode = ", "  function PermCard(") + "\nglobalThis.f = permActions;", b2);
-  b2.srv.runs[0].id = "r";
-  assert.match(b2.f({ tool: "ExitPlanMode" }, "r"), /data-mode="auto" data-keep="1"/);
+  // 移植：agy 没有 PreToolUse 钩子 / plan 模式，确认卡只有「允许 / 拒绝」，
+  // 不再按模式生成「按当前模式执行」这类按钮
+  const b2 = { t: T };
+  vm.runInNewContext(take(src, "  // agy 没有 PreToolUse 钩子", "  function PermCard(") + "\nglobalThis.f = permActions;", b2);
+  const html = b2.f({ tool: "Bash" }, "r");
+  assert.match(html, /允许/);
+  assert.match(html, /拒绝/);
+  assert.doesNotMatch(html, /data-mode=/);
 });
 
 test("权限卡已填的内容：读出来、重建后填回去", () => {
+  // 移植：卡片里只剩勾选项 + 拒绝理由（补充回答的 perm-other 输入已随旧卡片删掉，
+  // permFormRead 的 ot 恒为 []）
   const mk = (props) => ({ ...props, classList: { _h: true, contains(c) { return c === "hidden" && this._h; }, toggle(c, v) { this._h = v; } } });
   const make = () => {
-    const ins = [{ checked: false }, { checked: false }], others = [{ value: "" }], ta = { value: "" }, deny = mk({ querySelector: () => ta });
-    return { ins, others, ta, deny, el: { querySelectorAll: (q) => q.includes("perm-other") ? others : ins, querySelector: (q) => q === ".perm-deny" ? deny : ta } };
+    const ins = [{ checked: false }, { checked: false }], ta = { value: "" }, deny = mk({ querySelector: () => ta });
+    return { ins, ta, deny, el: { querySelectorAll: () => ins, querySelector: (q) => q === ".perm-deny" ? deny : ta } };
   };
   const box = {};
   vm.runInNewContext(take(src, "  function permFormRead(", "  function onPermRequest(") + "\nglobalThis.f = { permFormRead, permFormRestore };", box);
   const a = make();
-  a.ins[1].checked = true; a.others[0].value = "我的补充"; a.ta.value = "理由"; a.deny.classList._h = false;
+  a.ins[1].checked = true; a.ta.value = "理由"; a.deny.classList._h = false;
   const form = box.f.permFormRead(a.el);
+  assert.equal(form.ot.length, 0, "补充回答输入已删，ot 恒为空");
   const b = make();
   box.f.permFormRestore(b.el, form);
   assert.deepEqual(b.ins.map((x) => x.checked), [false, true]);
-  assert.equal(b.others[0].value, "我的补充");
   assert.equal(b.ta.value, "理由");
   assert.equal(b.deny.classList._h, false);
 });

@@ -178,7 +178,7 @@ function handle(req, res) {
     const h = { ...ur.headers };
     delete h["content-length"]; delete h["content-encoding"]; delete h["transfer-encoding"];
     res.writeHead(ur.statusCode || 200, h);
-    const sid = String(req.headers["x-claude-code-session-id"] || "").slice(0, 64);
+    const sid = String(req.headers["x-antigravity-code-session-id"] || "").slice(0, 64);
     const fix = sseRepairer({ onSwallow: (msg, kind) => { for (const h of SWALLOW_HOOKS) { try { h(sid, msg, kind); } catch {} } } });
     let ended = false;
     const end = () => {

@@ -13,7 +13,7 @@ const runProvider = (sid) => providerById(effectiveModel(sid).provider) || PROVI
 import { isLoginMode } from "./models.mjs";
 import { findSessionFile } from "./sessions.mjs";
 import { sealSession } from "./integrity.mjs";
-import { killRunProcs, killTree, safeModePerm } from "./claude.mjs";
+import { killRunProcs, killTree, safeModePerm } from "./agy.mjs";
 import { goalCheck, tasksCheck } from "./goal.mjs";
 import { LAST_SESSION, RUNS, SESSIONS, TRASH_HOOKS, latestRun, maxParallel, runFlag, runList } from "./runs.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
@@ -22,7 +22,6 @@ import { execIntent, lostProvider, pickProvider, startRun } from "./run.mjs";
 import { cleanMergeFrom } from "./merge.mjs";
 import { LOCAL_CMD_RE } from "./modelcmd.mjs";
 import { tamperPending } from "./tamper.mjs";
-import { RATE_LIMITS } from "./stream.mjs";
 
 // ── 生成与排队 ────────────────────────────────────────────────────────
 export const QUEUE = [];                 // 等着跑的消息：{ id, message, sessionId, follow, model, permissionMode, addDirs, at }
@@ -85,7 +84,7 @@ export function setPermMode(mode, { persist = true } = {}) {
   SETTINGS.permissionMode = mode;
   // 设置路由要一次请求只写一次盘（中途写盘 + 后面校验失败就是半套设置，FIND-051），由它传 persist:false 自己落盘
   const saved = persist ? saveSettings() !== false : undefined;
-  const eff = safeModePerm(mode);   // 安全模式下不问人的几档退回 default（见 claude.mjs），界面显示实际生效的
+  const eff = safeModePerm(mode);   // 安全模式下不问人的那档退回 request-review（见 agy.mjs），界面显示实际生效的
   for (const r of RUNS.values()) if (r.setMode) {
     r.setMode(eff);
     // 重放（切回会话、断线重连）时 init 里还是起跑时的模式，会把界面改回去，用户想收紧也发不出去（安全通告 GHSA-2w6p）
@@ -118,8 +117,8 @@ export const publishState = () => { saveRunMark(); publish({ type: "state", ...s
 // 正在跑的这一轮 + 排队的消息，每次状态变化都落盘；正常收尾、队列清空时删掉。
 // App 连同网关被系统结束时它留下来：下次启动把那一轮记成「已中断」（前端给「继续」），
 // 排队的消息原样放回队列、一律挂起 —— 杀掉之后不许自己发出去，用户点 ⚡ 才发。
-const RUN_MARK = path.join(CFG.home, "ccapp-run-mark.json");
-const INTR_FILE = path.join(CFG.home, "ccapp-interrupted.json");
+const RUN_MARK = path.join(CFG.home, "agyapp-run-mark.json");
+const INTR_FILE = path.join(CFG.home, "agyapp-interrupted.json");
 const TEXT_KEEP = 64 << 10;     // 运行标记里每轮留的提问字数（标记每次排队变化都重写，别存整条 200 万字）
 // 中断的原因要分得清（0.6.9 审计 195-A.11：以前一律说「App 在后台被系统结束」）：
 //   标记里记着安装包清单的指纹，下次启动对不上 → App 更新了；收到 SIGTERM / SIGINT 正常退出时记一笔 stop → 网关被关闭或重启；
@@ -430,7 +429,7 @@ export function holdLane(run) {
 // 1 小时缓存从接口返回的 cache_creation.ephemeral_1h_input_tokens 看出来（订阅账户就是这种）；
 // 第三方厂商的缓存规则各不相同，不做。计时从这一轮结束算起，54 分钟时缓存还剩约 6 分钟。
 // 两个环境变量只给测试用（缩短等待、降低门槛）
-const IDLE_MS = Number(process.env.CCAPP_IDLE_MS) || 54 * 60 * 1000, IDLE_MIN_TOKENS = Number(process.env.CCAPP_IDLE_MIN) || 200000;
+const IDLE_MS = Number(process.env.AGAPP_IDLE_MS) || 54 * 60 * 1000, IDLE_MIN_TOKENS = Number(process.env.AGAPP_IDLE_MIN) || 200000;
 const IDLE = new Map();   // 会话号 → { timer, ctx, at, size }
 export function idleDisarm(sid) { const x = IDLE.get(sid); if (x) { clearTimeout(x.timer); IDLE.delete(sid); } }
 export function idleDisarmAll() { for (const sid of [...IDLE.keys()]) idleDisarm(sid); }
@@ -459,8 +458,7 @@ function idleFire(sid) {
     if (laneRun("s:" + sid)) return "正在跑";
     if (QUEUE.some((q) => sidOfLane(laneOfItem(q)) === sid)) return "有排队的消息";
     try { if (fs.statSync(findSessionFile(sid).file).size !== x.size) return "会话有新内容"; } catch { return "会话文件不见了"; }
-    const rl = RATE_LIMITS;
-    if (rl && isLoginMode(P) && Math.max(rl.fiveHour?.used || 0, rl.sevenDay?.used || 0) >= 90) return "额度逼近上限";
+    // agy 没有额度（Anthropic 的 RATE_LIMITS 已删），也不会走到这里：上面 !P.nativeModels 就退了。
     return null;
   })();
   if (why) { log(`⏲ 空闲压缩跳过（${why}）：会话 ${sid.slice(0, 8)}`); return; }
@@ -516,7 +514,7 @@ export function enqueue(body) {
     permissionMode: typeof body.permissionMode === "string" ? body.permissionMode.slice(0, 40) : null,
     addDirs: strList(body.addDirs, 64, 4096, 16384),
     projectId: body.projectId ? String(body.projectId).slice(0, 100) : null,
-    // 汇合（脉络阶段 2）：新会话第一条带来的来源，拿到会话号时记进 ccapp-lineage.json
+    // 汇合（脉络阶段 2）：新会话第一条带来的来源，拿到会话号时记进 agyapp-lineage.json
     mergeFrom: !body.sessionId && !body.follow ? cleanMergeFrom(body.mergeFrom) : null,
     at: Date.now(),
     // 只有网关自己（定时任务）会带的：前端发来的 /api/chat 不许设这些

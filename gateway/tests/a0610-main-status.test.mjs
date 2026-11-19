@@ -16,13 +16,13 @@ const srv = http.createServer(async (req, res) => { const u = new URL(req.url, "
   for (const r of [routeFeedback, routeSettings]) if ((await r(req, res, u, u.pathname)) !== NEXT) return;
   res.writeHead(404).end(); });
 await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
-const bin = fs.mkdtempSync(path.join(os.tmpdir(), "st-")), oldBin = process.env.CCAPP_BIN;
-after(() => { srv.close(); process.env.CCAPP_BIN = oldBin; fs.rmSync(bin, { recursive: true, force: true }); });
+const bin = fs.mkdtempSync(path.join(os.tmpdir(), "st-")), oldBin = process.env.AGAPP_BIN;
+after(() => { srv.close(); process.env.AGAPP_BIN = oldBin; fs.rmSync(bin, { recursive: true, force: true }); });
 const call = async (p, post) => { const r = await fetch(`http://127.0.0.1:${srv.address().port}${p}`, post ? { method: "POST", body: "{}" } : {}); return { status: r.status, body: await r.json() }; };
 
 test("本机自检：没有结果时如实说；点重新自检就跑，跑完能看到通过 / 失败项；跑着时不另起", async () => {
-  fs.writeFileSync(path.join(bin, "cccodroid-selftest"), "#!/bin/sh\nsleep 0.5\necho 'PASS cc'\necho 'PASS git'\necho 'FAIL zig: not found'\necho 'INFO hw h264'\n", { mode: 0o755 });
-  process.env.CCAPP_BIN = bin;
+  fs.writeFileSync(path.join(bin, "agycodroid-selftest"), "#!/bin/sh\nsleep 0.5\necho 'PASS cc'\necho 'PASS git'\necho 'FAIL zig: not found'\necho 'INFO hw h264'\n", { mode: 0o755 });
+  process.env.AGAPP_BIN = bin;
   const a = (await call("/api/env-facts")).body;
   assert.equal(a.supported, true);
   const r1 = (await call("/api/env-facts/rerun", true)).body;
@@ -39,7 +39,7 @@ test("本机自检：没有结果时如实说；点重新自检就跑，跑完�
 });
 
 test("本机自检：没跑出结果 → error 写明原因，旧结果不被冲掉", async () => {
-  fs.writeFileSync(path.join(bin, "cccodroid-selftest"), "#!/bin/sh\necho nothing\n", { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, "agycodroid-selftest"), "#!/bin/sh\necho nothing\n", { mode: 0o755 });
   await call("/api/env-facts/rerun", true);
   let s;
   for (let i = 0; i < 100; i++) { s = (await call("/api/env-facts")).body; if (!s.running) break; await new Promise((ok) => setTimeout(ok, 100)); }
@@ -72,7 +72,7 @@ test("特权免确认时长可选、最长一周：网关只放行固定几档�
   const src = (f) => fs.readFileSync(new URL(f, import.meta.url), "utf8");
   assert.match(src("../gw/devside.mjs"), /\[1, 4, 24, 72, 168\]\.includes\(\+b\.hours\) \? \+b\.hours : 24/);
   assert.match(src("../web/app/10-settings-device.js"), /hours: \+\$\("priv-na-hours"\)\.value \|\| 24/);
-  const java = src("../../android/java/cc/codroid/Priv.java");
+  const java = src("../../android/java/cc/agyroid/Priv.java");
   assert.match(java, /NOASK_HOURS = \{ 1, 4, 24, 72, 168 \}/);
   assert.match(java, /NOASK_MAX = 7L \* 24 \* 3600 \* 1000/);
   assert.ok(!/NOASK_TTL/.test(java), "旧的固定 24 小时常量不再用");

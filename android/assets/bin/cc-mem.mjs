@@ -1,5 +1,5 @@
 // cc-mem —— 内存管家：重活之前清场，跑的时候压住「杀了又活」的后台应用。
-// 经 priv（Shizuku，shell 身份）调 am / dumpsys；默认关闭，在 cccodroid 设置里打开。
+// 经 priv（Shizuku，shell 身份）调 am / dumpsys；默认关闭，在 agycodroid 设置里打开。
 //
 // 保护谁（不碰）：
 //   1. 安卓自己判为前台 / 可见 / 可感知 / 常驻的进程（分屏另一半、挂前台通知的代理、正在播放的音乐……）
@@ -12,8 +12,8 @@ import os from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
-const HOME = process.env.CCAPP_HOME || process.env.HOME || HERE;
-const SETTINGS_FILE = path.join(HOME, "ccapp-settings.json");
+const HOME = process.env.AGAPP_HOME || process.env.HOME || HERE;
+const SETTINGS_FILE = path.join(HOME, "agyapp-settings.json");
 const STATE_FILE = path.join(HOME, ".cc-mem-state.json");
 
 const HELP = `用法:
@@ -32,7 +32,7 @@ const HELP = `用法:
 
 // ── 基础 ──────────────────────────────────────────────────────────────
 function privArgv() {
-  // cccodroid：priv.mjs 和本文件同在 app/bin，直接用 node 跑（解包出来的文件不一定带可执行位）
+  // agycodroid：priv.mjs 和本文件同在 app/bin，直接用 node 跑（解包出来的文件不一定带可执行位）
   const sib = path.join(HERE, "priv.mjs");
   return fs.existsSync(sib) ? [process.execPath, sib] : ["priv"];   // 开发端：PATH 上的 priv
 }
@@ -41,7 +41,7 @@ function priv(cmd, timeout = 30000) {
   // 两路合成一路再读：开发端的 rish 客户端会把输出随机拆到 stdout / stderr 两个管道，分开接收各得一半
   const r = spawnSync(SH, ["-c", `exec "$@" 2>&1`, "sh", ...privArgv(), `{ ${cmd}\n} 2>&1`], { encoding: "utf8", timeout, maxBuffer: 64 << 20 });
   if (r.error) throw new Error(`priv 调用失败：${r.error.message}`);
-  // 125 连不上 cccodroid、126 Shizuku 没运行/没授权、127 起进程失败：都不能当成「没有输出」往下走，否则会显示「可停的应用 0 个」
+  // 125 连不上 agycodroid、126 Shizuku 没运行/没授权、127 起进程失败：都不能当成「没有输出」往下走，否则会显示「可停的应用 0 个」
   if (r.status >= 125 && r.status <= 127) throw new Error((r.stdout || "").replace(/^priv: /gm, "").trim() || "priv 不可用（Shizuku 没启动或没授权）");
   return { out: r.stdout || "", err: r.stdout || "", code: r.status };
 }
@@ -78,7 +78,7 @@ const CLASS_NAME = { pers: "常驻", sys: "系统", fg: "前台", vis: "可见",
 const CORE = [/^android$/, /^android\./, /^com\.android\.(systemui|phone|providers\..*|networkstack.*|bluetooth|nfc|se|shell|server\..*|inputdevices|location\.fused|externalstorage|mtp|settings|permissioncontroller|packageinstaller|vending)$/,
   /^com\.google\.android\.(permissioncontroller|packageinstaller)$/,      // 权限弹窗、安装确认被停掉会打断用户（审查 10-29 第六份 低1）
   /^com\.google\.android\.(gms|gsf|ext\.services)$/, /^moe\.shizuku\.privileged\.api$/, /^cc\.codroid$/, /^li\.dsh\./,
-  /shizuku|rikka/i];   // 包名带这两个词的（Shizuku 的周边应用）：停它们的 am 命令会被 cccodroid 当成动到 Shizuku，在后台直接拒掉（审查 0601d）
+  /shizuku|rikka/i];   // 包名带这两个词的（Shizuku 的周边应用）：停它们的 am 命令会被 agycodroid 当成动到 Shizuku，在后台直接拒掉（审查 0601d）
 
 /** 进程分档（lru）+ 每个进程加载了哪些包（processes）。
  *  后者要紧：停掉一个包，安卓会连带杀掉所有加载过它的进程 —— 停 WebView 包就把用 WebView 的应用全带走了，
@@ -215,7 +215,7 @@ function stopPkgs(pkgs, hard) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function requireEnabled(cfg) {
   if (cfg.enabled) return;
-  console.error("cc-mem: 内存管家没有打开。到 cccodroid「设置 → 内存管家」里打开后再用（status / protected / clear --dry-run 不受限）。");
+  console.error("cc-mem: 内存管家没有打开。到 agycodroid「设置 → 内存管家」里打开后再用（status / protected / clear --dry-run 不受限）。");
   process.exit(3);
 }
 
@@ -363,7 +363,7 @@ function cmdTame(pkgs, undo) {
 function cmdJobs(argv) {
   const i = argv.indexOf("--per"), per = Math.max(50, Number(i >= 0 ? argv[i + 1] : 700) || 700) * 1048576;
   const m = meminfo(), cpus = Math.max(1, (os.availableParallelism ? os.availableParallelism() : os.cpus().length));
-  const reserve = Math.max(1.5 * 1073741824, m.total * 0.12);   // 系统、输入法、WebView、Claude 本身
+  const reserve = Math.max(1.5 * 1073741824, m.total * 0.12);   // 系统、输入法、WebView、Antigravity 本身
   const n = Math.max(1, Math.min(cpus, Math.floor((m.available - reserve) / per)));
   if (argv.includes("--explain")) {
     const g = (b) => (b / 1073741824).toFixed(1) + " GB";

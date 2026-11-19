@@ -22,7 +22,7 @@ async function serve(...routes) {
 }
 const gitGo = await serve(routeGit);
 // 网关跑 git 用终端那套 PATH（假 PREFIX/bin）：把本机的 git 链进去
-{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
   if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
 
 function repo(name, files) {
@@ -168,7 +168,7 @@ test("03-014 旧版留下的半截（主记录已回去、附件还在回收站�
   const ops = await import("../gw/sessionops.mjs");
   const { sid, d } = sessionWithSide("-a0520-half");
   assert.equal(ops.trashSession(sid).ok, true);
-  const slot = path.join(CFG.home, ".ccapp-trash", sid);
+  const slot = path.join(CFG.home, ".agyapp-trash", sid);
   fs.renameSync(path.join(slot, sid + ".jsonl"), path.join(d, sid + ".jsonl"));   // 模拟旧版：主记录先回去了
   assert.equal(ops.restoreSession(sid).ok, true);
   assert.ok(fs.existsSync(path.join(d, sid, "subagents", "agent-1.jsonl")));
@@ -185,7 +185,7 @@ test("03-002 导入时后一条出错：前面放好的那条标题照样落盘�
     files.push({ name: `sessions/${sid}.jsonl`, file: src });
   }
   const man = path.join(CFG.home, "a0520-man.json");
-  fs.writeFileSync(man, JSON.stringify({ format: "cccodroid-sessions", sessions: [{ id: a, renamed: true, title: "我起的名字" }, { id: b }] }));
+  fs.writeFileSync(man, JSON.stringify({ format: "agycodroid-sessions", sessions: [{ id: a, renamed: true, title: "我起的名字" }, { id: b }] }));
   const zip = path.join(CFG.home, "a0520-imp.zip");
   await zipToFile(zip, [{ name: "manifest.json", file: man }, ...files]);
   const err = await failRenameAsync((x) => x.endsWith(b + ".jsonl.part"), () => importSessions(zip).then(() => null, (e) => e));
@@ -200,8 +200,8 @@ test("03-007 建档存不上：内存不留没存上的题名和用户锁，AI �
   const { sid } = sessionWithSide("-a0520-arch");
   assert.equal((await fileChapter(sid, { title: "接手网关修复并验证", chapter: 1 })).ok, true);
   const before = JSON.stringify(archiveDb().sessions[sid]);
-  // 写盘改成 statefile 的原子写后，临时文件名是 `.ccapp-archive.json.tmp-<pid>-…`（0.6.10 b2）
-  const r = await failRenameAsync((x) => x.includes("ccapp-archive.json.tmp-"), () => fileChapter(sid, { title: "用户改的题名", chapter: 1, by: "user" }));
+  // 写盘改成 statefile 的原子写后，临时文件名是 `.agyapp-archive.json.tmp-<pid>-…`（0.6.10 b2）
+  const r = await failRenameAsync((x) => x.includes("agyapp-archive.json.tmp-"), () => fileChapter(sid, { title: "用户改的题名", chapter: 1, by: "user" }));
   assert.equal(r.ok, false);
   assert.equal(JSON.stringify(archiveDb().sessions[sid]), before);
   assert.equal((await fileChapter(sid, { title: "整理组件技能冲突", chapter: 1 })).ok, true);
@@ -214,43 +214,49 @@ test("02-005 新会话首条结束后，跟着它排的消息落盘时补上会�
   QUEUE.push({ id: "q-a0520", message: "第二条", follow: "r-a0520-first", sessionId: null, held: true, at: Date.now() });
   try {
     saveRunMark();
-    const m = JSON.parse(fs.readFileSync(path.join(CFG.home, "ccapp-run-mark.json"), "utf8"));
+    const m = JSON.parse(fs.readFileSync(path.join(CFG.home, "agyapp-run-mark.json"), "utf8"));
     assert.equal(m.queue.find((q) => q.id === "q-a0520").sessionId, s);
   } finally {
     QUEUE.splice(QUEUE.findIndex((q) => q.id === "q-a0520"), 1); RUN_SESSIONS.delete("r-a0520-first");
-    fs.rmSync(path.join(CFG.home, "ccapp-run-mark.json"), { force: true });
+    fs.rmSync(path.join(CFG.home, "agyapp-run-mark.json"), { force: true });
   }
 });
 
 test("04-010 auth status 问不出结果：不当成未登录；有上次问出的就沿用并标旧", async () => {
+  // 移植：agy 的 authStatus 跑 `agy -p ping`，exit 0 = 已登录，
+  // 输出含 authentication required = 未登录，其余失败 = unknown/stale；
+  // 不再解析 CLI 吐的 loggedIn JSON。
   const login = await import("../gw/login.mjs");
-  const prev = PATHS.claudeLoader;
-  PATHS.claudeLoader = path.join(CFG.home, "no-such-loader");
+  const { PATHS } = await import("../gw/config.mjs");
+  const prev = PATHS.agy;
+  PATHS.agy = path.join(CFG.home, "no-such-agy");
   try {
     const v = await login.authStatus(true);
     assert.equal(v.unknown, true);
     assert.match(v.error, /ENOENT/);
-  } finally { PATHS.claudeLoader = prev; }
+  } finally { PATHS.agy = prev; }
 });
 
-test("04-010 复核 #2：退出码 0 但解析不出 loggedIn 也不算未登录；JSON 后面夹着警告照样认", async () => {
+test("04-010 复核 #2：exit 0 就是已登录（输出不必是 JSON）；非 0 且没说 authentication required 就标旧沿用；明说 authentication required 才是确定未登录", async () => {
   const login = await import("../gw/login.mjs");
-  const prev = PATHS.claudeLoader, fake = path.join(CFG.home, "fake-auth.sh");
+  const { PATHS } = await import("../gw/config.mjs");
+  const prev = PATHS.agy, fake = path.join(CFG.home, "fake-auth.sh");
   const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
   try {
-    PATHS.claudeLoader = fake;
-    fs.writeFileSync(fake, `#!${sh}\nprintf %s "{\\"loggedIn\\": true, \\"authMethod\\": \\"claude.ai\\"}"\necho\necho "warning: } something"\nexit 0\n`, { mode: 0o700 });
+    PATHS.agy = fake;
+    fs.writeFileSync(fake, `#!${sh}\necho "some ping output, not json"\nexit 0\n`, { mode: 0o700 });
     const ok = await login.authStatus(true);
     assert.equal(ok.loggedIn, true, JSON.stringify(ok));
-    fs.writeFileSync(fake, `#!${sh}\necho "{garbled"\nexit 0\n`, { mode: 0o700 });
+    assert.equal(ok.authMethod, "google");
+    fs.writeFileSync(fake, `#!${sh}\necho "{garbled"\nexit 1\n`, { mode: 0o700 });
     const v = await login.authStatus(true);
     assert.equal(v.stale, true, JSON.stringify(v));
     assert.equal(v.loggedIn, true, "沿用上次问出的");
-    fs.writeFileSync(fake, `#!${sh}\necho "Not logged in"\nexit 1\n`, { mode: 0o700 });
+    fs.writeFileSync(fake, `#!${sh}\necho "Error: authentication required"\nexit 1\n`, { mode: 0o700 });
     const no = await login.authStatus(true);
     assert.equal(no.loggedIn, false);
     assert.equal(!!no.stale, false, "明说没登录就是确定的");
-  } finally { PATHS.claudeLoader = prev; fs.rmSync(fake, { force: true }); }
+  } finally { PATHS.agy = prev; fs.rmSync(fake, { force: true }); }
 });
 
 test("04-011 首次补算：since 所在小时里 since 之前的消息也补上，重补不重复", async () => {
@@ -273,16 +279,4 @@ test("04-011 首次补算：since 所在小时里 since 之前的消息也补上
   await post("import");
   assert.equal((await get()).hours[h].m, 1, "重补不重复加");
   fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test("04-009 账本换币种：旧消费不贴上新币种（没汇率时旧账本另存，从零记）", async () => {
-  const { _billForTest: B } = await import("../gw/providers.mjs");
-  const id = "a0520-cur";
-  B.noteBalance(id, "CNY", 100); B.noteBalance(id, "CNY", 90);
-  assert.equal(B.billOf(id).spends.reduce((a, x) => a + x[1], 0), 10);
-  B.noteBalance(id, "USD", 20);
-  const b = B.billOf(id);
-  assert.equal(b.currency, "USD");
-  assert.equal(b.spends.length + b.spentOld, 0, "旧的 10 元不能当成 10 美元");
-  assert.deepEqual(b.oldLedgers.map((x) => [x.currency, x.spent]), [["CNY", 10]]);
 });

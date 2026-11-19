@@ -1,7 +1,7 @@
 // 脉络 · 网关这一侧：扫全部会话（含回收站）、增量缓存、给前端的 /api/lineage。
 // 推断逻辑在 lineage-core.mjs；显式记录（分叉 / 回退时写）在 lineage-store.mjs。规划见 claude-workspace/session-lineage-plan.md。
 //
-// 缓存：每个会话按字节偏移增量读，结果落在 home/.cache/ccapp-lineage-index.json。
+// 缓存：每个会话按字节偏移增量读，结果落在 home/.cache/agyapp-lineage-index.json。
 // 开发端 900 MB 的会话从头扫一遍约 15 秒，所以不能每次重启都重扫；落盘后重启只读新追加的部分。
 // 会话记录（jsonl）一个字节都不改。
 import fs from "node:fs";
@@ -16,8 +16,8 @@ import { runOfSession } from "./runs.mjs";
 import { emptyRecord, inferParents, scanSession, weakPrompt } from "./lineage-core.mjs";
 import { lineageDb } from "./lineage-store.mjs";
 
-const CACHE_FILE = path.join(CFG.home, ".cache", "ccapp-lineage-index.json");
-const TRASH_DIR = path.join(CFG.home, ".ccapp-trash");
+const CACHE_FILE = path.join(CFG.home, ".cache", "agyapp-lineage-index.json");
+const TRASH_DIR = path.join(CFG.home, ".agyapp-trash");
 const SID = /^[0-9a-f-]{36}$/i;
 
 let RECS = null;          // id → 记录（lineage-core 的 scanSession 结果）
@@ -239,7 +239,7 @@ export async function lineageGraph() {
     edges.push({ child, parent: x.id, at: x.at || null, ts: tsAt(RECS.get(x.id), x.at), kind: "merge", source: "explicit", how: x.how || "", missing: !RECS.has(x.id) });
     linked.add(child + ">" + x.id);
   }
-  // 汇合记录丢了（导到别的设备、手动删过 ccapp-lineage.json）：按第一条消息末尾的落款重建
+  // 汇合记录丢了（导到别的设备、手动删过 agyapp-lineage.json）：按第一条消息末尾的落款重建
   const byShort = new Map();
   for (const id of RECS.keys()) { const k = id.slice(0, 4); byShort.set(k, byShort.has(k) ? null : id); }
   for (const r of RECS.values()) {

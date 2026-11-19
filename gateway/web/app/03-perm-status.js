@@ -1,30 +1,34 @@
   // ── 权限确认 ─────────────────────────────────────────────────────
-  //  claude 要跑需确认的工具时，网关把 can_use_tool 转成 perm_request 事件。
+  //  agy 要跑需确认的工具时，网关把审批请求转成 perm_request 事件。
   //  卡片挂在对应工具卡下面；输入框上方另有一条常驻提示（翻到上面去了、分屏切回来也看得见）。
-  //  参数一律以 claude 发来的为准，前端只回「允许 / 拒绝 / 始终允许 / 选项答案」。
+  //  参数一律以 agy 发来的为准，前端只回「允许 / 拒绝」。
+  //  agy 没有逐条审批弹窗：未预先放行的工具会被软拒绝（继续跑、退出码 0，提示写在 stderr 里），
+  //  所以这里只处理网关转来的确认请求，不编造 Claude 的审批协议。
   const PERMS = new Map();          // id → { p, runId, el, done }
   const permBar = $("perm-bar");
   let permWaiting = false;          // 状态栏此刻显示的是「等你确认」
-  const MODE_KEYS = ["default", "acceptEdits", "plan", "auto", "bypassPermissions"];
-  const modeLabel = (m) => ({
-    default: t("逐项确认"), acceptEdits: t("自动接受编辑"), plan: t("只做计划"),
-    auto: t("自动判断"), dontAsk: t("不询问"), bypassPermissions: t("全部放行"),
+  // agy 的两组设置：toolPermission（工具审批）与 agentMode（代理模式）
+  const TP_KEYS = ["request-review", "proceed-in-sandbox", "always-proceed", "strict"];
+  const AM_KEYS = ["", "accept-edits", "auto", "plan"];
+  const tpLabel = (m) => ({
+    "request-review": t("逐项确认"), "proceed-in-sandbox": t("沙箱中继续"),
+    "always-proceed": t("始终继续"), strict: t("严格"),
   }[m] || m || "");
-  function setPermChip(m) {
-    if (!m) return;
-    state.permissionMode = m;
-    permEl.innerHTML = (m === "bypassPermissions" ? '<svg class="ei" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></svg>' : "") + esc(modeLabel(m));
-    permEl.classList.toggle("danger", m === "bypassPermissions");
+  const amLabel = (m) => ({
+    "": t("默认"), "accept-edits": t("自动接受编辑"), auto: t("自动"), plan: t("只出计划"),
+  }[m] ?? m ?? "");
+  // 旧名保留给别处调用：modeLabel 现在指代理模式
+  const modeLabel = (m) => amLabel(m);
+  function setPermChip(tp, am) {
+    if (tp != null) state.toolPermission = tp;
+    if (am != null) state.agentMode = am;
+    const tpv = state.toolPermission || state.settings.toolPermission || "request-review";
+    const amv = state.agentMode ?? state.settings.agentMode ?? "";
+    state.toolPermission = tpv; state.agentMode = amv;
+    state.permissionMode = amv;
+    permEl.innerHTML = (tpv === "always-proceed" ? '<svg class="ei" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></svg>' : "") + esc(tpLabel(tpv) + " · " + amLabel(amv));
+    permEl.classList.toggle("danger", tpv === "always-proceed");
   }
-
-  function permRules(p) {
-    const out = [];
-    for (const s of p.suggestions || []) {
-      if (s.type === "addRules") for (const r of s.rules || []) out.push(r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName);
-    }
-    return out;
-  }
-  const permSuggestsEdits = (p) => (p.suggestions || []).some((s) => s.type === "setMode" && s.mode === "acceptEdits");
 
   // 别叫 diffHtml：各段拼在同一个作用域里，16 段版本面板的 diffHtml(text) 会把它盖掉，
   // 权限卡上 Edit 的新内容就不显示了，人可能在看不到要写什么的情况下点了允许（审查 #49 P1-1）
@@ -61,96 +65,41 @@
       case "UserConfig": {
         // 用户级配置的改动 + 之前的对话留下的后台进程（网关 userconf.mjs / leftover.mjs）
         const kindL = (k) => ({ added: t("新增"), changed: t("改动"), removed: t("删除"), transient: t("改过又改回") }[k] || "");
-        h = (i.first ? `<div class="perm-sub">${t("第一次检查：下面这些配置每次对话都会交给 Claude，确认一下是不是你自己放的。")} ${t("撤销会把它挪进 ~/.ccapp-userconf/quarantine，找得回来。")}</div>` : "")
+        h = (i.first ? `<div class="perm-sub">${t("第一次检查：下面这些配置每次对话都会交给 Antigravity，确认一下是不是你自己放的。")} ${t("撤销会把它挪进 ~/.agyapp-userconf/quarantine，找得回来。")}</div>` : "")
           + (i.changes || []).map((c) => c.kind === "more" ? `<div class="perm-path">${esc(c.rel)}</div>${c.preview ? `<pre class="perm-cmd">${esc(c.preview)}</pre>` : ""}` : `<div class="perm-path">${esc(kindL(c.kind))} ~/${esc(c.rel)}${c.during ? " · " + t("在一轮对话运行期间改的") : ""}${c.again ? " · " + t("撤销后又被改回来（第 {n} 次）", { n: c.again + 1 }) : ""}</div>${c.preview ? `<pre class="perm-cmd">${esc(c.preview)}</pre>` : ""}`).join("")
           + ((i.procs || []).length ? `<div class="perm-sub">${t("之前的对话留下、还在后台运行的程序：")}</div><pre class="perm-cmd">${esc(i.procs.map((x) => `${x.pid}  ${x.kind === "unknown" ? "[" + t("来源不明") + "] " : ""}${x.cmd}`).join("\n"))}</pre>` : "");
         break;
       }
       case "ProjectConfig": h = `<div class="perm-path">${esc(i.dir || "")}</div><pre class="perm-cmd">${esc((i.risks || []).join("\n"))}</pre>`; break;
       case "WebSearch": h = `<pre class="perm-cmd">${esc(i.query || "")}</pre>`; break;
-      case "ExitPlanMode": h = `<div class="perm-plan">${renderMd(String(i.plan || ""))}</div>`; break;
-      case "AskUserQuestion":
-        h = (i.questions || []).map((q, qi) => `
-          <div class="perm-q" data-q="${qi}">
-            <div class="perm-qt">${esc(q.question || "")}</div>
-            <div class="perm-opts">${(q.options || []).map((o) => `
-              <label class="perm-opt"><input type="${q.multiSelect ? "checkbox" : "radio"}" name="pq-${esc(p.id)}-${qi}" value="${esc(o.label)}">
-                <span><b>${esc(o.label)}</b>${o.description ? `<small>${esc(o.description)}</small>` : ""}</span></label>`).join("")}
-            </div>
-            <input class="perm-other" placeholder="${t("或者直接写你的回答…")}">
-          </div>`).join("");
-        break;
       default:
         h = `<pre class="perm-cmd">${esc(JSON.stringify(i, null, 2).slice(0, 4000))}</pre>`;
     }
     if (p.blockedPath && !["Edit", "Write", "MultiEdit"].includes(p.tool) && !String(i.command || "").includes(p.blockedPath)) h += `<div class="perm-sub">${t("涉及路径：{p}", { p: esc(p.blockedPath) })}</div>`;
     if (p.reason && typeof p.reason === "string") h += `<div class="perm-sub">${t("原因：{r}", { r: esc(p.reason) })}</div>`;
-    // 敏感操作再确认（网关的 guard 钩子）：说清楚碰到了什么、为什么要多问一句
-    if (p.guard) h = `<div class="perm-guard"><b>${esc(permGuardWhat(p.guard, p.input))}</b><p>${p.guard.cat === "userconf"
-      ? t("这些改动如果不是你自己做的、或者认不出来，选「撤销」：配置恢复到上次确认时的样子（新多出来的文件挪进隔离目录，不删），留下的程序会被结束。是你自己改的就选「保留」，以后不再问。")
-      : p.guard.cat === "error"
-      ? t("正常情况下不会出现。拿不准这一步是做什么的，就拒绝。")
-      : p.guard.cat === "project"
-      ? t("这些配置会以本应用的身份直接运行程序。不是你自己写的、或者来路不明的项目，选「不加载」：这一轮照常进行，只是不用它们。允许后记住，配置变了会再问。")
-      : t("如果不是你让它这么做的，多半是它读到的网页或文件里藏了指令，建议拒绝。允许后，这一轮里同一类操作不再问。")}</p></div>` + h;
     return h;
   }
 
-  function permGuardWhat(g, i) {
-    const c = String(g.cat || "");
-    if (c === "userconf") return (i?.changes || []).length ? t("会交给 Claude 的用户级配置有变化，没经过你确认") : t("之前的对话留下了还在运行的后台程序");
-    if (c === "error") return t("安全检查自己出错了，判断不了这一步");
-    if (c === "device:screen") return t("要读屏幕或替你操作别的应用（{w}）", { w: g.what });
-    if (c === "device:clipboard") return t("要读剪贴板");
-    if (c === "device:share") return t("要把文件分享到别的应用");
-    if (c === "project") return t("这个项目带了打开就会自动运行的配置（钩子、MCP 服务器等）");
-    // what 是「英文类别: 命中的那段路径」，界面只显示路径那段
-    const w = String(g.what || ""), k = w.indexOf(": ");
-    if (c.startsWith("prompt:")) return t("要改管着提示词或安全检查的文件：{w}", { w: k > 0 ? w.slice(k + 2) : w });
-    return t("碰到了密钥或登录凭据：{w}", { w: k > 0 ? w.slice(k + 2) : w });
-  }
-
-  // 这张卡所属那一轮实际在用的模式：并行时各轮可能不同（项目默认、会话单独选），别拿全局的芯片值猜（DeepSeek 复核 11-02）
-  const runMode = (runId) => (srv.runs.find((r) => r.id === runId) || {}).permMode || state.permissionMode;
-  // 和 gw/config.mjs 的 WIDE_PERM_MODES 是同一张表，改一处要同步另一处
-  const WIDE_MODES = ["bypassPermissions", "auto", "dontAsk"];
+  // agy 没有 PreToolUse 钩子，也就没有 guard 类敏感操作卡：确认卡只有「允许 / 拒绝」。
   function permActions(p, runId) {
-    if (p.guard) return `
-      <button class="pa-allow">${p.guard.cat === "userconf" ? t("是我做的，保留") : p.guard.cat === "project" ? t("允许并记住") : t("允许")}</button>
-      <button class="pa-more primary">${p.guard.cat === "userconf" ? t("撤销 ▾") : p.guard.cat === "project" ? t("不加载 ▾") : t("拒绝 ▾")}</button>`;
-    if (p.tool === "ExitPlanMode") {
-      // 用户本来就放得比「自动接受编辑」宽（全部放行等）时，批准计划不该顺手把全局模式降下来（群友反馈）
-      const cur = runMode(runId), keep = WIDE_MODES.includes(cur);
-      return `
-      ${keep ? `<button class="pa-allow primary" data-mode="${esc(cur)}" data-keep="1">${t("批准，按当前模式执行（{m}）", { m: esc(modeLabel(cur)) })}</button>` : ""}
-      <button class="pa-allow${keep ? "" : " primary"}" data-mode="default">${t("批准，逐项确认执行")}</button>
-      <button class="pa-allow" data-mode="acceptEdits">${t("批准，自动接受编辑")}</button>
-      <button class="pa-more">${t("再改改 ▾")}</button>`;
-    }
-    if (p.tool === "AskUserQuestion") return `
-      <button class="pa-answer primary">${t("提交回答")}</button>
-      <button class="pa-more">${t("不回答 ▾")}</button>`;
-    const rules = permRules(p);
     return `
       <button class="pa-allow primary">${t("允许")}</button>
-      ${rules.length ? `<button class="pa-always" title="${esc(rules.join("\n"))}">${t("始终允许")} <code>${esc(rules[0].length > 40 ? rules[0].slice(0, 40) + "…" : rules[0])}</code></button>` : ""}
-      ${permSuggestsEdits(p) ? `<button class="pa-allow" data-mode="acceptEdits">${t("允许，之后的编辑都不再问")}</button>` : ""}
       <button class="pa-more">${t("拒绝 ▾")}</button>`;
   }
 
   function PermCard(p, runId) {
     const el = document.createElement("div");
-    el.className = p.guard ? "perm guard" : "perm";
+    el.className = "perm";
     el.dataset.id = p.id;
-    const kind = p.tool === "ExitPlanMode" ? t("计划待批准") : p.tool === "AskUserQuestion" ? t("Claude 想问你") : p.guard ? t("敏感操作") : t("需要确认");
+    const kind = t("需要确认");
     el.innerHTML = `
       <div class="perm-head"><span class="perm-kind">${uiI("pause")}${kind}</span><span class="perm-tool">${esc(p.tool)}</span>${p.agentId ? `<span class="perm-sub">${t("子代理")}</span>` : ""}</div>
       <div class="perm-body">${permPreview(p)}</div>
       <div class="perm-acts">${permActions(p, runId)}</div>
       <div class="perm-deny hidden">
-        <textarea rows="2" placeholder="${p.tool === "ExitPlanMode" ? t("说说要怎么改（会发回给 Claude）") : t("可选：告诉 Claude 为什么 / 该怎么做")}"></textarea>
+        <textarea rows="2" placeholder="${t("可选：告诉 Antigravity 为什么 / 该怎么做")}"></textarea>
         <div class="perm-acts">
-          <button class="pa-deny">${p.tool === "ExitPlanMode" ? t("发回意见") : p.tool === "UserConfig" ? t("撤销改动") : t("拒绝")}</button>
+          <button class="pa-deny">${p.tool === "UserConfig" ? t("撤销改动") : t("拒绝")}</button>
           <button class="pa-stop">${p.tool === "UserConfig" ? t("撤销并停止") : t("拒绝并停止")}</button>
         </div>
       </div>`;
@@ -170,33 +119,12 @@
         return;
       }
       const msg = el.querySelector(".perm-deny textarea").value.trim();
-      if (b.classList.contains("pa-allow")) return permAnswer(p.id, { behavior: "allow", mode: b.dataset.mode && (b.dataset.keep || b.dataset.mode !== runMode(runId)) ? b.dataset.mode : undefined });
+      if (b.classList.contains("pa-allow")) return permAnswer(p.id, { behavior: "allow" });
       if (b.classList.contains("pa-always")) return permAnswer(p.id, { behavior: "allow", always: true });
       if (b.classList.contains("pa-deny")) return permAnswer(p.id, { behavior: "deny", message: msg });
       if (b.classList.contains("pa-stop")) return permAnswer(p.id, { behavior: "deny", message: msg, interrupt: true });
-      if (b.classList.contains("pa-answer")) {
-        const answers = {};
-        el.querySelectorAll(".perm-q").forEach((qe) => {
-          const q = (p.input.questions || [])[+qe.dataset.q];
-          const other = qe.querySelector(".perm-other").value.trim();
-          const picked = [...qe.querySelectorAll("input:checked")].map((x) => x.value);
-          const v = other || picked.join(", ");
-          if (q && v) answers[q.question] = v;
-        });
-        if (!Object.keys(answers).length) return toast(t("先选一个选项，或者写下你的回答"), true);
-        return permAnswer(p.id, { behavior: "allow", answers });
-      }
     });
     return el;
-  }
-
-  // 模式在卡片等着的时候变了（设置里切、别的会话切）：还没答的计划卡按新模式重排按钮，别留着过期的「按当前模式」
-  function refreshPlanActs() {
-    for (const it of PERMS.values()) {
-      if (it.done || !it.el || it.p.tool !== "ExitPlanMode") continue;
-      const acts = it.el.querySelector(".perm-acts"), html = permActions(it.p, it.runId);
-      if (acts && acts.dataset.html !== html) { acts.innerHTML = html; acts.dataset.html = html; }
-    }
   }
 
   async function permAnswer(id, body) {
@@ -222,11 +150,11 @@
     const label = p.tool === "UserConfig" && behavior === "allow" ? t("✓ 已保留")
       : p.tool === "UserConfig" && behavior === "deny" ? (o.interrupt ? t("↩ 已撤销并停止") : t("↩ 已撤销"))
       : behavior === "allow"
-      ? (p.tool === "ExitPlanMode" ? t("✓ 已批准计划") : p.tool === "AskUserQuestion" ? t("✓ 已回答") : o.always ? t("✓ 已允许（始终）") : t("✓ 已允许"))
-      : behavior === "deny" ? (o.expired ? t("超时") : o.interrupt ? t("✗ 已拒绝并停止") : p.tool === "ExitPlanMode" ? t("↩ 已退回修改") : t("✗ 已拒绝"))
+      ? (o.always ? t("✓ 已允许（始终）") : t("✓ 已允许"))
+      : behavior === "deny" ? (o.expired ? t("超时") : o.interrupt ? t("✗ 已拒绝并停止") : t("✗ 已拒绝"))
       : behavior === "cancel" ? t("已撤回") : behavior === "stopped" ? t("已停止（这一轮结束了）") : t("已失效");
     const tc = p.toolUseId && TOOL_CARDS.get(p.toolUseId);
-    if (it.el && tc && tc.el && tc.el.isConnected && p.tool !== "ExitPlanMode" && p.tool !== "AskUserQuestion") {
+    if (it.el && tc && tc.el && tc.el.isConnected) {
       const tag = document.createElement("span");
       tag.className = "perm-tag " + (behavior === "allow" ? "ok" : "no");
       tag.textContent = label;
@@ -240,8 +168,8 @@
     } else if (it.el) {
       it.el.classList.remove("busy");
       it.el.classList.add("done", behavior === "allow" ? "ok" : "no");
-      // 收起成一行，留在记录里；计划和问答的正文还有用，留着
-      if (p.tool !== "ExitPlanMode" && p.tool !== "AskUserQuestion") it.el.querySelector(".perm-body").remove();
+      // 收起成一行，留在记录里
+      it.el.querySelector(".perm-body").remove();
       it.el.querySelectorAll(".perm-acts, .perm-deny").forEach((x) => x.remove());
       it.el.querySelectorAll("input").forEach((x) => { x.disabled = true; });
       it.el.querySelector(".perm-head").innerHTML = `<span class="perm-res">${label}</span><span class="perm-tool">${esc(p.tool)}</span><span class="tool-arg">${esc(String(what).slice(0, 90))}</span>`;
@@ -253,11 +181,10 @@
   function permFormRead(el) {
     const deny = el.querySelector(".perm-deny");
     return { ck: [...el.querySelectorAll(".perm-body input[type=checkbox], .perm-body input[type=radio]")].map((x) => x.checked),
-      ot: [...el.querySelectorAll(".perm-other")].map((x) => x.value), deny: deny.querySelector("textarea").value, open: !deny.classList.contains("hidden") };
+      ot: [], deny: deny.querySelector("textarea").value, open: !deny.classList.contains("hidden") };
   }
   function permFormRestore(el, f) {
     el.querySelectorAll(".perm-body input[type=checkbox], .perm-body input[type=radio]").forEach((x, i) => { if (f.ck[i] != null) x.checked = f.ck[i]; });
-    el.querySelectorAll(".perm-other").forEach((x, i) => { if (f.ot[i] != null) x.value = f.ot[i]; });
     el.querySelector(".perm-deny textarea").value = f.deny || "";
     el.querySelector(".perm-deny").classList.toggle("hidden", !f.open);
   }
@@ -288,7 +215,7 @@
   const chatCovered = () => typeof $ === "function" && COVER_IDS.some((id) => { const el = $(id); return el && !el.classList.contains("hidden"); });
   function revealChat() {
     // 逐层收（返回键同一套顺序）：查看器有未保存修改时会先问，那是用户该回答的
-    for (let n = 0; n < 8 && chatCovered(); n++) if (!window.__ccBack || !window.__ccBack()) break;
+    for (let n = 0; n < 8 && chatCovered(); n++) if (!window.__agyBack || !window.__agyBack()) break;
   }
   function askNotice(list) {
     let first = null;
@@ -298,7 +225,7 @@
     // 一次只登记这一条：以前把同批全部记成「已提醒」，后面的卡再也不弹（0.6.9 审计 195-B.8）
     ASK_SEEN.add(first.id);
     const r = srv.runs.find((y) => y.id === first.runId);
-    toastAct(t("Claude 在等你确认"), t("查看"), () => {
+    toastAct(t("Antigravity 在等你确认"), t("查看"), () => {
       if (r && r.sessionId && r.sessionId !== view.sessionId) { revealChat(); return openSession(r.sessionId); }
       revealChat();
     });
@@ -440,28 +367,23 @@
     permBar.classList.toggle("hidden", !list.length && !state.settings.permNotice);
     if (!list.length) {
       permBar.innerHTML = state.settings.permNotice ? `
-        <div class="pb-note"><span>${t("权限模式已改为「逐项确认」，与官方一致：改文件、跑命令前会先问你。想恢复全部放行，点下方的权限标签。")}</span>
+        <div class="pb-note"><span>${t("工具审批已改为「逐项确认」：改文件、跑命令前会先问你。想放宽，点下方的权限标签。未预先放行的工具会被软拒绝：继续跑、退出码 0，提示写在 stderr 里。")}</span>
         <button class="pb-x" aria-label="${t("关闭")}">${uiI("x")}</button></div>` : "";
       if (permWaiting && isBusy()) setStatus(t("生成中…"), "live");
       permWaiting = false;
       return;
     }
-    // 敏感卡（guard）不能当成 simple、不进「全部允许」（0.6.9 审计 195-B.3）。但全部放行模式下弹出来的只剩敏感卡，
-    // 底部条一个「允许」都没有（用户 11-09）：单个敏感卡带上卡片同一句风险说明再给「允许」；
-    // 用户级配置 / 项目配置两种的选项不是允许拒绝（保留撤销、记住），仍只给「查看」
-    const f = list[0].p, simple = (it) => !it.p.guard && it.p.tool !== "ExitPlanMode" && it.p.tool !== "AskUserQuestion";
-    const quick = (it) => simple(it) || (!!it.p.guard && it.p.tool !== "ExitPlanMode" && it.p.tool !== "AskUserQuestion" && it.p.guard.cat !== "userconf" && it.p.guard.cat !== "project");
+    const f = list[0].p;
     const what = f.tool === "Bash" ? f.input.command : (f.input.file_path || f.input.url || f.input.query || "");
     permBar.innerHTML = `
       <div class="pb-main">
         ${list.length > 1 ? `<span class="pb-n">${t("第 {i}/{n} 个", { i: 1, n: list.length })}</span>` : ""}
-        <span class="pb-txt${f.guard ? " wrap" : ""}">${uiI("pause")}${f.tool === "ExitPlanMode" ? t("计划待批准") : f.tool === "AskUserQuestion" ? t("Claude 想问你") : t("Claude 在等你确认") + " · "}${simple(list[0]) ? `<b>${esc(f.tool)}</b> <span class="mono">${esc(String(what || "").slice(0, 80))}</span>`
-          : quick(list[0]) ? `<b>${t("敏感操作")}</b> ${esc(permGuardWhat(f.guard, f.input))}` : ""}</span>
-        ${quick(list[0]) ? `<button class="pb-allow primary" data-id="${esc(String(f.id))}">${t("允许")}</button>` : ""}
+        <span class="pb-txt">${uiI("pause")}${t("Antigravity 在等你确认") + " · "}<b>${esc(f.tool)}</b> <span class="mono">${esc(String(what || "").slice(0, 80))}</span></span>
+        <button class="pb-allow primary" data-id="${esc(String(f.id))}">${t("允许")}</button>
         <button class="pb-view">${t("查看")}</button>
       </div>
       ${list.length > 1 ? `<div class="pb-more">${t("还有 {n} 项", { n: list.length - 1 })}
-        ${list.every(simple) ? `<button class="pb-all">${t("全部允许")}</button>` : ""}</div>` : ""}`;
+        <button class="pb-all">${t("全部允许")}</button></div>` : ""}`;
     setStatus(t("等你确认…"), "warn");
     permWaiting = true;
   }
@@ -501,16 +423,24 @@
     if (OV.at(permEl)) return OV.close(OV.at(permEl));
     const m = document.createElement("div");
     m.id = "perm-menu";
-    const desc = {
-      default: t("读文件不问；改文件、跑命令、联网前先问你"),
-      acceptEdits: t("改文件不问，跑命令还要问"),
-      plan: t("只读和出计划，等你批准再动手"),
-      auto: t("由 Claude 的分类器判断哪些要问（实验）"),
-      bypassPermissions: t("什么都不问。Claude 可以不经你同意删文件、跑任意命令"),
+    const tpDesc = {
+      "request-review": t("读文件不问；改文件、跑命令、联网前先问你"),
+      "proceed-in-sandbox": t("在沙箱里继续，沙箱外的操作还要问"),
+      "always-proceed": t("什么都不问。agy 可以不经你同意改文件、跑命令"),
+      strict: t("能问的都问，最严"),
     };
-    m.innerHTML = MODE_KEYS.map((k) => `
-      <button data-mode="${k}" class="${k === state.permissionMode ? "cur" : ""}${k === "bypassPermissions" ? " danger" : ""}">
-        <b>${modeLabel(k)}</b><small>${desc[k]}</small></button>`).join("");
+    const amDesc = {
+      "": t("默认"), "accept-edits": t("改文件不问，跑命令还要问"),
+      auto: t("由 agy 自动判断"), plan: t("只读和出计划，等你批准再动手"),
+    };
+    const tpv = state.toolPermission || "request-review", amv = state.agentMode ?? "";
+    m.innerHTML = `<div class="pm-sec"><b>${t("工具审批")}</b>` + TP_KEYS.map((k) => `
+      <button data-tp="${k}" class="${k === tpv ? "cur" : ""}${k === "always-proceed" ? " danger" : ""}">
+        <b>${tpLabel(k)}</b><small>${tpDesc[k]}</small></button>`).join("") + `</div>
+      <div class="pm-sec"><b>${t("代理模式")}</b>` + AM_KEYS.map((k) => `
+      <button data-am="${k}" class="${k === amv ? "cur" : ""}">
+        <b>${amLabel(k)}</b><small>${amDesc[k]}</small></button>`).join("") + `</div>
+      <div class="tiny">${t("未预先放行的工具会被软拒绝：继续跑、退出码 0，提示写在 stderr 里。")}</div>`;
     OV.open(m, { anchor: permEl });
     const r = permEl.getBoundingClientRect(), col = colRect(), mw = Math.min(m.offsetWidth, col.width - 16);
     m.style.maxWidth = (col.width - 16) + "px";
@@ -523,39 +453,41 @@
       const b = ev.target.closest("button");
       if (!b) return;
       OV.close(m);
-      changePermMode(b.dataset.mode);
+      if (b.dataset.tp) changePermMode({ toolPermission: b.dataset.tp });
+      else if (b.dataset.am != null) changePermMode({ agentMode: b.dataset.am });
     });
   });
 
-  async function changePermMode(mode) {
-    // 不能只看标签一样就不发：标签可能是旧的（重放过旧事件），用户要收紧时必须真送到网关（安全通告 GHSA-2w6p）
-    if (!mode || (mode === state.permissionMode && mode === "bypassPermissions")) return;
-    if (mode === "bypassPermissions" && !confirm(t("切到「全部放行」？\n\nClaude 将不再询问，可以直接改写、删除文件，运行任意命令，访问网络。只在你信任当前任务、且出了事能承受的时候用。"))) {
-      // 取消：下拉框回到全局设置，不能被 chip 的运行模式带跑（0.6.9 审计 195-B.9）
-      $("set-perm").value = state.settings.permissionMode || state.permissionMode;
+  async function changePermMode(patch) {
+    // 兼容旧调用：传字符串当作代理模式
+    if (typeof patch === "string") patch = AM_KEYS.includes(patch) ? { agentMode: patch } : {};
+    if (!patch || typeof patch !== "object") return;
+    const tp = patch.toolPermission ?? state.toolPermission ?? state.settings.toolPermission ?? "request-review";
+    const am = patch.agentMode ?? state.agentMode ?? state.settings.agentMode ?? "";
+    const revertSel = () => {
+      const t = $("set-toolperm"); if (t) t.value = state.settings.toolPermission || "request-review";
+      const a = $("set-agentmode"); if (a) a.value = state.settings.agentMode || "";
+    };
+    if (patch.toolPermission === "always-proceed" && (state.toolPermission || state.settings.toolPermission) !== "always-proceed"
+      && !confirm(t("切到「始终继续」？\n\nagy 将不再询问，可以直接改写、删除文件，运行任意命令，访问网络。只在你信任当前任务、且出了事能承受的时候用。"))) {
+      revertSel();
       return;
     }
     try {
-      const r = await api("/api/perm/mode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode }) });
-      // 网关回的是实际生效的 mode（安全模式下会自动退回 default）和用户选的 wanted（0.6.9 审计 195-A.6 / P1-12）
-      const eff = r.mode || r.wanted || mode;
-      state.settings.permissionMode = r.wanted || r.mode || mode;   // 全局设置记用户选的；chip / 下拉显示实际生效的
-      setPermChip(eff);
-      $("set-perm").value = eff;
-      for (const x of srv.runs) if (x.permMode) x.permMode = eff;   // 同 perm_mode 事件：等着的计划卡跟着重排（#175-2）
-      refreshPlanActs();
-      if (eff !== mode) toast(t("安全模式下不问人的几档不生效，现在是「逐项确认」"));
-      else if (r.saved === false) toast(t("设置没保存上，重启后会回到原来的权限模式"), true);
-      else toast(r.live ? t("已切到「{m}」，这一轮当场生效", { m: modeLabel(eff) }) : t("已切到「{m}」", { m: modeLabel(eff) }));
+      const r = await api("/api/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ toolPermission: tp, agentMode: am }) });
+      state.settings.toolPermission = (r.settings && r.settings.toolPermission) || tp;
+      state.settings.agentMode = (r.settings && r.settings.agentMode) ?? am;
+      setPermChip(state.settings.toolPermission, state.settings.agentMode);
+      revertSel();
+      toast(t("已切到「{m} · {a}」", { m: tpLabel(state.settings.toolPermission), a: amLabel(state.settings.agentMode) }));
     } catch (err) {
-      // 保存失败：下拉框回到全局设置，别停在新值让人以为切了（0.6.9 审计 196-显示.1）
-      $("set-perm").value = state.settings.permissionMode || state.permissionMode;
+      revertSel();
       toast(err.message, true);
     }
   }
 
   // 回复底下的「复制 / 转发」：只取正文（Markdown 原文，多段之间空一行），思考和工具调用不算。
-  // 转发走外壳的系统分享面板（CCApp.shareText）；外壳没有这个接口时退回 Web Share，都没有就复制并说明。
+  // 转发走外壳的系统分享面板（AGApp.shareText）；外壳没有这个接口时退回 Web Share，都没有就复制并说明。
   // 提问和回复底下一律四个键（提问：复制 / 重发 / 回退 / 删除；回复：复制 / 转发 / 分叉 / 删除），别因为环境不同少一个
   function replyActs(msgEl, getText) {
     if (msgEl.querySelector(":scope > .msg-acts")) return;
@@ -570,7 +502,7 @@
       const a = e.target.closest("button")?.dataset.a, text = getText();
       if (a === "copy") copyText(text).then((ok) => toast(ok ? t("已复制") : t("复制失败"), !ok));
       if (a === "share") {
-        if (window.CCApp && CCApp.shareText) CCApp.shareText(text);
+        if (window.AGApp && AGApp.shareText) AGApp.shareText(text);
         else if (navigator.share) navigator.share({ text }).catch(() => {});
         else copyText(text).then((ok) => toast(ok ? t("这里没有系统分享，已复制到剪贴板") : t("复制失败"), !ok));
       }
@@ -581,7 +513,7 @@
     msgEl.appendChild(acts);
   }
 
-  // 删一条消息：提问只删这一条；回复删整条（连同它的工具调用和结果）。改的是会话记录本身，Claude 下一轮就看不到了。
+  // 删一条消息：提问只删这一条；回复删整条（连同它的工具调用和结果）。改的是会话记录本身，Antigravity 下一轮就看不到了。
   // 删完直接从界面上拿掉（不重载，滚动位置不跳）；提示条上能撤销最近一次
   async function deleteMsg(msgEl, which) {
     const sid = view.sessionId;
@@ -597,7 +529,7 @@
     // 记录是原地重写的，删点之后的字节偏移都会挪：把手里的游标交给网关一起换算（#153-1）
     const pages = [...histPages()], gen = view.gen;
     const offs = [view.next, view.cursor, ...pages.flatMap((p) => [p.dataset.from, p.dataset.to])].filter((x) => x != null && x !== "").map(Number);
-    if (!confirm(which === "user" ? t("删掉这条提问？Claude 之后就看不到它了（它的回复保留）。") : t("删掉这条回复？连同它的工具调用和结果一起删，Claude 之后就看不到了。"))) return;
+    if (!confirm(which === "user" ? t("删掉这条提问？Antigravity 之后就看不到它了（它的回复保留）。") : t("删掉这条回复？连同它的工具调用和结果一起删，Antigravity 之后就看不到了。"))) return;
     try {
       const r = await api("/api/session/" + encodeURIComponent(sid) + "/delmsg", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -706,8 +638,8 @@
       const list = files.slice(0, 8).map((f) => `<li title="${esc(f)}"><span class="mono">${esc(f.split("/").pop())}</span> <span class="rw-dir">${esc(f.replace(/\/[^/]*$/, ""))}</span></li>`).join("") +
         (files.length > 8 ? `<li>${esc(t("还有 {n} 个", { n: files.length - 8 }))}</li>` : "");
       const what = files.length
-        ? `<p>${esc(t("会撤销 Claude 在这之后对 {n} 个文件的修改", { n: files.length }))} <span class="rw-stat">+${+d.insertions || 0} −${+d.deletions || 0}</span></p><ul class="rw-files">${list}</ul>`
-        : `<p>${esc(d.canRewind ? t("这之后 Claude 没有用编辑工具改过文件。") : t("这之后的文件改动没有留底（这个版本之前的消息不支持），只能回退对话。"))}</p>`;
+        ? `<p>${esc(t("会撤销 Antigravity 在这之后对 {n} 个文件的修改", { n: files.length }))} <span class="rw-stat">+${+d.insertions || 0} −${+d.deletions || 0}</span></p><ul class="rw-files">${list}</ul>`
+        : `<p>${esc(d.canRewind ? t("这之后 Antigravity 没有用编辑工具改过文件。") : t("这之后的文件改动没有留底（这个版本之前的消息不支持），只能回退对话。"))}</p>`;
       ov.innerHTML = `<div class="rw-dlg" role="dialog" aria-modal="true" aria-labelledby="rw-title">
         <h3 id="rw-title">${esc(t("回退到这条消息之前"))}</h3>${what}
         <p class="rw-note">${esc(t("只撤销编辑工具（Edit / Write）做的修改；用命令改的文件、装的包不会还原。"))}</p>
@@ -727,7 +659,7 @@
     });
   }
 
-  /** 一条 Claude 回复：思考 / 正文 / 工具按真实顺序交错排列 */
+  /** 一条 Antigravity 回复：思考 / 正文 / 工具按真实顺序交错排列 */
   function AssistantView(parent, live) {
     const bubble = mkMsg("bot", null, parent);
     const msgEl = bubble.parentElement;

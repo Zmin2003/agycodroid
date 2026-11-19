@@ -6,7 +6,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
 const { PROJECTS } = await import("../gw/projects.mjs");
@@ -23,7 +23,7 @@ for (const s of [srvS, srvH]) await new Promise((ok) => s.listen(0, "127.0.0.1",
 after(() => { srvS.close(); srvH.close(); });
 const url = (s, p) => `http://127.0.0.1:${s.address().port}${p}`;
 
-const proj = path.join(CFG.home, ".claude", "projects", "-i173");
+const proj = path.join(PATHS.projects, "-i173");
 fs.mkdirSync(proj, { recursive: true });
 const session = () => {
   const sid = crypto.randomUUID();

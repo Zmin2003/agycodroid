@@ -1,0 +1,6 @@
+{"event":"init","conversation_id":"agy-sample-0001","init":{"model":"gemini-3.8-flash-medium","permission_mode":"default","tools":[{"name":"Read","description":"Read a file"},{"name":"Bash","description":"Run a shell command"}],"cwd":"/tmp/agy-sample-ws"}}
+{"event":"step_update","step_update":{"step_index":0,"step_type":"agent_response","text_delta":"先看一下这个文件。"}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"tool","state":"ACTIVE","tool_info":{"name":"Read","parameters":{"file_path":"/tmp/agy-sample-ws/a.txt"}}}}
+{"event":"step_update","step_update":{"step_index":1,"step_type":"tool","state":"DONE","tool_info":{"name":"Read","parameters":{"file_path":"/tmp/agy-sample-ws/a.txt"},"output":"hello agy\n"}}}
+{"event":"step_update","step_update":{"step_index":2,"step_type":"agent_response","text_delta":"文件里写着 hello agy。"}}
+{"event":"result","conversation_id":"agy-sample-0001","result":{"status":"SUCCESS","response":"文件里写着 hello agy。","num_turns":1,"usage":{"input_tokens":1200,"cache_read_tokens":800,"output_tokens":25},"duration_seconds":3.5}}

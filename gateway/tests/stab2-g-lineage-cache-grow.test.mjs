@@ -14,7 +14,7 @@ import { chapterView } from "../gw/archive-core.mjs";
 const A = "cccccccc-1111-2222-3333-444444444444";
 const DIR = path.join(PATHS.projects, "-stab2-g-cache-grow");
 const FILE_A = path.join(DIR, A + ".jsonl");
-const CACHE = path.join(CFG.home, ".cache", "ccapp-lineage-index.json");
+const CACHE = path.join(CFG.home, ".cache", "agyapp-lineage-index.json");
 const line = (o) => JSON.stringify(o) + "\n";
 const msg = (type, uuid, text, ts) => line({
   type, uuid, sessionId: A, timestamp: new Date(ts).toISOString(),

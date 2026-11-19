@@ -9,11 +9,11 @@ import { CFG, PREFIX, log } from "./config.mjs";
 // 而 /api/chat 等于本机任意命令执行，经 priv 还能拿到 Shizuku 的 shell 身份。所以：
 //   1. Host 必须是 127.0.0.1:端口 / localhost:端口 —— 挡 DNS 重绑定；
 //   2. 带 Origin 的请求必须来自本页 —— 挡网页跨站发请求；
-//   3. /api/* 必须带令牌：X-CC-Token 头，或 cc_t_<端口> Cookie（宿主 WebView 首次加载首页时带 ?t=令牌 换来）。
+//   3. /api/* 必须带令牌：X-CC-Token 头，或 agy_t_<端口> Cookie（宿主 WebView 首次加载首页时带 ?t=令牌 换来）。
 //      令牌在应用私有目录里（0600），别的应用读不到；首页带对 ?t= 时种一个 HttpOnly + SameSite=Strict 的 Cookie，
 //      之后界面的 fetch / EventSource / <img src> 都自动带上，前端不用改。
 //   令牌跨网关重启保持不变；删掉文件即轮换。Cookie 的值见下面 SESSION。
-const TOKEN_FILE = process.env.CCAPP_TOKEN_FILE || path.join(CFG.home, ".gateway-token");
+const TOKEN_FILE = process.env.AGAPP_TOKEN_FILE || path.join(CFG.home, ".gateway-token");
 export const TOKEN = (() => {
   try {
     const t = fs.readFileSync(TOKEN_FILE, "utf8").trim();
@@ -26,22 +26,22 @@ export const TOKEN = (() => {
   fs.renameSync(tmp, TOKEN_FILE);
   return t;
 })();
-// Cookie 不按端口隔离：同一个浏览器里开着两个网关（开发端 8790 + cccodroid 8791）时，同名 Cookie 会互相覆盖，
+// Cookie 不按端口隔离：同一个浏览器里开着两个网关（开发端 8790 + agycodroid 8791）时，同名 Cookie 会互相覆盖，
 // 所以名字里带上端口
-export const COOKIE = `cc_t_${CFG.port}`;
+export const COOKIE = `agy_t_${CFG.port}`;
 // ── 界面专用地址（GHSA-hwmm 第 1 项）──
 // Cookie 不按端口隔离：种在 127.0.0.1 上，内置浏览器打开同机别的应用起的 127.0.0.1:任意端口、或者回复里一张
 // <img src="http://127.0.0.1:端口/…">，Cookie 都会跟着送过去，对方拿到就能用原生客户端重放 /api/*。
-// cccodroid 的界面因此改走 127.0.0.2（同样是回环，网关两个地址都听），会话 Cookie 只认这个地址上来的请求；
+// agycodroid 的界面因此改走 127.0.0.2（同样是回环，网关两个地址都听），会话 Cookie 只认这个地址上来的请求；
 // App 那边把内置浏览器里这个地址的所有端口、界面里这个地址的其他端口全拦掉，Cookie 就送不到别人手里。
 // 开发端的外壳还是 127.0.0.1，照旧。
 // 个别设备上 127.0.0.2 根本连不通（11-14 一加 PGP110 / Android 17：发往它的 SYN 被静默丢掉，127.0.0.1 正常）：
 // App 核不了身份，每 40 秒杀一次网关重起，界面永远停在「等待网关」。App 拉起网关前先自连探测，不通就经
-// CCAPP_UI_HOST=127.0.0.1 让界面改走主地址（见 Env.checkHost）。只认这两个值，别的一律按 127.0.0.2
-export const UI_HOST = process.env.CCAPP_UI_HOST === "127.0.0.1" ? "127.0.0.1" : "127.0.0.2";
+// AGAPP_UI_HOST=127.0.0.1 让界面改走主地址（见 Env.checkHost）。只认这两个值，别的一律按 127.0.0.2
+export const UI_HOST = process.env.AGAPP_UI_HOST === "127.0.0.1" ? "127.0.0.1" : "127.0.0.2";
 const UI_HOSTPORT = `${UI_HOST}:${CFG.port}`;
 const ALLOWED_HOSTS = new Set([`127.0.0.1:${CFG.port}`, `localhost:${CFG.port}`, UI_HOSTPORT]);
-/** 这个请求能不能凭 Cookie 认、能不能种 Cookie：cccodroid 里只有界面专用地址可以 */
+/** 这个请求能不能凭 Cookie 认、能不能种 Cookie：agycodroid 里只有界面专用地址可以 */
 // Host 头谁都能写：再核一下连接实际进的是哪个监听地址。冒牌的占住 127.0.0.2、把界面请求转发到 127.0.0.1 上来时，这里就不认
 export const localAddr = (req) => String(req.socket?.localAddress || "").replace(/^::ffff:/, "");
 export const cookieHostOk = (req) => !PREFIX || (String(req.headers.host || "").toLowerCase() === UI_HOSTPORT && localAddr(req) === UI_HOST);
@@ -84,10 +84,10 @@ export const BOOT = crypto.randomBytes(16).toString("hex");
 // 防冒名（反破甲 11-03）：令牌在 home 里，同 uid 的程序读得到，自己另起一个网关也能算对上面这些 HMAC。
 // 所以应用（GatewayService）每次拉起网关都现造一个随机数，经 stdin 管道交过来（不落盘、不进环境变量），
 // 证明身份、静态资源签名、Cookie 都改用「令牌 + 这个随机数」派生的钥匙：不是应用亲手拉起的网关算不出来，界面一律不认。
-// 开发端、测试没有这一步（CCAPP_SPAWN_KEY 不是 stdin），照旧用令牌
+// 开发端、测试没有这一步（AGAPP_SPAWN_KEY 不是 stdin），照旧用令牌
 const SPAWN = (() => {
-  if (process.env.CCAPP_SPAWN_KEY !== "stdin") return "";
-  delete process.env.CCAPP_SPAWN_KEY;
+  if (process.env.AGAPP_SPAWN_KEY !== "stdin") return "";
+  delete process.env.AGAPP_SPAWN_KEY;
   const buf = Buffer.alloc(128), sab = new Int32Array(new SharedArrayBuffer(4)), t0 = Date.now();
   let got = "";
   // 管道默认是阻塞的：应用不写、或者晚写时 fs.readSync(0) 会一直等下去，下面的 5 秒期限根本轮不到，
@@ -123,7 +123,7 @@ const mac = (s) => crypto.createHmac("sha256", KEY).update(s).digest("hex");
 export function proof(n, local = UI_HOST) {
   return /^[0-9a-f]{32,128}$/.test(String(n || "")) ? `${BOOT} ${mac(`proof:${n}:${BOOT}:${local}`)}` : null;
 }
-// 终端里的工具（cccodroid-selftest、cc-archive）用的证明：它们手里只有令牌，算不出上面那个按应用随机数派生的钥匙 ——
+// 终端里的工具（agycodroid-selftest、cc-archive）用的证明：它们手里只有令牌，算不出上面那个按应用随机数派生的钥匙 ——
 // 0.6.3 起 proof 换了钥匙，它们就永远核不过、不交凭据，建档 / 补档和自检对账全失败（11-04 真机自检发现）。
 // 这里直接用令牌、换个前缀：别的应用（不同 uid）读不到令牌，照样冒充不了；同 uid 的本来就读得到令牌，没多给什么。
 // 前缀不同，算出来的东西当不了界面那条证明，也当不了 sig2 签名
@@ -143,7 +143,7 @@ export function staticMac(nonce, url, body, local = UI_HOST) {
   if (!/^[0-9a-f]{32}$/.test(String(nonce || ""))) return null;
   return mac(`static:${nonce}:${local}:${url}:${crypto.createHash("sha256").update(body).digest("hex")}`);
 }
-// cccodroid 里 Cookie 不用令牌本身，用按这次启动派生的会话值：会话中途网关挂了、端口被抢，
+// agycodroid 里 Cookie 不用令牌本身，用按这次启动派生的会话值：会话中途网关挂了、端口被抢，
 // 界面重连时送出去的 Cookie 到了下一个真网关就作废。网关重启后 App 按新的 BOOT 种上新 Cookie（Env.proveGateway），
 // 界面的事件总线 2 秒一重连，自己就接上了。开发端照旧用令牌：gw-swap 热换网关时界面不能掉线
 export const SESSION = PREFIX ? mac("cookie:" + BOOT) : TOKEN;

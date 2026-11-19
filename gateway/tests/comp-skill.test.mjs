@@ -11,12 +11,12 @@ import { PREFIX } from "../gw/config.mjs";
 
 // 同一轮的测试共用一个假 home：别把造的记录留给别的测试文件（components.test 断言组件目录里没有 *.json）
 const made = [];
-after(() => { for (const id of made) { fs.rmSync(path.join(COMP_DIR, id + ".json"), { force: true }); fs.rmSync(path.join(PREFIX, "share/cccodroid/components", id), { recursive: true, force: true }); } });
+after(() => { for (const id of made) { fs.rmSync(path.join(COMP_DIR, id + ".json"), { force: true }); fs.rmSync(path.join(PREFIX, "share/agycodroid/components", id), { recursive: true, force: true }); } });
 
 // 造一个「装好了、记录里没有 skill」的组件，包里带名叫 name 的技能
 function comp(id, name) {
   made.push(id);
-  const src = path.join(PREFIX, "share/cccodroid/components", id, "skill");
+  const src = path.join(PREFIX, "share/agycodroid/components", id, "skill");
   fs.mkdirSync(src, { recursive: true });
   fs.writeFileSync(path.join(src, "SKILL.md"), `---\nname: ${name}\ndescription: 组件版\n---\n组件 ${id}\n`);
   fs.mkdirSync(COMP_DIR, { recursive: true });
@@ -44,7 +44,7 @@ test("没有同名：照常补装，并记下归属", () => {
   compHealSkills();
   const d = path.join(SKILLS_DIR, "ks-free");
   assert.match(fs.readFileSync(path.join(d, "SKILL.md"), "utf8"), /组件 ks-b/);
-  assert.equal(fs.readFileSync(path.join(d, ".cccodroid-component"), "utf8").trim(), "ks-b");
+  assert.equal(fs.readFileSync(path.join(d, ".agycodroid-component"), "utf8").trim(), "ks-b");
   assert.equal(compRecord("ks-b").skill, "ks-free");
 });
 
@@ -58,7 +58,7 @@ test("别的组件放的同名技能：也不碰", () => {
 test("自己放的（装到一半记录没写上）：认得出，重新装上", () => {
   const d = path.join(SKILLS_DIR, "ks-half");
   fs.mkdirSync(d, { recursive: true });
-  fs.writeFileSync(path.join(d, ".cccodroid-component"), "ks-d\n");
+  fs.writeFileSync(path.join(d, ".agycodroid-component"), "ks-d\n");
   fs.writeFileSync(path.join(d, "SKILL.md"), "旧的半截");
   comp("ks-d", "ks-half");
   compHealSkills();

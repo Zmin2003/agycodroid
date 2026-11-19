@@ -7,8 +7,7 @@
 import { LAST_LANG, log } from "./config.mjs";
 import { SETTINGS } from "./settings-store.mjs";
 import { PROVIDER } from "./providers.mjs";
-import { cachedModels, isLoginMode } from "./models.mjs";
-import { ensureBridge } from "./claude.mjs";
+import { cachedModels } from "./models.mjs";
 import { NAMES, findSessionFile } from "./sessions.mjs";
 import { lineageRecord } from "./lineage.mjs";
 import { archiveDb } from "./archive-store.mjs";
@@ -89,7 +88,6 @@ async function run(sid, P, model) {
   // 指定的型号得在这家现在的清单里：换了全局接口后，旧值别带给新那家（撞名就会用一个没给它选过的型号计费 —— v0515 复核低-3）
   const tm = SETTINGS.titleModel;
   const m = tm && P.id === PROVIDER.id && cachedModels(P).some((x) => x.id === tm) ? tm : model || "";
-  if (P.id === PROVIDER.id && !isLoginMode() && !(await ensureBridge())) return;
   const item = { n: 1, open: true, src: q, reply, prev: null };
   let fix = null;
   for (let round = 0; round < 2; round++) {

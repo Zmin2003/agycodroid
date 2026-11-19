@@ -38,14 +38,14 @@
 38	Gagal membaca riwayat: {msg}
 39	Sesi: {title}
 40	Siap
-41	<p>Hai, saya <strong>Claude Code CLI</strong> yang berjalan di perangkat ini.</p>
+41	<p>Hai, saya <strong>Antigravity CLI</strong> yang berjalan di perangkat ini.</p>
 42	Terputus dari gateway, menyambung ulang… (generasi tidak terpengaruh)
 43	Antarmuka telah diperbarui, memuat ulang…
 44	Terhubung
 45	Dihentikan
 46	Menghasilkan
 47	Menghasilkan · Enter = antre · ⚡ = sisipkan (tanpa menghentikan)
-48	Kirim pesan ke Claude, / untuk perintah, @ untuk merujuk file…
+48	Kirim pesan ke Antigravity, / untuk perintah, @ untuk merujuk file…
 49	Menghasilkan…
 50	Konteks telah dibersihkan, memulai sesi baru
 51	{n} menunggu dikirim · dikirim satu per satu setelah putaran ini selesai
@@ -56,7 +56,7 @@
 56	Gagal memulai proses masuk
 57	Belum ada sesi
 58	Nama diubah
-59	Disisipkan: Claude akan melihatnya setelah langkah ini selesai
+59	Disisipkan: Antigravity akan melihatnya setelah langkah ini selesai
 60	Putaran ini hampir selesai, jadi tidak bisa disisipkan — dipindahkan ke urutan terdepan antrean, akan segera dikirim
 61	Masuk antrean, akan dikirim setelah putaran ini selesai
 62	Gagal mengirim
@@ -111,7 +111,7 @@
 111	✓ Sudah masuk: {email}
 112	, ketuk “Gunakan penyedia ini” untuk beralih
 113	Proses masuk tidak selesai
-114	Keluar dari akun Claude di perangkat ini?
+114	Keluar dari akun Antigravity di perangkat ini?
 115	Sudah keluar
 116	Gagal keluar: {msg}
 117	Hapus Key untuk {name}?
@@ -133,7 +133,7 @@
 133	Membaca…
 134	Memeriksa status login…
 135	Masuk dengan akun lain
-136	Masuk ke akun Claude
+136	Masuk ke akun Antigravity
 137	Gunakan akun Console
 138	Keluar
 139	Batalkan login
@@ -149,31 +149,31 @@
 149	URL daftar model (opsional, /models berformat OpenAI)
 150	URL endpoint, mis.
 151	Tambah
-152	Endpoint harus mendukung protokol <b>Anthropic Messages</b> (URL yang didokumentasikan penyedia sebagai "integrasi Claude Code").
+152	Endpoint harus mendukung protokol <b>Anthropic Messages</b> (URL yang didokumentasikan penyedia sebagai "integrasi Antigravity CLI").
 153	Jangan tambahkan <code>/v1</code> di akhir URL; claude akan menambahkan <code>/v1/messages</code> sendiri.
 154	Hapus endpoint "{name}"?
 155	Nama model default wajib diisi
 156	Ditambahkan
 157	Shizuku belum terpasang
 158	Shizuku sudah terpasang, tetapi layanannya tidak berjalan (setelah reboot, mulai ulang layanannya di aplikasi Shizuku)
-159	Shizuku berjalan, tetapi belum diizinkan untuk cccodroid
+159	Shizuku berjalan, tetapi belum diizinkan untuk agycodroid
 160	Tidak dapat menghubungi layanan latar belakang aplikasi
 161	RedMagic / Nubia: Info aplikasi → Penggunaan baterai → Optimasi baterai → <b>Berjalan di latar belakang: izinkan</b> (izinkan juga <b>mulai otomatis</b> — itulah yang mengaktifkan kembali Shizuku saat boot dan memulihkan semuanya setelah pembaruan)
 162	ZTE: Info aplikasi → Penggunaan baterai → Optimasi baterai → <b>Berjalan di latar belakang: izinkan</b>, <b>mulai otomatis: izinkan</b>
 163	Xiaomi / Redmi: Info aplikasi → <b>Kebijakan hemat daya: tanpa batasan</b>, aktifkan <b>mulai otomatis</b> (jalur umum, dapat berbeda tergantung versi OS)
 164	OPPO / OnePlus / Realme: Info aplikasi → Manajemen daya → <b>Izinkan aktivitas latar belakang</b>, <b>Izinkan mulai otomatis</b> (jalur umum)
-165	vivo / iQOO: Pengaturan → Baterai → Manajemen daya latar belakang → cccodroid <b>izinkan konsumsi daya latar belakang tinggi</b>; di iManager izinkan <b>mulai otomatis</b> (jalur umum)
-166	Huawei / Honor: Pengaturan → Peluncuran aplikasi → matikan "Kelola otomatis" untuk cccodroid, lalu izinkan <b>mulai otomatis</b> dan <b>aktivitas latar belakang</b> secara manual (jalur umum)
-167	cccodroid terdeteksi dibekukan di latar belakang oleh sistem sebanyak {n} kali (terakhir sekitar {sec} detik, {at}).
+165	vivo / iQOO: Pengaturan → Baterai → Manajemen daya latar belakang → agycodroid <b>izinkan konsumsi daya latar belakang tinggi</b>; di iManager izinkan <b>mulai otomatis</b> (jalur umum)
+166	Huawei / Honor: Pengaturan → Peluncuran aplikasi → matikan "Kelola otomatis" untuk agycodroid, lalu izinkan <b>mulai otomatis</b> dan <b>aktivitas latar belakang</b> secara manual (jalur umum)
+167	agycodroid terdeteksi dibekukan di latar belakang oleh sistem sebanyak {n} kali (terakhir sekitar {sec} detik, {at}).
 168	Saat dibekukan, gateway dan semua tugas yang sedang berjalan berhenti total dan baru berlanjut setelah kembali ke latar depan. Layanan latar depan tidak dapat mencegah pembekuan semacam ini oleh vendor.
-169	Di pengaturan sistem, izinkan cccodroid berjalan di latar belakang, matikan optimasi baterai, dan izinkan mulai otomatis (istilahnya berbeda di tiap vendor).
+169	Di pengaturan sistem, izinkan agycodroid berjalan di latar belakang, matikan optimasi baterai, dan izinkan mulai otomatis (istilahnya berbeda di tiap vendor).
 170	✓ Siap · menjalankan perintah sebagai {who}
 171	Status tidak diketahui
 172	 (permintaan terakhir ditolak)
-173	Pairing wireless debugging untuk cccodroid telah dicabut: masih berfungsi sekarang, tetapi setelah reboot tidak dapat diaktifkan otomatis.
-174	Shizuku tidak diaktifkan oleh cccodroid, jadi cccodroid tidak dapat mengaktifkannya kembali setelah reboot. Cukup lakukan pairing sekali.
-175	Sistem tidak memberi tahu cccodroid saat boot (diblokir oleh pengelolaan "mulai otomatis"), sehingga aktivasi otomatis saat boot gagal; aktivasi akan dilakukan saat cccodroid dibuka.
-176	Agar aktif saat boot: izinkan mulai otomatis / mulai di latar belakang untuk cccodroid di detail aplikasi. Berlaku pada boot berikutnya.
+173	Pairing wireless debugging untuk agycodroid telah dicabut: masih berfungsi sekarang, tetapi setelah reboot tidak dapat diaktifkan otomatis.
+174	Shizuku tidak diaktifkan oleh agycodroid, jadi agycodroid tidak dapat mengaktifkannya kembali setelah reboot. Cukup lakukan pairing sekali.
+175	Sistem tidak memberi tahu agycodroid saat boot (diblokir oleh pengelolaan "mulai otomatis"), sehingga aktivasi otomatis saat boot gagal; aktivasi akan dilakukan saat agycodroid dibuka.
+176	Agar aktif saat boot: izinkan mulai otomatis / mulai di latar belakang untuk agycodroid di detail aplikasi. Berlaku pada boot berikutnya.
 177	Mulai layanan di aplikasi Shizuku (sebaiknya aktifkan "Mulai saat boot (wireless debugging)") dan pastikan sudah diizinkan untuk aplikasi ini.
 178	Diminta
 179	Kode pairing adalah 6 digit
@@ -184,7 +184,7 @@
 184	Pasang dan aktifkan dengan satu ketuk
 185	Aktifkan dengan satu ketuk (wireless debugging)
 186	Buka Shizuku
-187	Izinkan untuk cccodroid
+187	Izinkan untuk agycodroid
 188	Unduh manual
 189	Izinkan mulai otomatis
 190	Muat ulang
@@ -192,9 +192,9 @@
 192	Buka pengaturan sistem
 193	Sudah diatur, hapus notifikasi
 194	Shizuku (hak istimewa debug)
-195	Aktifkan ulang otomatis setelah reboot (perlu Wi‑Fi; akan memulai layanan latar belakang cccodroid saat boot)
+195	Aktifkan ulang otomatis setelah reboot (perlu Wi‑Fi; akan memulai layanan latar belakang agycodroid saat boot)
 196	Peningkatan keep-alive: melonggarkan batas "proses hantu" Android (agar subproses tidak dibunuh saat kompilasi paralel), menambahkan aplikasi ke daftar putih baterai, dan mengizinkan berjalan di latar belakang
-197	Setelah diaktifkan, <code>priv 'perintah'</code> dapat dijalankan di terminal sebagai pengguna shell (pm / am / settings / dumpsys / logcat / screencap…), dan Claude juga dapat memakainya. Tanpa Shizuku, fitur pengembangan dasar tetap berjalan normal — hanya kemampuan debug ini yang tidak tersedia.
+197	Setelah diaktifkan, <code>priv 'perintah'</code> dapat dijalankan di terminal sebagai pengguna shell (pm / am / settings / dumpsys / logcat / screencap…), dan Antigravity juga dapat memakainya. Tanpa Shizuku, fitur pengembangan dasar tetap berjalan normal — hanya kemampuan debug ini yang tidak tersedia.
 198	Sudah terbaru
 199	Ada versi baru
 200	Mengunduh
@@ -214,7 +214,7 @@
 214	CLI: latest
 215	Perbarui devkit?\n\nUkuran unduhan tertera di samping item ini (dapat dilanjutkan); saat pemasangan, layanan akan dijeda selama 1–2 menit.\nApa pun yang Anda pasang ke devkit dengan pip / npm -g akan dipertahankan.
 216	Dimulai
-217	Pembaruan otomatis (aktif secara default): Claude Code diperbarui secara senyap; versi baru aplikasi diunduh lalu mengingatkan Anda untuk memasangnya (dipasang otomatis saat menganggur jika ada Shizuku); devkit hanya diunduh lebih dulu saat Wi‑Fi dan dipasang saat aplikasi dibuka berikutnya
+217	Pembaruan otomatis (aktif secara default): Antigravity CLI diperbarui secara senyap; versi baru aplikasi diunduh lalu mengingatkan Anda untuk memasangnya (dipasang otomatis saat menganggur jika ada Shizuku); devkit hanya diunduh lebih dulu saat Wi‑Fi dan dipasang saat aplikasi dibuka berikutnya
 218	Aktifkan peningkatan keep-alive?\n\nIni akan mengubah beberapa pengaturan sistem: batas proses hantu (berdampak pada semua aplikasi), daftar putih baterai aplikasi ini, dan batas berjalan di latar belakang. Mematikan sakelar akan memulihkan dua pengaturan pertama.
 219	Menerapkan…
 220	Memulihkan…
@@ -230,7 +230,7 @@
 230	Model tidak ditentukan → <b>claude yang memutuskan</b> (akun resmi saat ini menggunakan default <code>{model}</code>).
 231	default bawaan claude
 232	<br>Daftar di atas adalah semua model yang tersedia untuk akun ini; pilih satu untuk menguncinya.
-233	Penyedia ini membiarkan claude memilih model sendiri dan tidak menyediakan daftar. Untuk menetapkannya, ubah <code>defaultModel</code> di <code>ccapp-providers.json</code>.
+233	Penyedia ini membiarkan claude memilih model sendiri dan tidak menyediakan daftar. Untuk menetapkannya, ubah <code>defaultModel</code> di <code>agyapp-providers.json</code>.
 234	Gagal mengambil daftar model: {msg}
 235	Tingkat lebih tinggi berpikir lebih lama. Ini nilai default; untuk satu sesi, pilih yang lain di bawah kolom input
 236	(default)
@@ -242,7 +242,7 @@
 242	Gagal: {msg}
 243	Lainnya
 244	(belum ada data — kirim satu pesan untuk mengambilnya dari CLI)
-245	Claude Code {ver} · model {model} · izin {perm} · gaya output {style}
+245	Antigravity CLI {ver} · model {model} · izin {perm} · gaya output {style}
 246	Daftar kemampuan belum diterima dari CLI — akan terisi otomatis setelah pesan pertama.
 247	Menanyakan…
 248	(tidak ada server MCP)
@@ -443,7 +443,7 @@
 443	Pratinjau
 444	Bungkus teks
 445	Gagal menyimpan: {msg}
-446	File berubah setelah Anda membukanya (mungkin diubah oleh Claude).\nOK: timpa dengan versi Anda\nBatal: buang perubahan Anda dan muat ulang
+446	File berubah setelah Anda membukanya (mungkin diubah oleh Antigravity).\nOK: timpa dengan versi Anda\nBatal: buang perubahan Anda dan muat ulang
 447	Kata sandi salah, coba lagi:
 448	PDF ini memerlukan kata sandi:
 449	Tidak dapat membuka PDF: {msg}
@@ -527,10 +527,10 @@
 527	Izinkan, jangan tanya lagi soal edit
 528	Tolak ▾
 529	Rencana menunggu persetujuan
-530	Claude ingin bertanya
+530	Antigravity ingin bertanya
 531	Perlu konfirmasi
-532	Jelaskan apa yang harus diubah (dikirim kembali ke Claude)
-533	Opsional: beri tahu Claude alasannya / apa yang sebaiknya dilakukan
+532	Jelaskan apa yang harus diubah (dikirim kembali ke Antigravity)
+533	Opsional: beri tahu Antigravity alasannya / apa yang sebaiknya dilakukan
 534	Kirim masukan
 535	Tolak
 536	Tolak dan hentikan
@@ -544,8 +544,8 @@
 544	Ditarik kembali
 545	Dihentikan (giliran ini selesai)
 546	Kedaluwarsa
-547	Mode izin diubah ke "Tanya tiap kali", sama seperti bawaan resmi: Claude akan bertanya sebelum mengubah file atau menjalankan perintah. Untuk kembali ke "Izinkan semua", ketuk label izin di bawah.
-548	Claude menunggu konfirmasi Anda
+547	Mode izin diubah ke "Tanya tiap kali", sama seperti bawaan resmi: Antigravity akan bertanya sebelum mengubah file atau menjalankan perintah. Untuk kembali ke "Izinkan semua", ketuk label izin di bawah.
+548	Antigravity menunggu konfirmasi Anda
 549	Lihat
 550	{n} lagi
 551	Izinkan semua
@@ -553,16 +553,16 @@
 553	Membaca file tanpa bertanya; bertanya sebelum mengubah file, menjalankan perintah, atau mengakses jaringan
 554	Mengubah file tanpa bertanya; tetap bertanya sebelum menjalankan perintah
 555	Hanya baca dan menyusun rencana; bertindak setelah Anda menyetujui
-556	Pengklasifikasi Claude menentukan apa yang perlu ditanyakan (eksperimental)
-557	Tidak bertanya apa pun. Claude bisa menghapus file dan menjalankan perintah apa pun tanpa persetujuan Anda
-558	Beralih ke "Izinkan semua"?\n\nClaude tidak akan bertanya lagi dan bisa langsung mengubah atau menghapus file, menjalankan perintah apa pun, serta mengakses jaringan. Gunakan hanya saat Anda memercayai tugas ini dan siap menanggung risikonya.
+556	Pengklasifikasi Antigravity menentukan apa yang perlu ditanyakan (eksperimental)
+557	Tidak bertanya apa pun. Antigravity bisa menghapus file dan menjalankan perintah apa pun tanpa persetujuan Anda
+558	Beralih ke "Izinkan semua"?\n\nAntigravity tidak akan bertanya lagi dan bisa langsung mengubah atau menghapus file, menjalankan perintah apa pun, serta mengakses jaringan. Gunakan hanya saat Anda memercayai tugas ini dan siap menanggung risikonya.
 559	Beralih ke "{m}" — langsung berlaku di giliran ini
 560	Beralih ke "{m}"
 561	Ubah mode izin
 562	default · tanya tiap kali (default)
 563	dontAsk · jangan tanya (tolak semua yang perlu konfirmasi)
 564	bypassPermissions · izinkan semua
-565	Bawaannya tanya tiap kali, sama seperti resmi: Claude bertanya di percakapan sebelum mengubah file atau menjalankan perintah. "Izinkan semua" berarti Claude bisa menghapus file dan menjalankan perintah apa pun tanpa bertanya. Anda juga bisa beralih kapan saja lewat label izin di bawah kolom input.
+565	Bawaannya tanya tiap kali, sama seperti resmi: Antigravity bertanya di percakapan sebelum mengubah file atau menjalankan perintah. "Izinkan semua" berarti Antigravity bisa menghapus file dan menjalankan perintah apa pun tanpa bertanya. Anda juga bisa beralih kapan saja lewat label izin di bawah kolom input.
 566	↩ Dikembalikan untuk revisi
 567	Buka alamat di bawah ini di browser untuk menyelesaikan otorisasi; setelah Anda mengizinkan, browser kembali ke perangkat ini dan proses masuk selesai otomatis:
 568	Jika browser tidak bisa kembali (misalnya Anda mengizinkan di perangkat lain): buka terminal, jalankan {cmd}, lalu tempel kode otorisasi dari halaman itu langsung ke claude.
@@ -592,7 +592,7 @@
 592	Katalog resmi kosong.
 593	Mencari di registri…
 594	Juga tersedia sebagai {kinds}, yang tidak bisa dijalankan di perangkat ini
-595	Butuh npx (ada di devkit cccodroid)
+595	Butuh npx (ada di devkit agycodroid)
 596	Tidak bisa dipasang di perangkat ini
 597	Tidak ditemukan. Coba kata kunci lain (bahasa Inggris lebih lengkap).
 598	Tampilkan 30 lagi
@@ -611,8 +611,8 @@
 611	Notifikasi untuk aplikasi ini dimatikan di pengaturan sistem, sehingga tombol di atas tidak berfungsi.
 612	Salah satu jenis notifikasi ("Menunggu konfirmasi" atau "Tugas selesai") dimatikan di pengaturan sistem.
 613	Giliran ini tidak selesai: aplikasi dimatikan oleh sistem saat di latar belakang (dimulai {when}).
-614	Bagian yang sudah selesai ada di sesi. Ketuk "Lanjutkan" agar Claude melanjutkan dari titik terputus.
-615	Sesi belum sempat dibuat, jadi Claude tidak menerima pesan ini. Ketuk "Kirim ulang" untuk mengembalikannya ke kolom input.
+614	Bagian yang sudah selesai ada di sesi. Ketuk "Lanjutkan" agar Antigravity melanjutkan dari titik terputus.
+615	Sesi belum sempat dibuat, jadi Antigravity tidak menerima pesan ini. Ketuk "Kirim ulang" untuk mengembalikannya ke kolom input.
 616	Lanjutkan
 617	Abaikan
 618	Giliran sebelumnya terputus oleh sistem. Silakan lanjutkan dari titik terputus dan selesaikan.
@@ -628,21 +628,21 @@
 628	Ketik / untuk memunculkan perintah slash, @ untuk merujuk jalur file
 629	Bilah atas: penjelajah file, terminal, palet perintah
 630	Kiri atas: riwayat sesi, Pengaturan, daftar kemampuan, ekstensi
-631	Label izin di bawah kolom input: apakah Claude bertanya dulu sebelum mengubah file atau menjalankan perintah — ketuk untuk mengubah
-632	Tetap bisa mengirim saat Claude bekerja: Enter mengantrekan, ⚡ menyela (tanpa memutus, digabung ke giliran saat ini)
+631	Label izin di bawah kolom input: apakah Antigravity bertanya dulu sebelum mengubah file atau menjalankan perintah — ketuk untuk mengubah
+632	Tetap bisa mengirim saat Antigravity bekerja: Enter mengantrekan, ⚡ menyela (tanpa memutus, digabung ke giliran saat ini)
 633	Lihat alat pengembangan apa saja yang terpasang di perangkat ini, lalu pilih tiga dan demokan masing-masing
 634	Gunakan Python untuk menghitung jumlah dan total ukuran file per jenis di ruang kerja, lalu susun dalam tabel
 635	Buat game ular (Snake) berbasis web dalam satu file, lalu buka di browser untuk saya lihat
 636	Bingung mau mulai dari mana? Ketuk salah satu untuk mencoba (hanya diisi ke kolom input, tidak langsung dikirim):
 637	Sebelum mulai, hubungkan model dulu (pilih salah satu dari dua cara):
-638	Masuk dengan akun Claude
-639	Punya langganan Claude Pro / Max atau akun Anthropic Console: cukup otorisasi sekali di browser, tanpa perlu mengisi key.
+638	Masuk dengan akun Antigravity
+639	Punya langganan Antigravity Pro / Max atau akun Anthropic Console: cukup otorisasi sekali di browser, tanpa perlu mengisi key.
 640	Masuk
 641	Isi API Key
 642	Gunakan key Anthropic, atau key dari penyedia kompatibel seperti DeepSeek, Zhipu GLM, Qwen, atau Kimi; bayar sesuai penggunaan.
 643	Pilih penyedia dan isi key
 644	Kedua cara ada di ☰ → Pengaturan → Penyedia, dan bisa diganti kapan saja.
-645	Buat paket diagnostik dan kirim lewat lembar berbagi sistem.\n\nIsi paket:\n· Versi dan perangkat: cccodroid / versi Android, model perangkat, chipset, ruang kosong\n· Devkit: versi yang terpasang, status pembaruan dan pemeriksaan mandiri\n· Log terbaru: log sistem aplikasi ini, bagian akhir log gateway\n· Catatan perbaikan: pemasangan, verifikasi, dan perbaikan yang dilakukan beserta hasilnya\n\nTelah dihapus:\n· Key, token, kredensial login, alamat email\n· Isi pesan Anda kepada Claude\n· Transkrip percakapan tidak disertakan dalam paket\n\nLanjutkan?
+645	Buat paket diagnostik dan kirim lewat lembar berbagi sistem.\n\nIsi paket:\n· Versi dan perangkat: agycodroid / versi Android, model perangkat, chipset, ruang kosong\n· Devkit: versi yang terpasang, status pembaruan dan pemeriksaan mandiri\n· Log terbaru: log sistem aplikasi ini, bagian akhir log gateway\n· Catatan perbaikan: pemasangan, verifikasi, dan perbaikan yang dilakukan beserta hasilnya\n\nTelah dihapus:\n· Key, token, kredensial login, alamat email\n· Isi pesan Anda kepada Antigravity\n· Transkrip percakapan tidak disertakan dalam paket\n\nLanjutkan?
 646	Saya macet · buat paket diagnostik
 647	Jika gagal memasang, tidak ada yang berjalan, atau ada error yang tidak Anda pahami: buat paket diagnostik lalu bagikan lewat sistem kepada orang yang membantu Anda (atau lampirkan ke issue GitHub). Sebelum dibuat, isi paket akan ditampilkan; key, token, alamat email, dan isi pesan Anda dihapus lebih dulu.
 648	Seret untuk mengubah lebar, ketuk dua kali untuk mengatur ulang
@@ -694,7 +694,7 @@
 694	Metode kompresi tidak didukung: {name}
 695	Tidak ada sesi untuk diekspor
 696	manifest.json tidak ada — ini bukan arsip sesi
-697	Bukan arsip sesi cccodroid
+697	Bukan arsip sesi agycodroid
 698	(Percakapan sebelumnya telah dipadatkan menjadi ringkasan)
 699	Devkit belum terpasang dengan lengkap (atau dipasang dari file lokal tanpa identitas versi), jadi komponen tidak dapat dipasang
 700	Komponen tidak ditemukan
@@ -720,9 +720,9 @@
 720	Manifest tidak memuat linux-arm64
 721	sha256 tidak cocok (diharapkan {want}…, didapat {got}…)
 722	Versi baru gagal dalam uji coba (--version menghasilkan "{v}")
-723	Build pengembangan hanya mengurus Claude Code (aplikasinya sendiri Anda build dan pasang di perangkat ini)
+723	Build pengembangan hanya mengurus Antigravity CLI (aplikasinya sendiri Anda build dan pasang di perangkat ini)
 724	Tidak ada versi baru untuk dipasang, periksa pembaruan dulu
-725	Mulai memperbarui Claude Code
+725	Mulai memperbarui Antigravity CLI
 726	Tidak didukung di build pengembangan: {op}
 727	Nama hanya boleh berisi huruf, angka, titik, garis bawah, dan tanda hubung
 728	Perintah atau alamat belum diisi
@@ -792,7 +792,7 @@
 792	Kembalikan file ini ke kondisi commit terakhir
 793	Pesan commit: apa yang diubah (wajib)
 794	Commit {n} file yang dipilih
-795	Minta Claude menulis pesan dan commit
+795	Minta Antigravity menulis pesan dan commit
 796	{f} adalah file baru, mengurungkannya berarti menghapusnya. Yakin?
 797	Kembalikan {f} ke kondisi commit terakhir? Perubahan yang belum di-commit pada file ini akan hilang.
 798	Diurungkan
@@ -884,13 +884,13 @@
 884	Hanya berjalan pada kondisi ini (kosong = semua)
 885	Tersimpan, berlaku mulai pesan berikutnya
 886	Batas waktu habis: perintah dihentikan sebelum selesai.
-887	Selesai normal: isi yang dicetak akan diberikan ke Claude sebagai keterangan tambahan.
-888	Diizinkan: Claude melanjutkan seperti biasa.
+887	Selesai normal: isi yang dicetak akan diberikan ke Antigravity sebagai keterangan tambahan.
+888	Diizinkan: Antigravity melanjutkan seperti biasa.
 889	Selesai normal.
-890	Diblokir (kode keluar 2): Claude tidak akan menjalankan langkah ini, dan isi stderr akan disampaikan kepadanya.
-891	Kode keluar 2: Claude akan melanjutkan, dan isi stderr akan disampaikan kepadanya.
-892	Kode keluar 2: isi stderr akan diteruskan ke Claude.
-893	Terjadi kesalahan (kode keluar {n}): tidak ada yang diblokir, Claude melanjutkan seperti biasa.
+890	Diblokir (kode keluar 2): Antigravity tidak akan menjalankan langkah ini, dan isi stderr akan disampaikan kepadanya.
+891	Kode keluar 2: Antigravity akan melanjutkan, dan isi stderr akan disampaikan kepadanya.
+892	Kode keluar 2: isi stderr akan diteruskan ke Antigravity.
+893	Terjadi kesalahan (kode keluar {n}): tidak ada yang diblokir, Antigravity melanjutkan seperti biasa.
 894	Keluaran (stdout)
 895	Keluaran error (stderr)
 896	Input simulasi (bisa diubah lalu dicoba lagi)
@@ -901,19 +901,19 @@
 901	Semua hooks dijeda
 902	Hooks dilanjutkan
 903	Sebelum alat digunakan
-904	Sebelum Claude memanggil alat apa pun (mengubah file, menjalankan perintah, mengakses internet…). Kode keluar 2 memblokir panggilan ini, dan alasan di stderr akan disampaikan ke Claude.
+904	Sebelum Antigravity memanggil alat apa pun (mengubah file, menjalankan perintah, mengakses internet…). Kode keluar 2 memblokir panggilan ini, dan alasan di stderr akan disampaikan ke Antigravity.
 905	Setelah alat digunakan
-906	Setelah alat berhasil dijalankan. Cocok untuk pemformatan, pencatatan, dan pemeriksaan; tindakan sudah dilakukan, jadi kode keluar 2 hanya meneruskan stderr ke Claude.
+906	Setelah alat berhasil dijalankan. Cocok untuk pemformatan, pencatatan, dan pemeriksaan; tindakan sudah dilakukan, jadi kode keluar 2 hanya meneruskan stderr ke Antigravity.
 907	Saat Anda mengirim pesan
-908	Setiap kali Anda mengirim pesan. Isi yang dicetak perintah akan diberikan ke Claude sebagai keterangan tambahan; kode keluar 2 memblokir pesan ini.
-909	Saat Claude menyelesaikan satu giliran
-910	Saat jawaban Claude untuk giliran ini berakhir. Cocok untuk penyimpanan otomatis dan pengingat; kode keluar 2 membuatnya melanjutkan (hati-hati loop tanpa akhir).
+908	Setiap kali Anda mengirim pesan. Isi yang dicetak perintah akan diberikan ke Antigravity sebagai keterangan tambahan; kode keluar 2 memblokir pesan ini.
+909	Saat Antigravity menyelesaikan satu giliran
+910	Saat jawaban Antigravity untuk giliran ini berakhir. Cocok untuk penyimpanan otomatis dan pengingat; kode keluar 2 membuatnya melanjutkan (hati-hati loop tanpa akhir).
 911	Saat sesi dimulai
-912	Saat sesi dimulai: sesi baru, dilanjutkan, dibersihkan, atau setelah pemadatan. Isi yang dicetak perintah akan diberikan ke Claude sebagai latar belakang.
+912	Saat sesi dimulai: sesi baru, dilanjutkan, dibersihkan, atau setelah pemadatan. Isi yang dicetak perintah akan diberikan ke Antigravity sebagai latar belakang.
 913	Saat sesi berakhir
 914	Saat sesi berakhir, cocok untuk pembersihan akhir.
-915	Saat Claude mengirim notifikasi
-916	Saat Claude meminta izin kepada Anda, atau sedang menganggur menunggu balasan Anda.
+915	Saat Antigravity mengirim notifikasi
+916	Saat Antigravity meminta izin kepada Anda, atau sedang menganggur menunggu balasan Anda.
 917	Saat meminta izin
 918	Sebelum dialog izin muncul. Penggunaan lanjutan: mencetak JSON dapat otomatis mengizinkan atau menolak untuk Anda.
 919	Setelah alat gagal
@@ -924,33 +924,33 @@
 924	Sebelum memadatkan konteks
 925	Setelah memadatkan konteks
 926	Lindungi file penting
-927	Memblokir Claude saat mencoba mengubah .env, kunci, atau file tanda tangan, dan memberi tahu alasannya.
+927	Memblokir Antigravity saat mencoba mengubah .env, kunci, atau file tanda tangan, dan memberi tahu alasannya.
 928	File yang dilindungi (satu per baris; * adalah wildcard, pola dengan / dicocokkan dengan path)
 929	Blokir perintah berbahaya
-930	Menolak perintah seperti force-push, hard reset, atau menghapus folder root, dan memberi tahu Claude agar mencari cara lain.
+930	Menolak perintah seperti force-push, hard reset, atau menghapus folder root, dan memberi tahu Antigravity agar mencari cara lain.
 931	Teks terlarang (satu per baris; /…/ berarti regex)
 932	Simpan otomatis tiap giliran (git)
-933	Setiap kali Claude menyelesaikan satu giliran, perubahan di proyek otomatis di-commit, sehingga Anda bisa kembali ke langkah mana pun. Hanya commit, tidak push; proyek yang bukan repositori git tidak disentuh.
+933	Setiap kali Antigravity menyelesaikan satu giliran, perubahan di proyek otomatis di-commit, sehingga Anda bisa kembali ke langkah mana pun. Hanya commit, tidak push; proyek yang bukan repositori git tidak disentuh.
 934	Awalan pesan commit
 935	Simpan otomatis
 936	Tambahkan instruksi tetap pada setiap pesan
-937	Setiap pesan yang Anda kirim otomatis menyertakan teks ini untuk Claude, misalnya “jawab dalam bahasa Indonesia” atau “jelaskan rencana sebelum mengubah”.
+937	Setiap pesan yang Anda kirim otomatis menyertakan teks ini untuk Antigravity, misalnya “jawab dalam bahasa Indonesia” atau “jelaskan rencana sebelum mengubah”.
 938	Teks yang ditambahkan
 939	Jawab dalam bahasa Indonesia; sebelum mengubah apa pun, jelaskan secara singkat rencana Anda.
 940	Baca file progres saat sesi dimulai
-941	Setiap sesi baru (atau setelah pemadatan konteks), satu file dari proyek dibacakan ke Claude, misalnya catatan progres, kerangka, atau daftar karakter. Dilewati jika file tidak ada.
+941	Setiap sesi baru (atau setelah pemadatan konteks), satu file dari proyek dibacakan ke Antigravity, misalnya catatan progres, kerangka, atau daftar karakter. Dilewati jika file tidak ada.
 942	File (relatif terhadap folder proyek)
 943	progres.md
-944	Catat perintah yang dijalankan Claude
+944	Catat perintah yang dijalankan Antigravity
 945	Setiap perintah ditambahkan beserta waktu dan folder ke ~/.claude/bash-history.log agar mudah ditinjau nanti.
 946	Format otomatis kode setelah diubah
-947	Setelah Claude mengubah file kode, file dirapikan dengan formatter yang terpasang di perangkat (ruff / black, prettier, gofmt, clang-format…); jika tidak ada, tidak dilakukan apa pun. Markdown dan teks biasa tidak disentuh.
+947	Setelah Antigravity mengubah file kode, file dirapikan dengan formatter yang terpasang di perangkat (ruff / black, prettier, gofmt, clang-format…); jika tidak ada, tidak dilakukan apa pun. Markdown dan teks biasa tidak disentuh.
 948	Hooks (aturan otomatis)
-949	Hook adalah “saat momen ini tiba, jalankan perintah ini”: sebelum atau sesudah Claude memakai alat, saat Anda mengirim pesan, saat ia menyelesaikan satu giliran… Perintah dapat memblokir tindakan Claude, memberinya keterangan tambahan, atau mengerjakan hal-hal kecil (menyimpan, mencatat, memformat).
+949	Hook adalah “saat momen ini tiba, jalankan perintah ini”: sebelum atau sesudah Antigravity memakai alat, saat Anda mengirim pesan, saat ia menyelesaikan satu giliran… Perintah dapat memblokir tindakan Antigravity, memberinya keterangan tambahan, atau mengerjakan hal-hal kecil (menyimpan, mencatat, memformat).
 950	Aturan umum (ketuk “Tambah”, sesuaikan parameternya dan langsung bisa dipakai)
 951	Tulis sendiri
 952	Cara kerja hooks
-953	Perintah dijalankan dengan bash di folder proyek, dan Claude mengirimkan detail momen ini (alat mana, argumen apa, apa yang Anda katakan…) sebagai JSON melalui input standar.<br>Kode keluar menentukan hasilnya: <b>0</b> diizinkan; <b>2</b> memblokir langkah ini (“Sebelum alat digunakan” dan “Saat Anda mengirim pesan”), dan alasan di stderr akan disampaikan ke Claude; kode keluar lain dianggap error, tidak memblokir, dan Claude melanjutkan seperti biasa.<br>Untuk “Saat Anda mengirim pesan” dan “Saat sesi dimulai”, isi yang dicetak perintah akan diberikan ke Claude sebagai keterangan tambahan.<br>Perubahan berlaku mulai pesan berikutnya. Aturan adalah perintah shell biasa dan bisa melakukan sebanyak yang bisa Anda lakukan di terminal—jangan tambahkan perintah yang tidak Anda percayai.
+953	Perintah dijalankan dengan bash di folder proyek, dan Antigravity mengirimkan detail momen ini (alat mana, argumen apa, apa yang Anda katakan…) sebagai JSON melalui input standar.<br>Kode keluar menentukan hasilnya: <b>0</b> diizinkan; <b>2</b> memblokir langkah ini (“Sebelum alat digunakan” dan “Saat Anda mengirim pesan”), dan alasan di stderr akan disampaikan ke Antigravity; kode keluar lain dianggap error, tidak memblokir, dan Antigravity melanjutkan seperti biasa.<br>Untuk “Saat Anda mengirim pesan” dan “Saat sesi dimulai”, isi yang dicetak perintah akan diberikan ke Antigravity sebagai keterangan tambahan.<br>Perubahan berlaku mulai pesan berikutnya. Aturan adalah perintah shell biasa dan bisa melakukan sebanyak yang bisa Anda lakukan di terminal—jangan tambahkan perintah yang tidak Anda percayai.
 954	Baterai
 955	Jam
 956	Hari
@@ -971,7 +971,7 @@
 971	Layar menyala
 972	Aplikasi di latar depan
 973	Perekaman baru dimulai — sampel diambil setiap 5 menit. Periksa lagi nanti.
-974	Versi ini tidak punya lapisan native, jadi hanya waktu CPU yang dicatat (level baterai, layar, dan durasi latar depan memerlukan cccodroid).
+974	Versi ini tidak punya lapisan native, jadi hanya waktu CPU yang dicatat (level baterai, layar, dan durasi latar depan memerlukan agycodroid).
 975	Baterai {p}
 976	Mengisi daya
 977	Memakai baterai
@@ -1004,7 +1004,7 @@
 1004	Kirim commit lokal baru ke remote
 1005	Push
 1006	Push pertama {b}: cabang dengan nama yang sama akan dibuat di remote dan ditautkan. Lanjutkan?
-1007	Minta Claude menggabungkan commit dari remote?
+1007	Minta Antigravity menggabungkan commit dari remote?
 1008	Cabang saat ini di {root} sudah bercabang dari remote. Tolong jalankan git fetch dulu, beri tahu commit apa saja di masing-masing sisi, lalu gabungkan commit dari remote (gunakan rebase jika bisa; jika ada konflik, berhenti dan tanya saya dulu), dan terakhir beri tahu hasilnya. Jangan push.
 1009	Dihapus di remote
 1010	Checkout
@@ -1028,7 +1028,7 @@
 1028	Kunci SSH tidak diterima. Tambahkan kunci publik perangkat ini ke akun remote, atau ganti URL remote ke https lalu masuk dengan GitHub.
 1029	Tidak dapat menjangkau remote. Periksa jaringan atau proxy Anda.
 1030	Remote memiliki commit yang belum ada di lokal. Pull dulu, lalu push.
-1031	Lokal dan remote masing-masing punya commit baru (sudah bercabang), jadi fast-forward tidak bisa dilakukan. Anda bisa meminta Claude melakukan merge atau rebase.
+1031	Lokal dan remote masing-masing punya commit baru (sudah bercabang), jadi fast-forward tidak bisa dilakukan. Anda bisa meminta Antigravity melakukan merge atau rebase.
 1032	Perubahan yang belum di-commit akan tertimpa. Commit atau buang file tersebut dulu, lalu coba lagi.
 1033	Repositori ini belum punya remote.
 1034	Cabang saat ini belum punya upstream. Push sekali untuk menautkannya.
@@ -1048,7 +1048,7 @@
 1048	Tidak menemukan "{q}" di pesan yang dimuat
 1049	Pilih file devkit yang sudah diunduh untuk dipasang
 1050	File lokal…
-1051	Pasang devkit dari file lokal?\n\nPilih devkit-cc.codroid.tar.gz (atau .tar); Anda bisa mengunduhnya dari halaman rilis GitHub atau cccodroid.net. Sebelum dipasang, file akan dicocokkan dengan rilis yang sudah diterbitkan; layanan berhenti selama 1–2 menit saat pemasangan.\nApa pun yang Anda pasang ke devkit dengan pip / npm -g akan dipertahankan.
+1051	Pasang devkit dari file lokal?\n\nPilih devkit-cc.agyroid.tar.gz (atau .tar); Anda bisa mengunduhnya dari halaman rilis GitHub atau cccodroid.net. Sebelum dipasang, file akan dicocokkan dengan rilis yang sudah diterbitkan; layanan berhenti selama 1–2 menit saat pemasangan.\nApa pun yang Anda pasang ke devkit dengan pip / npm -g akan dipertahankan.
 1052	Log perintah istimewa
 1053	Belum ada perintah yang dijalankan lewat priv
 1054	{n} entri terakhir (terbaru di atas). Hanya disimpan di perangkat ini, tidak diunggah.
@@ -1056,7 +1056,7 @@
 1056	Tangkapan layar dilampirkan
 1057	Gagal mengambil tangkapan layar (apakah Shizuku tersedia? Pengaturan → Shizuku)
 1058	Tangkapan layar selesai
-1059	Tangkapan layar ke Claude
+1059	Tangkapan layar ke Antigravity
 1060	Tangkapan layar dalam 5 detik (beralih ke aplikasi dulu)
 1061	Gagal memuat: {src}
 1062	Konversi ke PDF dengan LibreOffice untuk melihat
@@ -1126,7 +1126,7 @@
 1126	Berpikir dulu
 1127	Fokus kode
 1128	Besar
-1129	Model disimpan di /sdcard/cccodroid/models; setelah diunduh, gunakan di Pengaturan → Layanan model → Model kecil di perangkat. Memori perangkat ini {ram} GB. Semuanya terkuantisasi Q4_K_M; di ponsel 1–4B cukup praktis, di atas 6B akan sangat lambat.
+1129	Model disimpan di /sdcard/agycodroid/models; setelah diunduh, gunakan di Pengaturan → Layanan model → Model kecil di perangkat. Memori perangkat ini {ram} GB. Semuanya terkuantisasi Q4_K_M; di ponsel 1–4B cukup praktis, di atas 6B akan sangat lambat.
 1130	{n} diunduh
 1131	Tidak ada di daftar? Tempel tautan unduhan file .gguf (HuggingFace, ModelScope, dll.). Hash tidak diverifikasi, hanya header file yang diperiksa.
 1132	{name} sekitar {p}B parameter, {size}. Akan sangat lambat di ponsel dan memorinya mungkin tidak cukup. Tetap unduh?
@@ -1175,7 +1175,7 @@
 1175	↩ Pulihkan konten yang baru saja dibersihkan
 1176	Pemadatan saat menganggur
 1177	Padatkan sesi panjang yang menganggur hampir satu jam
-1178	Hanya berlaku untuk akun Claude dan API Key Anthropic. Saat sesi dengan konteks lebih dari 200 ribu token menganggur sekitar 54 menit dan cache prompt 1 jamnya hampir kedaluwarsa, konteks dipadatkan sekali; saat Anda kembali melanjutkan, seluruh riwayat tidak perlu diproses ulang dengan harga penuh, sehingga akun langganan lebih hemat kuota dan API Key lebih hemat biaya. Claude Code di komputer juga melakukannya.
+1178	Hanya berlaku untuk akun Antigravity dan API Key Anthropic. Saat sesi dengan konteks lebih dari 200 ribu token menganggur sekitar 54 menit dan cache prompt 1 jamnya hampir kedaluwarsa, konteks dipadatkan sekali; saat Anda kembali melanjutkan, seluruh riwayat tidak perlu diproses ulang dengan harga penuh, sehingga akun langganan lebih hemat kuota dan API Key lebih hemat biaya. Antigravity CLI di komputer juga melakukannya.
 1179	Tugas
 1180	Tugas selesai
 1181	menunggu {ids}
@@ -1189,8 +1189,8 @@
 1189	Perubahan pada {n} file dibatalkan; percakapan kembali ke sebelum pesan ini
 1190	Percakapan kembali ke sebelum pesan ini; sesi asli tetap ada
 1191	Perubahan pada {n} file dibatalkan
-1192	Ini akan membatalkan perubahan Claude pada {n} file setelah titik ini
-1193	Setelah titik ini, Claude tidak mengubah file dengan alat editnya.
+1192	Ini akan membatalkan perubahan Antigravity pada {n} file setelah titik ini
+1193	Setelah titik ini, Antigravity tidak mengubah file dengan alat editnya.
 1194	Tidak ada snapshot file setelah titik ini (pesan dari sebelum versi ini tidak didukung), jadi hanya percakapan yang dapat dikembalikan.
 1195	Kembalikan ke sebelum pesan ini
 1196	Hanya perubahan dari alat edit (Edit / Write) yang dibatalkan; file yang diubah lewat perintah dan paket yang dipasang tidak akan dipulihkan.
@@ -1268,17 +1268,17 @@
 1268	{src}: {n} file, {size}
 1269	Nama
 1270	Deskripsi
-1271	Opsional: untuk apa komponen ini; Claude akan melihatnya
+1271	Opsional: untuk apa komponen ini; Antigravity akan melihatnya
 1272	Perintah yang akan ditambahkan
 1273	Anda bertanggung jawab atas sumber programnya: program ini bisa membaca dan menulis semua file di aplikasi ini.
 1274	Menambahkan pustaka dan memasang…
 1275	Memasang…
 1276	Terpasang, tetapi masih kurang {n} pustaka
-1277	Terpasang. Kini bisa dipakai di Claude dan terminal
+1277	Terpasang. Kini bisa dipakai di Antigravity dan terminal
 1278	Copot komponen kustom {name}? Tindakan ini akan menghapus program yang diimpor, pustaka yang ditambahkan, dan perintahnya.
 1279	(tanpa output, kode keluar {c})
 1280	Komponen kustom
-1281	Tidak ada di market? Impor sendiri program Linux arm64: satu program, atau arsip .tar.gz / .zip. Pustaka yang kurang akan diambil otomatis dan perintah dibuat, siap dipakai langsung di Claude dan terminal.
+1281	Tidak ada di market? Impor sendiri program Linux arm64: satu program, atau arsip .tar.gz / .zip. Pustaka yang kurang akan diambil otomatis dan perintah dibuat, siap dipakai langsung di Antigravity dan terminal.
 1282	Impor program…
 1283	Analisis
 1284	Atau masukkan path di perangkat ini, mis. /sdcard/Download/foo.tar.gz
@@ -1286,7 +1286,7 @@
 1286	Statistik penggunaan
 1287	Laporan bulanan
 1288	percakapan
-1289	Sebulan bersama Claude
+1289	Sebulan bersama Antigravity
 1290	{p} dibanding bulan lalu
 1291	Hari aktif
 1292	{n} / {d} hari
@@ -1296,7 +1296,7 @@
 1296	Hari tersibuk
 1297	Pemanggilan alat
 1298	{n}
-1299	Claude menulis
+1299	Antigravity menulis
 1300	Harian
 1301	Waktu dalam sehari
 1302	Paling sering sekitar pukul {h}
@@ -1332,7 +1332,7 @@
 1332	Sembunyikan kode QR
 1333	Kode QR grup QQ
 1334	Ada masalah saat digunakan atau punya ide? Silakan bergabung di grup untuk mengobrol. Untuk melaporkan bug, sebaiknya lewat "Pengaturan → Laporkan di GitHub": model perangkat dan hasil pemeriksaan mandiri akan disertakan otomatis, sedangkan pesan di grup cepat tenggelam.
-1335	Saat ini cccodroid hanya dirawat oleh satu orang, yaitu penulisnya, dan sangat membutuhkan bantuan: koreksi terjemahan, laporan kompatibilitas perangkat, resep komponen, dokumentasi, dan kode semuanya diterima; Anda tetap bisa membantu meski tidak bisa menulis kode. Cara berpartisipasi dijelaskan di panduan kontribusi dalam repositori.
+1335	Saat ini agycodroid hanya dirawat oleh satu orang, yaitu penulisnya, dan sangat membutuhkan bantuan: koreksi terjemahan, laporan kompatibilitas perangkat, resep komponen, dokumentasi, dan kode semuanya diterima; Anda tetap bisa membantu meski tidak bisa menulis kode. Cara berpartisipasi dijelaskan di panduan kontribusi dalam repositori.
 1336	Diskusi
 1337	Laporkan masalah
 1338	Ikut berkontribusi
@@ -1348,7 +1348,7 @@
 1348	Hanya untuk perangkat dengan GPU ARM Mali (Dimensity, Exynos, dll.); tidak bisa dipakai di perangkat ini
 1349	Khusus Mali
 1350	Alat perangkat
-1351	Izinkan Claude menggunakan alat perangkat (notifikasi, papan klip, membuka tautan / kalender / alarm, membagikan file…)
+1351	Izinkan Antigravity menggunakan alat perangkat (notifikasi, papan klip, membuka tautan / kalender / alarm, membagikan file…)
 1352	Saat dipanggil, konfirmasinya sama seperti alat lain, mengikuti mode izin yang Anda pilih. Tindakan yang membuka aplikasi lain hanya mengisinya lebih dulu; menyimpan, mengirim, atau menelepon tetap Anda ketuk sendiri di aplikasi itu.
 1353	Membaca layar dan mengetuk (aksesibilitas)
 1354	Nonaktif (default)
@@ -1359,7 +1359,7 @@
 1359	Layanan aksesibilitas: terhubung
 1360	Layanan aksesibilitas: nonaktif
 1361	Layanan aksesibilitas: sedang nonaktif (diaktifkan saat dibutuhkan)
-1362	Shizuku belum diaktifkan, jadi aplikasi tidak bisa menyalakan atau mematikan aksesibilitas sendiri: aktifkan cccodroid secara manual di pengaturan aksesibilitas sistem. Mulai Android 13, aplikasi yang dipasang secara sideload harus lebih dulu membuka Info aplikasi → menu kanan atas → Izinkan setelan terbatas.
+1362	Shizuku belum diaktifkan, jadi aplikasi tidak bisa menyalakan atau mematikan aksesibilitas sendiri: aktifkan agycodroid secara manual di pengaturan aksesibilitas sistem. Mulai Android 13, aplikasi yang dipasang secara sideload harus lebih dulu membuka Info aplikasi → menu kanan atas → Izinkan setelan terbatas.
 1363	Status perangkat
 1364	Kirim notifikasi
 1365	Baca papan klip
@@ -1373,7 +1373,7 @@
 1373	Ketik teks
 1374	Tombol kembali / beranda, dll.
 1375	Tangkapan layar
-1376	Nonaktif secara default. Aktifkan saat Anda ingin Claude menguji aplikasi buatan sendiri atau mengirim file yang dibuatnya ke aplikasi lain; selama aktif, setiap giliran percakapan membawa satu hingga dua ribu token tambahan untuk deskripsi alat.
+1376	Nonaktif secara default. Aktifkan saat Anda ingin Antigravity menguji aplikasi buatan sendiri atau mengirim file yang dibuatnya ke aplikasi lain; selama aktif, setiap giliran percakapan membawa satu hingga dua ribu token tambahan untuk deskripsi alat.
 1377	Model & intensitas berpikir
 1378	Intensitas berpikir
 1379	Cari model
@@ -1389,10 +1389,10 @@
 1389	Seeker · Ikuti sistem
 1390	Seeker · Terang
 1391	Seeker · Gelap
-1392	Claude Code itu sendiri
+1392	Antigravity CLI itu sendiri
 1393	Panel Git
 1394	Mulai Shizuku sekali ketuk (debug nirkabel)
-1395	Claude mencari kode dan melihat diff
+1395	Antigravity mencari kode dan melihat diff
 1396	Mengompilasi program native
 1397	Membangun APK
 1398	Debug USB
@@ -1430,18 +1430,18 @@
 1430	{n} menunggu · giliran sebelumnya di sesi ini belum sepenuhnya selesai (tugas latar belakang sedang berjalan atau hampir selesai); pesan akan dikirim berurutan setelah itu
 1431	Dalam antrean: giliran sebelumnya di sesi ini belum sepenuhnya selesai; pesan akan dikirim setelah itu
 1432	Copot devkit pengembangan?\n\nSeluruh devkit akan dihapus, termasuk komponen yang terpasang di dalamnya, modul tambahan, dan apa pun yang Anda pasang dengan pip / npm -g / pkg, lalu kembali ke penyiapan awal untuk memilih sumber unduhan dan modul lagi.\n\nSesi, ruang kerja, login, dan pengaturan tetap dipertahankan. Terminal yang sedang berjalan akan ditutup.
-1433	Copot Claude Code?\n\nProgram Claude Code yang sudah diunduh akan dihapus dan tidak akan dipasang ulang secara otomatis. Saat dibutuhkan, ketuk "Pasang…" di sini dan pilih versi sendiri (stable, latest, atau nomor versi tertentu).\n\nLogin, sesi, dan pengaturan tetap dipertahankan; jika belum terpasang, mengirim pesan akan mengingatkan Anda untuk memasangnya dulu.
+1433	Copot Antigravity CLI?\n\nProgram Antigravity CLI yang sudah diunduh akan dihapus dan tidak akan dipasang ulang secara otomatis. Saat dibutuhkan, ketuk "Pasang…" di sini dan pilih versi sendiri (stable, latest, atau nomor versi tertentu).\n\nLogin, sesi, dan pengaturan tetap dipertahankan; jika belum terpasang, mengirim pesan akan mengingatkan Anda untuk memasangnya dulu.
 1434	{n} program sisa devkit lama ({size}) telah dikarantina dan akan dihapus otomatis dalam {d} hari.
 1435	Hapus sekarang
 1436	Hapus {n} program lama yang dikarantina sekarang? Yang sudah dihapus tidak bisa dikembalikan.
 1437	{n} dihapus
 1438	Pasang…
 1439	Versi mana yang akan dipasang?\nIsi stable, latest, atau nomor versi tertentu (mis. {v}).
-1440	Claude Code belum terpasang. Buka Pengaturan → Pembaruan, ketuk "Pasang…", lalu pilih versi untuk dipasang.
+1440	Antigravity CLI belum terpasang. Buka Pengaturan → Pembaruan, ketuk "Pasang…", lalu pilih versi untuk dipasang.
 1441	CLI: dipatok {v}
 1442	CLI: patok versi…
 1443	Versi…
-1444	Versi Claude Code
+1444	Versi Antigravity CLI
 1445	Ikuti kanal (pembaruan otomatis mengikutinya)
 1446	Kunci ke satu versi (pembaruan otomatis tidak mengubahnya)
 1447	Cari versi
@@ -1467,8 +1467,8 @@
 1467	Tidak ada devkit di sini, tidak perlu diperiksa
 1468	Penanda pemasangan devkit (.devkit-ok) tidak ditemukan; devkit mungkin belum selesai dipasang
 1469	Pengaturan → Pembaruan: perbaiki devkit
-1470	Program Claude Code tidak ditemukan
-1471	Pengaturan → Pembaruan: pasang ulang Claude Code
+1470	Program Antigravity CLI tidak ditemukan
+1471	Pengaturan → Pembaruan: pasang ulang Antigravity CLI
 1472	Catatan pemasangan komponen "{id}" tidak bisa dibaca
 1473	Pasang ulang komponen ini di halaman Ekstensi
 1474	Komponen "{id}" belum selesai dipasang terakhir kali
@@ -1494,8 +1494,8 @@
 1494	Sesi ini belum tersimpan; hapus setelah satu balasan selesai
 1495	Masih membuat balasan; tunggu selesai lalu hapus
 1496	Tidak ada pesan Anda sebelum balasan ini, jadi tidak bisa dihapus sendiri
-1497	Hapus pertanyaan ini? Claude tidak akan melihatnya lagi (balasannya tetap ada).
-1498	Hapus balasan ini? Panggilan alat dan hasilnya ikut terhapus, dan Claude tidak akan melihatnya lagi.
+1497	Hapus pertanyaan ini? Antigravity tidak akan melihatnya lagi (balasannya tetap ada).
+1498	Hapus balasan ini? Panggilan alat dan hasilnya ikut terhapus, dan Antigravity tidak akan melihatnya lagi.
 1499	Enter langsung mengirim
 1500	Enter membuat baris baru; Ctrl + Enter atau tombol kirim untuk mengirim
 1501	Sesi ini sedang membuat balasan. Tunggu selesai lalu hapus.
@@ -1525,14 +1525,14 @@
 1525	Komunitas · Diskusi
 1526	Umum
 1527	Penyedia & model
-1528	Perilaku Claude
+1528	Perilaku Antigravity
 1529	Latar belakang & paralel
 1530	Perangkat & izin
 1531	Warna native atau "Qiusuo"
 1532	Keyboard ponsel tidak punya Shift; pilih baris baru jika ingin mengetik banyak baris
 1533	Item tetap bilah samping
 1534	Sisanya ada di "Lainnya"
-1535	Kanal Claude Code yang diikuti
+1535	Kanal Antigravity CLI yang diikuti
 1536	Pembaruan otomatis
 1537	Paket diagnostik
 1538	Apakah komponen, modul, daftar paket, dan disk sudah cocok
@@ -1575,8 +1575,8 @@
 1575	(sesi yang dihapus)
 1576	Belum ada catatan bulan ini
 1577	CPU aplikasi
-1578	Baterai menunjukkan berapa banyak daya perangkat turun hari ini; CPU adalah waktu aplikasi ini (termasuk Claude dan perintah yang dijalankannya) benar-benar bekerja.
-1579	Versi ini tidak punya lapisan native, jadi hanya waktu CPU yang dicatat (baterai dan layar menyala butuh cccodroid).
+1578	Baterai menunjukkan berapa banyak daya perangkat turun hari ini; CPU adalah waktu aplikasi ini (termasuk Antigravity dan perintah yang dijalankannya) benar-benar bekerja.
+1579	Versi ini tidak punya lapisan native, jadi hanya waktu CPU yang dicatat (baterai dan layar menyala butuh agycodroid).
 1580	Pesan
 1581	Giliran balasan
 1582	Token input
@@ -1585,8 +1585,8 @@
 1585	Berpikir {e}
 1586	Tanya
 1587	Sesuai aturan
-1588	Claude Code {ver} · yang tersedia di giliran ini
-1589	Yang bisa dipakai Claude di giliran ini
+1588	Antigravity CLI {ver} · yang tersedia di giliran ini
+1589	Yang bisa dipakai Antigravity di giliran ini
 1590	Mode izin: {m} · {n} aturan
 1591	Tidak terhubung
 1592	Tekan lama sesi: sematkan, ganti nama, ekspor, hapus
@@ -1603,7 +1603,7 @@
 1603	Ekspor CSV
 1604	Rincian konsumsi daya
 1605	Laporan bulanan
-1606	Semua yang bisa dipakai Claude di giliran ini (dari laporan init saat mulai). Ketuk perintah slash untuk memasukkannya ke kolom input; "izinkan / tanya / tolak" untuk alat mengikuti mode izin dan aturan.
+1606	Semua yang bisa dipakai Antigravity di giliran ini (dari laporan init saat mulai). Ketuk perintah slash untuk memasukkannya ke kolom input; "izinkan / tanya / tolak" untuk alat mengikuti mode izin dan aturan.
 1607	Edit aturan
 1608	MCP
 1609	Pasang/copot di Ekstensi → MCP
@@ -1666,7 +1666,7 @@
 1666	Buka di penjelajah file
 1667	Memori
 1668	{n} item
-1669	Hal yang dicatat Claude di proyek ini
+1669	Hal yang dicatat Antigravity di proyek ini
 1670	Baru
 1671	Aktif
 1672	Nonaktif
@@ -1710,7 +1710,7 @@
 1710	Tidak akan jalan lagi
 1711	Nonaktif
 1712	Sakelar
-1713	Pada waktu yang ditentukan, Claude berjalan sekali di perangkat ini di folder yang dipilih; Anda diberi tahu sesuai pengaturan dan hasilnya disimpan sebagai percakapan. Tidak ada yang mengawasi, jadi semua yang butuh persetujuan Anda otomatis ditolak. Jadwal yang terlewat tidak pernah dijalankan diam-diam; pengaturan tiap tugas yang menentukan.
+1713	Pada waktu yang ditentukan, Antigravity berjalan sekali di perangkat ini di folder yang dipilih; Anda diberi tahu sesuai pengaturan dan hasilnya disimpan sebagai percakapan. Tidak ada yang mengawasi, jadi semua yang butuh persetujuan Anda otomatis ditolak. Jadwal yang terlewat tidak pernah dijalankan diam-diam; pengaturan tiap tugas yang menentukan.
 1714	Aktif
 1715	Nonaktif
 1716	Belum ada tugas terjadwal. Misalnya, minta ia memeriksa CI setiap pagi.
@@ -1806,7 +1806,7 @@
 1806	Nonaktif otomatis setelah dijalankan.
 1807	Cron lima kolom standar: menit jam tanggal bulan hari.
 1808	Contoh: cek CI setiap pagi
-1809	Apa yang harus dilakukan Claude
+1809	Apa yang harus dilakukan Antigravity
 1810	Tulis dengan jelas apa yang harus dilakukan dan bagaimana melaporkannya. Tidak ada yang mengawasi: ia tidak bisa bertanya kepada Anda.
 1811	Ingin "jangan ganggu kalau tidak ada apa-apa"? Minta ia hanya membalas satu kalimat tetap saat tidak menemukan apa pun (misalnya "Semua hijau"), lalu pilih notifikasi di bawah "Hanya saat ada temuan".
 1812	Di mana dijalankan
@@ -1912,7 +1912,7 @@
 1912	Font antarmuka
 1913	Secara default memakai Inter dan Source Han Sans bawaan aplikasi, tidak terpengaruh tema font sistem
 1914	Font balasan
-1915	Font teks balasan Claude
+1915	Font teks balasan Antigravity
 1916	Serif
 1917	Sans
 1918	Ukuran teks
@@ -2051,7 +2051,7 @@
 2051	{n} perangkat
 2052	Menghitung kata…
 2053	Work Island (Dynamic Island ColorOS)
-2054	Tampilkan status kerja Claude di Fluid Cloud / Dynamic Island ColorOS 16
+2054	Tampilkan status kerja Antigravity di Fluid Cloud / Dynamic Island ColorOS 16
 2055	Perlu memasang aplikasi "Work Island" secara terpisah. Setelah diaktifkan, status sedang bekerja, menunggu konfirmasi, dan tugas selesai akan muncul di kapsul pada pulau itu; kapsul menutup otomatis 8 detik setelah tugas selesai. Saat ini baru diuji di ColorOS 16 / Android 16.
 2056	Silsilah
 2057	Pindahkan ke Lainnya
@@ -2235,7 +2235,7 @@
 2235	Bukan file font yang bisa dipakai. Hanya ttf, otf, woff, dan woff2 yang didukung
 2236	Perintah tersimpan
 2237	Perintah
-2238	Simpan prompt panjang yang sering dikirim sebagai perintah, lalu pilih dengan mengetik / di kolom input. Teks setelah /nama akan mengisi $ARGUMENTS di dalam isi perintah. Disimpan sebagai file perintah resmi Claude Code, jadi claude di terminal juga bisa memakainya.
+2238	Simpan prompt panjang yang sering dikirim sebagai perintah, lalu pilih dengan mengetik / di kolom input. Teks setelah /nama akan mengisi $ARGUMENTS di dalam isi perintah. Disimpan sebagai file perintah resmi Antigravity CLI, jadi claude di terminal juga bisa memakainya.
 2239	Perintah baru
 2240	Sisipkan
 2241	Belum ada perintah tersimpan. Ketuk "Perintah baru" untuk menyimpan satu.
@@ -2245,7 +2245,7 @@
 2245	mis. Susun masalah sesuai templat issue
 2246	Petunjuk argumen (opsional)
 2247	mis. <deskripsi masalah>
-2248	Isi perintah (yang dikirim ke Claude; $ARGUMENTS diganti dengan teks setelah /nama)
+2248	Isi perintah (yang dikirim ke Antigravity; $ARGUMENTS diganti dengan teks setelah /nama)
 2249	mis. Ubah masalah di bawah ini menjadi issue GitHub: judul satu baris, isi dibagi tiga bagian "Gejala", "Langkah reproduksi", dan "Harapan".\n\n$ARGUMENTS
 2250	Hapus perintah /{name}?
 2251	/{name} tersimpan. Ketik / di kolom input untuk memakainya
@@ -2269,7 +2269,7 @@
 2269	Tombol di bawah pesan
 2270	Ketuk untuk menampilkan atau menyembunyikan; sembunyikan yang tidak dipakai
 2271	Pesan Anda
-2272	Balasan Claude
+2272	Balasan Antigravity
 2273	Warna kustom
 2274	Biru
 2275	Tosca
@@ -2312,16 +2312,16 @@
 2312	Tugas dimatikan atau dihapus saat sedang diantrekan
 2313	Waktu untuk jalan sekali sudah lewat, jadi tugas dimatikan
 2314	Tugas ini sudah berjalan
-2315	(Model ini tidak mendukung protokol Anthropic di alamat ini: ganti dengan model yang mendukung, atau gunakan alamat yang disediakan platform untuk Claude Code)
+2315	(Model ini tidak mendukung protokol Anthropic di alamat ini: ganti dengan model yang mendukung, atau gunakan alamat yang disediakan platform untuk Antigravity CLI)
 2316	Ekstra besar
 2317	Untuk mencegah aplikasi lain menyamar sebagai layanan pairing, isi kode bersama portnya: port adalah angka setelah titik dua di "Alamat IP & port" pada kotak pairing, misalnya {0}
 2318	Isi kode dan portnya sekaligus, misalnya {0} (port ada di kotak pairing)
-2319	Pertama kali perlu pairing: di Pengaturan yang terbuka, masuk ke "Debugging nirkabel" → aktifkan → "Pasangkan perangkat dengan kode pairing". Notifikasi cccodroid akan terus tampil di bagian atas layar; ketuk "Isi kode pairing", lalu isi kode 6 digit bersama port yang ada di kotak pairing, misalnya 123456 37285 (bisa juga diisi di sini)
+2319	Pertama kali perlu pairing: di Pengaturan yang terbuka, masuk ke "Debugging nirkabel" → aktifkan → "Pasangkan perangkat dengan kode pairing". Notifikasi agycodroid akan terus tampil di bagian atas layar; ketuk "Isi kode pairing", lalu isi kode 6 digit bersama port yang ada di kotak pairing, misalnya 123456 37285 (bisa juga diisi di sini)
 2320	Port (di kotak pairing)
 2321	Isi juga port dari kotak pairing (angka setelah titik dua)
 2322	Konfirmasi tindakan sensitif
 2323	Saat menyentuh kunci atau membaca layar dan mengetuk, Anda tetap akan ditanya meski memilih izinkan semua
-2324	Saat Claude hendak membaca kunci dan kredensial login (.env, kunci SSH, kunci API penyedia, token gateway, dan sebagainya), membaca layar atau mengetuk di aplikasi lain untuk Anda, membaca papan klip, atau membagikan file ke luar, muncul kartu konfirmasi tersendiri, termasuk saat memilih izinkan semua; dalam satu putaran, jenis tindakan yang sama tidak ditanya lagi setelah diizinkan. Ini mencegah instruksi tersembunyi di halaman web atau file yang dibaca Claude menyesatkannya. Hanya jaring pengaman: perintah yang sengaja disamarkan tidak bisa dikenali.
+2324	Saat Antigravity hendak membaca kunci dan kredensial login (.env, kunci SSH, kunci API penyedia, token gateway, dan sebagainya), membaca layar atau mengetuk di aplikasi lain untuk Anda, membaca papan klip, atau membagikan file ke luar, muncul kartu konfirmasi tersendiri, termasuk saat memilih izinkan semua; dalam satu putaran, jenis tindakan yang sama tidak ditanya lagi setelah diizinkan. Ini mencegah instruksi tersembunyi di halaman web atau file yang dibaca Antigravity menyesatkannya. Hanya jaring pengaman: perintah yang sengaja disamarkan tidak bisa dikenali.
 2325	Jika bukan Anda yang memintanya, kemungkinan itu berasal dari instruksi tersembunyi di halaman web atau file yang dibacanya; sebaiknya tolak. Setelah diizinkan, jenis tindakan yang sama tidak ditanya lagi dalam putaran ini.
 2326	Hendak membaca layar atau mengoperasikan aplikasi lain untuk Anda ({w})
 2327	Hendak membaca papan klip
@@ -2579,7 +2579,7 @@
 2579	dari pengaturan penyedia
 2580	Sesi lain juga bisa memakainya: ketuk label model di bawah kolom input, lalu pilih di baris penyedia.
 2581	Isi alamat, kunci, dan model, lalu siap digunakan; jendela konteks opsional.
-2582	Buat paket diagnostik lalu kirim lewat bagikan sistem.\n\nIsi paket:\n· Versi dan perangkat: versi cccodroid / Android, model perangkat, chip, ruang kosong\n· Devkit: versi yang terpasang, status pembaruan dan pemeriksaan mandiri\n· Log terbaru: log sistem aplikasi ini, bagian akhir log gateway\n· Catatan perbaikan: instalasi, verifikasi, dan perbaikan yang pernah dilakukan, berhasil atau tidak\n· Jaringan: apakah VPN aktif dan apakah aplikasi bisa menjangkau beberapa sumber unduhan (hanya hasilnya)\n\nSudah dihapus:\n· Kunci, token, kredensial login, email\n· Isi pesan Anda ke Claude\n· Riwayat percakapan tidak ada di dalam paket\n\nLanjutkan?
+2582	Buat paket diagnostik lalu kirim lewat bagikan sistem.\n\nIsi paket:\n· Versi dan perangkat: versi agycodroid / Android, model perangkat, chip, ruang kosong\n· Devkit: versi yang terpasang, status pembaruan dan pemeriksaan mandiri\n· Log terbaru: log sistem aplikasi ini, bagian akhir log gateway\n· Catatan perbaikan: instalasi, verifikasi, dan perbaikan yang pernah dilakukan, berhasil atau tidak\n· Jaringan: apakah VPN aktif dan apakah aplikasi bisa menjangkau beberapa sumber unduhan (hanya hasilnya)\n\nSudah dihapus:\n· Kunci, token, kredensial login, email\n· Isi pesan Anda ke Antigravity\n· Riwayat percakapan tidak ada di dalam paket\n\nLanjutkan?
 2583	Daftar model
 2584	Konteks {used} · kapasitas tidak diketahui
 2585	Tampilkan {n} baris lagi (total {total} baris)
@@ -2637,7 +2637,7 @@
 2637	Mematikan…
 2638	Aktif: perintah istimewa tidak lagi dikonfirmasi satu per satu
 2639	✓ Nonaktif, kembali mengonfirmasi tiap perintah
-2640	Tidak lagi mengonfirmasi tiap perintah istimewa (risiko ditanggung sendiri): setelah aktif, perintah istimewa langsung dijalankan dan tugas di latar belakang tidak lagi tertahan menunggu konfirmasi; perintah yang menyentuh cccodroid atau Shizuku / Sui sebisa mungkin dicegat dan ditanyakan, tetapi tidak semua bentuk penulisan bisa terdeteksi. Untuk mengizinkan satu sesi saja, centang "Izinkan semua perintah istimewa berikutnya di sesi ini" di dialog konfirmasi
+2640	Tidak lagi mengonfirmasi tiap perintah istimewa (risiko ditanggung sendiri): setelah aktif, perintah istimewa langsung dijalankan dan tugas di latar belakang tidak lagi tertahan menunggu konfirmasi; perintah yang menyentuh agycodroid atau Shizuku / Sui sebisa mungkin dicegat dan ditanyakan, tetapi tidak semua bentuk penulisan bisa terdeteksi. Untuk mengizinkan satu sesi saja, centang "Izinkan semua perintah istimewa berikutnya di sesi ini" di dialog konfirmasi
 2641	Ini file biner; membukanya sebagai teks akan membuat aplikasi macet.
 2642	Konfigurasi jembatan tidak lolos pemeriksaan konsistensi, sehingga belum dapat dibaca atau disimpan dengan aman. Tinjau penjelasan pemeriksaan; jangan langsung menghapus direktori atau mencopot instalasi.
 2643	Status jembatan
@@ -2699,7 +2699,7 @@
 2699	Catatan aplikasi telah disinkronkan. Status lokal telah dibaca ulang dan sesi saat ini tidak dialihkan.
 2700	Belum dapat dipastikan apakah perbaikan ini sudah tersimpan. Periksa lagi status lokal. Tidak akan ada percobaan ulang otomatis; jangan berulang kali menimpa konfigurasi.
 2701	Penyedia aplikasi telah disimpan, tetapi penyelesaian pemetaan belum tuntas. Pemeriksaan ulang hanya-baca telah dicoba; tinjau status saat ini. Jangan berulang kali menjalankan perbaikan. Sesi saat ini tidak dialihkan.
-2702	Sistem atau cccodroid sudah punya perintah dengan nama ini. Pilih nama lain
+2702	Sistem atau agycodroid sudah punya perintah dengan nama ini. Pilih nama lain
 2703	Perintah ini berasal dari file konfigurasi repositori itu sendiri. Kalau repo diunduh dari internet atau diberi orang lain, periksa dulu di terminal. Lanjutkan?
 2704	Izinkan halaman ini terhubung ke internet?\n\nSetelah terhubung, skrip di halaman bisa mengirim file dari foldernya, juga dari hingga tiga folder di atasnya, ke tempat lain. Hanya izinkan halaman yang kamu percaya. Tiap halaman perlu izin sendiri.
 2705	Direktori zip terlalu besar
@@ -2707,7 +2707,7 @@
 2707	Gagal menyalin ke area sementara: {msg}
 2708	Entri indeks untuk {pkg} tidak valid
 2709	{pkg} berisi entri yang akan menulis ke luar paket; tidak diekstrak
-2710	Perintah {c} bawaan sistem atau cccodroid. Pilih nama lain
+2710	Perintah {c} bawaan sistem atau agycodroid. Pilih nama lain
 2711	Skill bernama custom-{id} sudah ada. Pilih nama lain
 2712	Tanda tangan manifes resmi tidak valid: {msg}
 2713	Isi manifes tidak benar
@@ -2726,26 +2726,26 @@
 2726	Putih
 2727	Kuning
 2728	Statistik penggunaan dihapus saat penghitungan ulang, jadi hasilnya dibuang.
-2729	Program Claude Code telah diubah dan tidak dijalankan; 
+2729	Program Antigravity CLI telah diubah dan tidak dijalankan; 
 2730	File aplikasi telah diubah dan sudah dipulihkan dari paket aplikasi: 
-2731	Program Claude Code tidak cocok dengan manifes resmi yang ditandatangani dan mungkin telah diubah, jadi giliran ini tidak dijalankan. Instal ulang di Pengaturan → Pembaruan lalu coba lagi.
+2731	Program Antigravity CLI tidak cocok dengan manifes resmi yang ditandatangani dan mungkin telah diubah, jadi giliran ini tidak dijalankan. Instal ulang di Pengaturan → Pembaruan lalu coba lagi.
 2732	Nama panggilan
 2733	Konfigurasi repositori ini tidak dapat dibaca (ada baris baru, tanda kutip, dan sejenisnya di nama), jadi demi keamanan tidak dijalankan.
 2734	Komponen lain sedang memasang nama itu; coba lagi nanti atau pilih nama lain.
 2735	Perintah {c} sedang dipasang oleh komponen lain; coba lagi nanti atau pilih nama lain.
 2736	Perintah {c} diambil alih saat pemasangan, jadi pemasangan ini dibatalkan.
 2737	Pengaturan tidak dapat ditulis ke disk; mungkin masih berlaku untuk jalannya ini, tetapi akan kembali ke nilai lama setelah mulai ulang (lihat log gateway untuk detail).
-2738	Konfigurasi tingkat pengguna Claude Code punya perubahan yang belum dikonfirmasi, atau percakapan sebelumnya meninggalkan proses di latar belakang, jadi kali ini tidak dijalankan. Buka cccodroid, kirim pesan, lalu konfirmasi di kartu yang muncul dan coba lagi.
+2738	Konfigurasi tingkat pengguna Antigravity CLI punya perubahan yang belum dikonfirmasi, atau percakapan sebelumnya meninggalkan proses di latar belakang, jadi kali ini tidak dijalankan. Buka agycodroid, kirim pesan, lalu konfirmasi di kartu yang muncul dan coba lagi.
 2739	{n} item tidak bisa dipulihkan (tidak ada salinan saat dikonfirmasi, atau salinannya juga berubah), jadi giliran ini tidak dijalankan: {list}
 2740	Hook ({e}) menambahkan {n} karakter ke konteks giliran ini
 2741	Ditambahkan
-2742	Pemeriksaan pertama: konfigurasi di bawah diberikan ke Claude di setiap percakapan. Pastikan Anda sendiri yang menaruhnya.
+2742	Pemeriksaan pertama: konfigurasi di bawah diberikan ke Antigravity di setiap percakapan. Pastikan Anda sendiri yang menaruhnya.
 2743	diubah saat sebuah giliran berjalan
 2744	diubah lagi setelah dibatalkan (ke-{n})
 2745	Program yang ditinggalkan percakapan sebelumnya dan masih berjalan di latar belakang:
 2746	asal tidak diketahui
 2747	Jika bukan Anda yang membuat perubahan ini atau Anda tidak mengenalinya, pilih "Batalkan": konfigurasi kembali seperti saat terakhir dikonfirmasi (file baru dipindahkan ke folder karantina, tidak dihapus), dan program yang tersisa dihentikan. Jika Anda sendiri yang mengubahnya, pilih "Simpan" dan tidak akan ditanya lagi.
-2748	Konfigurasi tingkat pengguna yang diberikan ke Claude berubah tanpa konfirmasi Anda
+2748	Konfigurasi tingkat pengguna yang diberikan ke Antigravity berubah tanpa konfirmasi Anda
 2749	Percakapan sebelumnya meninggalkan program yang berjalan di latar belakang
 2750	Saya yang buat, simpan
 2751	Batalkan ▾
@@ -2755,15 +2755,15 @@
 2755	↩ Dibatalkan
 2756	Batalkan perubahan
 2757	Konfigurasi tingkat pengguna berubah lagi setelah Anda mengonfirmasinya, jadi giliran ini tidak dimulai: {list}. Kirim pesan lagi dan konfirmasi di kartu yang muncul.
-2758	Konfigurasi tingkat pengguna Claude Code memiliki perubahan yang belum dikonfirmasi. Kirim pesan dulu, konfirmasi di kartu yang muncul, lalu coba lagi.
+2758	Konfigurasi tingkat pengguna Antigravity CLI memiliki perubahan yang belum dikonfirmasi. Kirim pesan dulu, konfirmasi di kartu yang muncul, lalu coba lagi.
 2759	Diubah lalu dikembalikan
-2760	Membatalkan akan memindahkannya ke ~/.ccapp-userconf/quarantine, jadi masih bisa dikembalikan.
+2760	Membatalkan akan memindahkannya ke ~/.agyapp-userconf/quarantine, jadi masih bisa dikembalikan.
 2761	Pemeriksaan keamanan sendiri gagal dan tidak bisa menilai langkah ini
 2762	Ini biasanya tidak terjadi. Jika Anda tidak yakin apa yang dilakukan langkah ini, tolak saja.
 2763	Aktif — otomatis mati pada {t}
 2764	Nama remote tidak valid
 2765	Aplikasi ditutup sistem saat Anda memilih lokasi, sehingga file yang akan disimpan hilang. Simpan lagi.
-2766	Claude Code dihentikan oleh program lain ({why}); ini bukan masalah model atau API
+2766	Antigravity CLI dihentikan oleh program lain ({why}); ini bukan masalah model atau API
 2767	Pembuatan terputus ({sig})
 2768	Pembuatan gagal (kode keluar {code})
 2769	Pembuatan selesai tanpa hasil
@@ -2773,17 +2773,17 @@
 2773	Hooks di tingkat ini dijeda
 2774	Aturan ini diubah atau dihapus saat Anda mengeditnya. Buka lagi lalu ulangi perubahan
 2775	Folder dengan nama ini sudah ada tetapi tidak berisi SKILL.md (kemungkinan sisa impor sebelumnya yang gagal). Hapus ~/.claude/skills/{d} di Berkas, lalu impor lagi
-2776	File konfigurasi Claude Code ini berisi instruksi pengabaian (meminta model mengabaikan aturannya, menyamar sebagai pesan sistem, dan sejenisnya). cccodroid tidak memuatnya, jadi giliran ini tidak dijalankan. Ubah atau hapus bagian berikut, lalu kirim lagi:\n{list}
-2777	Versi rilis tidak menjalankan hooks yang diatur di sini: hook bisa menjalankan perintah apa pun dan memasukkan apa saja ke percakapan, yang tidak bisa diperiksa cccodroid. Aturannya tetap ada di file dan tidak dihapus.
-2778	cccodroid memeriksa skill ini sebelum diserahkan ke Claude Code. Saat memanggilnya dengan garis miring, tambahkan user: di depan namanya, misalnya /user:{name}.
-2779	Claude Code gagal pemeriksaan integritas, jadi tidak dijalankan: {why}
-2780	Versi Claude Code ini belum punya manifest resmi bertanda tangan, jadi giliran ini tidak dimulai. Sedang diverifikasi ulang secara daring — kirim lagi dalam satu-dua menit. Jika terus gagal, pasang ulang dari Pengaturan → Pembaruan.
-2781	Runtime milik gateway telah diubah, jadi Claude Code tidak dijalankan pada giliran ini. Gateway akan mulai ulang saat senggang dan memulihkannya dari paket; kirim lagi sebentar lagi.
+2776	File konfigurasi Antigravity CLI ini berisi instruksi pengabaian (meminta model mengabaikan aturannya, menyamar sebagai pesan sistem, dan sejenisnya). agycodroid tidak memuatnya, jadi giliran ini tidak dijalankan. Ubah atau hapus bagian berikut, lalu kirim lagi:\n{list}
+2777	Versi rilis tidak menjalankan hooks yang diatur di sini: hook bisa menjalankan perintah apa pun dan memasukkan apa saja ke percakapan, yang tidak bisa diperiksa agycodroid. Aturannya tetap ada di file dan tidak dihapus.
+2778	agycodroid memeriksa skill ini sebelum diserahkan ke Antigravity CLI. Saat memanggilnya dengan garis miring, tambahkan user: di depan namanya, misalnya /user:{name}.
+2779	Antigravity CLI gagal pemeriksaan integritas, jadi tidak dijalankan: {why}
+2780	Versi Antigravity CLI ini belum punya manifest resmi bertanda tangan, jadi giliran ini tidak dimulai. Sedang diverifikasi ulang secara daring — kirim lagi dalam satu-dua menit. Jika terus gagal, pasang ulang dari Pengaturan → Pembaruan.
+2781	Runtime milik gateway telah diubah, jadi Antigravity CLI tidak dijalankan pada giliran ini. Gateway akan mulai ulang saat senggang dan memulihkannya dari paket; kirim lagi sebentar lagi.
 2782	Tidak bisa membaca {path} di perangkat ini: mungkin ada di mesin jarak jauh, atau sudah dihapus
 2783	Gagal menyimpan pengaturan, jadi mode tidak diganti
 2784	Untuk “Setiap beberapa jam”, waktu mulai harus lebih awal dari waktu selesai. Untuk melewati tengah malam, pecah menjadi dua tugas
 2785	Giliran ini tidak dimulai: kartu konfirmasi sebelum peluncuran tidak dijawab selama {n} menit, jadi dihentikan (dikirim {when}).
-2786	Claude tidak menerima pesan ini. Ketuk "Kirim ulang" untuk mengembalikannya ke kotak input.
+2786	Antigravity tidak menerima pesan ini. Ketuk "Kirim ulang" untuk mengembalikannya ke kotak input.
 2787	Percakapan baru menunggu konfirmasi Anda · lihat "Percakapan baru belum tersimpan" di bilah samping
 2788	local-mode.json bukan berkas biasa
 2789	Percakapan baru belum tersimpan
@@ -2957,7 +2957,7 @@
 2957	Sistem tidak mengizinkan aplikasi ini memulai layanan Work Island, jadi tidak ada yang ditampilkan.
 2958	Aplikasi Work Island tidak terdeteksi — pasang dulu, lalu ketuk Coba lagi.
 2959	Swauji perangkat
-2960	Menjalankan kompiler, Python, Node, git, dan lainnya dari Devkit satu per satu; hasilnya memberi tahu Claude apa yang berfungsi di perangkat ini dan apa yang tidak. Diulang otomatis setelah Devkit atau aplikasi diperbarui; jika Anda sudah memperbaiki sesuatu dan ingin Claude segera tahu, ketuk Ulangi swauji.
+2960	Menjalankan kompiler, Python, Node, git, dan lainnya dari Devkit satu per satu; hasilnya memberi tahu Antigravity apa yang berfungsi di perangkat ini dan apa yang tidak. Diulang otomatis setelah Devkit atau aplikasi diperbarui; jika Anda sudah memperbaiki sesuatu dan ingin Antigravity segera tahu, ketuk Ulangi swauji.
 2961	Ulangi swauji
 2962	Mingguan · {model}
 2963	Durasi
@@ -2979,7 +2979,7 @@
 2979	Endpoint tidak menemukan model atau alamat ini: periksa nama model dan URL endpoint.
 2980	Penyedia mengalami galat atau kelebihan beban: coba lagi nanti. Jika terus terjadi, ganti model atau endpoint.
 2981	Tidak bisa menjangkau endpoint: periksa jaringan, atau apakah URL endpoint salah.
-2982	Buka ini di aplikasi cccodroid
+2982	Buka ini di aplikasi agycodroid
 2983	Arsip berisi terlalu banyak berkas ({n}, maksimal {max}); tidak ada yang diimpor
 2984	Hanya {n} pertama yang ditampilkan; gunakan filter
 2985	Ekstrak pilihan ({n})
@@ -2987,12 +2987,12 @@
 2987	Arsip: ketuk “Buka arsip” untuk melihat isinya, atau langsung ekstrak
 2988	Buka arsip
 2989	Ekstrak…
-2990	Setelah dinonaktifkan, Claude tidak melihatnya. File perintah tetap ada; bisa diaktifkan lagi kapan saja.
+2990	Setelah dinonaktifkan, Antigravity tidak melihatnya. File perintah tetap ada; bisa diaktifkan lagi kapan saja.
 2991	Hanya nama
 2992	Hanya saat kamu memanggilnya
 2993	Mode skill
 2994	Berlaku mulai giliran berikutnya
-2995	Nonaktif: Claude tidak akan terhubung. Pengaturannya disimpan; ketuk Aktifkan untuk menambahkannya lagi.
+2995	Nonaktif: Antigravity tidak akan terhubung. Pengaturannya disimpan; ketuk Aktifkan untuk menambahkannya lagi.
 2996	Nonaktifkan server MCP {name}? Pengaturannya disimpan dulu, jadi bisa diaktifkan lagi kapan saja.
 2997	Aktifkan server MCP {name}? Ini akan ditambahkan kembali: {target}
 2998	Hapus server MCP nonaktif {name}? Tidak bisa diaktifkan lagi dengan sekali ketuk.
@@ -3009,234 +3009,338 @@
 3009	Terenkripsi
 3010	Ekstrak semua…
 3011	Tutup arsip
-3012	Versi ini tidak menyertakan 7-Zip, jadi tidak bisa membuka arsip jenis ini
-3013	Tidak bisa membuka arsip: {msg}
-3014	{size} terkompresi
-3015	Tautan simbolik (tidak diekstrak)
-3016	Mengekstrak…
-3017	Kata sandi salah
-3018	Terlalu besar untuk pratinjau; ekstrak dulu
-3019	Ruang penyimpanan tidak cukup
-3020	Gagal mengekstrak: {msg}
-3021	Masukkan kata sandi
-3022	Kata sandi salah, coba lagi
-3023	OK
-3024	{n} item terpilih
-3025	Ekstrak {what}
-3026	Ekstrak ke
-3027	Folder saat ini
-3028	Kata sandi (kosongkan jika tidak terenkripsi)
-3029	File yang sudah ada dengan nama sama tidak ditimpa; yang baru diganti nama menjadi “nama (2)”. Tautan simbolik tidak diekstrak.
-3030	Ekstrak
-3031	Tulis path lengkap (diawali /)
-3032	Kompres “{name}”
-3033	Kompres {n} item
-3034	Nama arsip
-3035	Format
-3036	Tingkat kompresi
-3037	Simpan saja
-3038	Tercepat
-3039	Normal
-3040	Terkecil (lambat)
-3041	Kata sandi (opsional, zip / 7z)
-3042	Enkripsi juga nama file (7z)
-3043	Zip terenkripsi memakai AES-256, yang mungkin tidak bisa dibuka alat lama; jangan pakai kata sandi demi kompatibilitas. Folder kredensial seperti .ssh tidak dimasukkan.
-3044	Kompres
-3045	Tidak bisa mengekstrak atau mengompres ke lokasi ini
-3046	Versi ini tidak menyertakan 7-Zip
-3047	Arsip tidak bisa disimpan di dalam folder yang sedang dikompres
-3048	Mengekstrak
-3049	Mengompres
-3050	Diekstrak ke {path}
-3051	Dikompres menjadi {path}
-3052	Pilih
-3053	Prompt sistem tidak bisa ditulis ke file, jadi giliran ini tidak dimulai: {msg}
-3054	Kembalikan pengaturan awal
-3055	Untuk saat konfigurasi rusak membuat setiap giliran ditolak atau tidak menjawab dan tidak bisa Anda perbaiki: konfigurasi tingkat pengguna Claude Code (CLAUDE.md, skill, plugin, hook, MCP, memori), pengaturan cccodroid, dan file awal shell kembali seperti baru dipasang, dan file aplikasi dipasang ulang dari paket. Semuanya dipindah ke ~/.ccapp-reset sebagai cadangan, tidak dihapus; percakapan, ruang kerja, dan toolkit tetap, dan kunci disimpan secara bawaan. Dialog konfirmasi sistem muncul lebih dulu.
-3056	Dialog konfirmasi tidak muncul
-3057	Pasang ulang komponen ini (diunduh lagi)
-3058	Pasang ulang modul devkit ini (diunduh lagi)
-3059	Perbaiki devkit: unduh ulang versi ini dan pasang ulang; layanan dijeda 1–2 menit selama pemasangan
-3060	Pasang ulang Claude Code
-3061	Perbaiki semua
-3062	Perbaiki
-3063	Menunggu
-3064	Sedang berjalan…
-3065	Diserahkan ke aplikasi
-3066	Sedang memperbaiki. Menutup halaman ini tidak menghentikannya; setelah selesai akan diperiksa ulang otomatis:
-3067	Perbaikan selesai:
-3068	Pantau langkah yang diserahkan ke aplikasi di Pengaturan → Pembaruan, lalu ketuk “Periksa catatan” lagi setelah selesai.
-3069	Perbaikan selesai, {n} langkah gagal
-3070	Perbaikan selesai
-3071	Akan diperbaiki dengan urutan ini, lalu diperiksa ulang otomatis:
-3072	Perbaiki item ini:
-3073	Pemasangan ulang mengunduh dari internet; file, percakapan, dan pengaturan Anda tidak terpengaruh. Lanjutkan?
-3074	Indeks gagal verifikasi tanda tangan, jadi komponen tidak bisa dipasang
-3075	Versi di indeks ({v}) lebih lama dari yang terpasang ({now}); penurunan versi ditolak
-3076	Perbaikan atau pemeriksaan sedang berjalan; coba lagi setelah selesai
-3077	Tidak ada masalah yang bisa diperbaiki otomatis
-3078	Masih ada langkah yang berjalan di aplikasi:
-3079	Langkah yang diserahkan ke aplikasi masih berjalan; ketuk “Periksa catatan” setelah selesai
-3080	Browser bawaan
-3081	Paket yang diunduh pkg
-3082	Indeks silsilah
-3083	Memindai…
-3084	Aplikasi ini memakai {app}; sisa di perangkat {free}
-3085	Pemindaian terakhir: {when}
-3086	Belum pernah dipindai
-3087	{n} hari, sesuai setelan Anda
-3088	Disimpan selamanya
-3089	Pembersihan otomatis terakhir: {when}, membebaskan {size}
-3090	Belum ada pembersihan otomatis
-3091	Cache
-3092	Total {size}; diunduh atau dibangun ulang otomatis bila perlu
-3093	Sedang dipakai
-3094	Sesi berjalan
-3095	Tak berubah 7 hari
-3096	Terakhir diubah: {when}
-3097	Hapus yang dipilih
-3098	File sementara
-3099	Total {size}, {old} di antaranya tak berubah 7 hari. Termasuk keluaran perintah latar belakang dan folder sementara sisa pengujian dan build
-3100	{n} terbesar
-3101	Bersihkan yang lebih dari 7 hari
-3102	File sampingan Claude Code
-3103	Log debug, snapshot shell, log MCP, dan cadangan .claude.json: total {size}; {n} item ({auto}) bisa dibersihkan (lebih dari 30 hari; 5 cadangan terbaru disimpan)
-3104	{n} sesi, total {size}. Sesi tidak pernah dihapus otomatis; hapus dari daftar sesi, dan sesi masuk ke tempat sampah dulu
-3105	Data runtime komponen (~/.cccodroid)
-3106	{name} (dipasang dengan pkg)
-3107	Folder bersama /sdcard/cccodroid
-3108	Program dan file Anda
-3109	Hanya ukuran; tidak ada yang dihapus di sini
-3110	Tempat sampah sesi
-3111	{n} item, {size}; dikosongkan otomatis setelah 30 hari
-3112	Program sisa toolkit lama
-3113	Tinjau
-3114	Data runtime sisa komponen {id} yang dihapus
-3115	Statistik penggunaan
-3116	Tempat pembersihan lain
-3117	✓ Menghapus {n} item, membebaskan {size}
-3118	{n} item tidak dihapus (sedang dipakai atau di luar folder yang diizinkan)
-3119	Tidak ada yang dipilih
-3120	Hapus {n} item sementara yang dipilih? Tidak bisa dibatalkan.
-3121	Hapus data runtime sisa {id}? Saat dipasang ulang akan diunduh lagi.
-3122	✓ Dihapus
-3123	Penyimpanan
-3124	Ruang terpakai
-3125	Pindai
-3126	Penyimpanan sesi
-3127	Secara bawaan Claude Code menghapus sesi yang tak berubah selama 30 hari beserta data terkaitnya, tanpa lewat tempat sampah. Aplikasi ini menyimpannya selamanya: sesi hanya masuk tempat sampah bila Anda menghapusnya dari daftar sesi. Jika Anda sendiri menulis cleanupPeriodDays di ~/.claude/settings.json, jumlah hari Anda yang dipakai.
-3128	Pembersihan otomatis
-3129	Hanya membersihkan cache, file sementara yang tak berubah 7 hari, dan file sampingan Claude Code yang lebih dari 30 hari. Sesi, file Anda, dan program tidak pernah dihapus otomatis
-3130	Atur model tiap API melalui satu jembatan lokal; semua perubahan berlaku setelah disimpan.
-3131	Daftar API
-3132	Tambah API
-3133	Perbarui komponen jembatan untuk menambah beberapa API; konfigurasi satu API yang ada tetap berfungsi.
-3134	{n} model
-3135	Edit satu API setiap kali. Penambahan, penghapusan, dan perubahan model bawaan hanya berlaku setelah menekan Simpan konfigurasi.
-3136	Hapus API “{name}” beserta modelnya? Ini hanya berlaku setelah menekan Simpan konfigurasi; percakapan saat ini tidak berubah.
-3137	ID model yang terlihat bentrok, melebihi 200 karakter, atau berjumlah lebih dari 100; sesuaikan model sebelum menyimpan.
-3138	Simpan semua konfigurasi API?\n\nSaat digunakan, percakapan, hasil alat, dan gambar akan dikirim ke layanan berikut sesuai model yang dipilih:\n{origins}\nMenyimpan tidak memanggil model jarak jauh atau mengganti percakapan saat ini.
-3139	Hapus ({n})
-3140	Hapus {what} secara permanen? Tindakan ini tidak dapat dibatalkan.
-3141	Folder akan dihapus beserta seluruh isinya.
-3142	{n} item dihapus
-3143	Folder ini berisi direktori milik aplikasi atau ruang kerja dan tidak dapat dihapus
-3144	URL daftar model (opsional; jika kosong, /models dicari otomatis dari alamat API)
-3145	Saat terputus, {n} tindakan yang mungkin memiliki efek samping tidak mengembalikan hasil: {list}. Tidak dapat dipastikan apakah sudah dijalankan; periksa dulu sebelum menekan «Lanjutkan».
-3146	Status proses sebelumnya tidak dapat dipulihkan (catatan tidak terbaca atau formatnya salah), jadi giliran yang terputus dan pesan dalam antrean tidak akan muncul; berkas aslinya tetap disimpan.
-3147	Status proses tidak dapat disimpan (penyimpanan mungkin penuh atau tanpa izin). Jika aplikasi ditutup oleh sistem, giliran ini mungkin tidak dapat dipulihkan.
-3148	(Giliran sebelumnya tidak selesai dengan normal; balasan di atas mungkin tidak lengkap)
-3149	Sesi berhasil diimpor, tetapi judul kustom tidak dapat disimpan (penyimpanan mungkin penuh atau tidak ada izin). Judul asli akan tampil setelah mulai ulang
-3150	Daftar sesi tidak dapat dibaca ({msg}); ini bukan berarti tidak ada sesi. Periksa izin penyimpanan lalu segarkan.
-3151	Permintaan habis waktu: gateway tidak merespons ({n} dtk)
-3152	Gateway offline: {msg} · Ketuk untuk mencoba lagi
-3153	Draf tidak bisa disimpan: penyimpanan perangkat penuh. Salin teksnya ke tempat lain, atau kirim dulu.
-3154	Token pengiriman ini dipakai untuk konten lain; kirim ulang pesannya.
-3155	Tidak pasti apakah sudah terkirim: {msg}
-3156	Gateway sudah menerima pesan ini (hanya tanda terimanya yang hilang); tidak perlu dikirim ulang
-3157	Giliran sebelumnya gagal di latar belakang: {msg}
-3158	Alamat mengembalikan {s}, tetapi isi responsnya terlalu besar (lebih dari 8 MB) untuk memastikan kunci valid
-3159	Upstream terputus tanpa penanda akhir, jadi balasan dianggap selesai. Kelengkapannya tidak bisa dipastikan; jika terpotong, kirim “lanjutkan”
-3160	Giliran sebelumnya selesai, tetapi giliran berikutnya tidak mendapat hasil (terputus)
-3161	Direktori tidak ada: {dir}; memakai {cwd} sebagai gantinya
-3162	API mengembalikan error, bukan balasan normal:
-3163	Batas maksimum garis pemadatan adalah 1M; disimpan sebagai 1M
-3164	Contoh templat (bukan layanan nyata; ganti dengan nilai dari penyedia Anda)
-3165	Endpoint pihak ketiga Anda pilih sendiri; aplikasi tidak mengaudit atau mendukungnya. Operator dapat melihat Key, kode, dan percakapan Anda, jadi gunakan hanya layanan yang Anda percaya, dan jangan gunakan akun bersama atau hasil jual ulang.
-3166	HONOR / Huawei dan sistem serupa membekukan Shizuku di latar belakang dan memperlambat aktivasi: di Pengelolaan aplikasi → Shizuku, aktifkan "Abaikan pengoptimalan baterai".
-3167	Menunggu konfirmasi (bukan akibat pemuatan ulang ini)
-3168	Catatan baru atau berkas tambahan
-3169	Pertama dicatat: {time}
-3170	Waktu tidak diketahui
-3171	Berkas konfigurasi diubah dan ditulis ulang menggunakan pengaturan aplikasi saat ini:
-3172	Berkas aplikasi yang berjalan diubah; perlindungan diaktifkan:
-3173	Jendela konteks (opsional, jumlah token, 1k=1024; kosong = 200k)
-3174	Variabel lingkungan, opsional, dipisahkan koma (KEY=nilai)
-3175	Header, opsional, dipisahkan koma (Header: nilai), mis. Authorization: Bearer token-anda
-3176	Header
-3177	MCP jarak jauh memakai header: tulis {bad} dengan titik dua, mis. Authorization: Bearer token-anda
-3178	MCP jarak jauh tidak mendukung variabel lingkungan: tulis header sebagai Header: nilai, mis. Authorization: Bearer token-anda
-3179	Hapus dari konfigurasi
-3180	Header saat ini
-3181	Variabel lingkungan saat ini
-3182	Kosongkan untuk mempertahankan nilai, isi untuk mengubah
-3183	Perubahan {name} tersimpan
-3184	Gagal mengedit: {msg}
-3185	Hanya server MCP yang Anda tambahkan (tingkat pengguna) yang bisa diedit
-3186	Gagal menyimpan: {msg}; konfigurasi lama dipulihkan apa adanya
-3187	Gagal menyimpan: {msg}, dan konfigurasi lama tidak bisa dipulihkan — silakan periksa manual
-3188	Tidak bisa membuka editor: {msg}
-3189	Mengedit {name}: kosongkan = pertahankan nilai, ketuk × untuk hapus, isi untuk mengganti
-3190	Server MCP ini tidak ditemukan (konektor akun tidak bisa diedit)
-3191	Sudah ada server MCP dengan nama ini
-3192	stdio tidak menyimpan header: {names} akan dibuang. Lanjutkan?
-3193	Jika server ada di perangkat ini, isi http://127.0.0.1:port — IP LAN berubah saat jaringan berganti dan koneksi putus
-3194	Ini tampak seperti alamat LAN: jika server ada di perangkat ini, ganti ke http://127.0.0.1:port — IP LAN berubah dan koneksi putus
-3195	Gabungkan PDF
-3196	Ekstrak halaman
-3197	Pisahkan per halaman
-3198	Putar halaman
-3199	Kompres PDF
-3200	PDF ke gambar
-3201	Halaman tidak valid. Gunakan format 1-3,5 dan periksa jumlah halaman.
-3202	Pemrosesan PDF gagal: {code}
-3203	File yang dipilih bukan PDF
-3204	Pindah ke atas
-3205	Pindah ke bawah
-3206	Pilih PDF di panel file atau klik “Pilih PDF…”.
-3207	Alat PDF belum tersedia: {tools}. Instal “Kotak alat PDF” di Ekstensi → Komponen opsional.
-3208	Mengimpor PDF…
-3209	Memproses PDF…
-3210	Pemrosesan selesai
-3211	Kompresi tidak memperkecil ukuran. File asli tetap tersimpan.
-3212	Buka folder hasil
-3213	Koneksi terputus. Mencoba lagi…
-3214	Kotak alat PDF
-3215	File hanya diproses di perangkat ini. File asli tidak ditimpa.
-3216	Operasi
-3217	Buka komponen opsional
-3218	Tambah dari panel file
-3219	Pilih PDF…
-3220	Gabungkan hingga 20 PDF. Pilih satu PDF untuk operasi lain.
-3221	Halaman
-3222	Format: 1-3,5. Kosongkan untuk semua halaman.
-3223	Sudut rotasi
-3224	Kualitas kompresi
-3225	Buku elektronik (ebook)
-3226	File kecil (screen)
-3227	Cetak (printer)
-3228	Format gambar
-3229	Resolusi
-3230	Rendah (72 DPI)
-3231	Tinggi (150 DPI)
-3232	Maksimal 100 halaman per proses. Sisi panjang gambar dibatasi 2048 piksel.
-3233	Folder hasil (baru)
-3234	Mulai pemrosesan
-3235	Pilih maksimal 20 PDF dengan total 256 MB.
-3236	Jumlah halaman PDF tidak boleh melebihi 1000.
-3237	PDF tidak dapat diproses. Pastikan file tidak rusak dan tanpa kata sandi.
-3238	Waktu pemrosesan habis. Kurangi halaman lalu coba lagi.
-3239	Tugas PDF sedang berjalan. Coba lagi nanti.
-3240	Instal komponen kotak alat PDF, lalu buka kembali.
-3241	Masukkan folder hasil baru di lokasi yang dapat ditulis.
-3242	Hasil melebihi 512 MB. Kurangi halaman atau resolusi.
+3012	Kembali ke arsip
+3013	Versi ini tidak menyertakan 7-Zip, jadi tidak bisa membuka arsip jenis ini
+3014	Tidak bisa membuka arsip: {msg}
+3015	{size} terkompresi
+3016	Tautan simbolik (tidak diekstrak)
+3017	Mengekstrak…
+3018	Kata sandi salah
+3019	Terlalu besar untuk pratinjau; ekstrak dulu
+3020	Ruang penyimpanan tidak cukup
+3021	Gagal mengekstrak: {msg}
+3022	Masukkan kata sandi
+3023	Kata sandi salah, coba lagi
+3024	OK
+3025	{n} item terpilih
+3026	Ekstrak {what}
+3027	Ekstrak ke
+3028	Folder saat ini
+3029	Kata sandi (kosongkan jika tidak terenkripsi)
+3030	File yang sudah ada dengan nama sama tidak ditimpa; yang baru diganti nama menjadi “nama (2)”. Tautan simbolik tidak diekstrak.
+3031	Ekstrak
+3032	Tulis path lengkap (diawali /)
+3033	Kompres “{name}”
+3034	Kompres {n} item
+3035	Nama arsip
+3036	Format
+3037	Tingkat kompresi
+3038	Simpan saja
+3039	Tercepat
+3040	Normal
+3041	Terkecil (lambat)
+3042	Kata sandi (opsional, zip / 7z)
+3043	Enkripsi juga nama file (7z)
+3044	Zip terenkripsi memakai AES-256, yang mungkin tidak bisa dibuka alat lama; jangan pakai kata sandi demi kompatibilitas. Folder kredensial seperti .ssh tidak dimasukkan.
+3045	Kompres
+3046	Tidak bisa mengekstrak atau mengompres ke lokasi ini
+3047	Versi ini tidak menyertakan 7-Zip
+3048	Arsip tidak bisa disimpan di dalam folder yang sedang dikompres
+3049	Mengekstrak
+3050	Mengompres
+3051	Diekstrak ke {path}
+3052	Dikompres menjadi {path}
+3053	Pilih
+3054	Prompt sistem tidak bisa ditulis ke file, jadi giliran ini tidak dimulai: {msg}
+3055	Kembalikan pengaturan awal
+3056	Untuk saat konfigurasi rusak membuat setiap giliran ditolak atau tidak menjawab dan tidak bisa Anda perbaiki: konfigurasi tingkat pengguna Antigravity CLI (CLAUDE.md, skill, plugin, hook, MCP, memori), pengaturan agycodroid, dan file awal shell kembali seperti baru dipasang, dan file aplikasi dipasang ulang dari paket. Semuanya dipindah ke ~/.agyapp-reset sebagai cadangan, tidak dihapus; percakapan, ruang kerja, dan toolkit tetap, dan kunci disimpan secara bawaan. Dialog konfirmasi sistem muncul lebih dulu.
+3057	Dialog konfirmasi tidak muncul
+3058	Pasang ulang komponen ini (diunduh lagi)
+3059	Pasang ulang modul devkit ini (diunduh lagi)
+3060	Perbaiki devkit: unduh ulang versi ini dan pasang ulang; layanan dijeda 1–2 menit selama pemasangan
+3061	Pasang ulang Antigravity CLI
+3062	Perbaiki semua
+3063	Perbaiki
+3064	Menunggu
+3065	Sedang berjalan…
+3066	Diserahkan ke aplikasi
+3067	Sedang memperbaiki. Menutup halaman ini tidak menghentikannya; setelah selesai akan diperiksa ulang otomatis:
+3068	Perbaikan selesai:
+3069	Pantau langkah yang diserahkan ke aplikasi di Pengaturan → Pembaruan, lalu ketuk “Periksa catatan” lagi setelah selesai.
+3070	Perbaikan selesai, {n} langkah gagal
+3071	Perbaikan selesai
+3072	Akan diperbaiki dengan urutan ini, lalu diperiksa ulang otomatis:
+3073	Perbaiki item ini:
+3074	Pemasangan ulang mengunduh dari internet; file, percakapan, dan pengaturan Anda tidak terpengaruh. Lanjutkan?
+3075	Indeks gagal verifikasi tanda tangan, jadi komponen tidak bisa dipasang
+3076	Versi di indeks ({v}) lebih lama dari yang terpasang ({now}); penurunan versi ditolak
+3077	Perbaikan atau pemeriksaan sedang berjalan; coba lagi setelah selesai
+3078	Tidak ada masalah yang bisa diperbaiki otomatis
+3079	Masih ada langkah yang berjalan di aplikasi:
+3080	Langkah yang diserahkan ke aplikasi masih berjalan; ketuk “Periksa catatan” setelah selesai
+3081	Browser bawaan
+3082	Paket yang diunduh pkg
+3083	Indeks silsilah
+3084	Memindai…
+3085	Aplikasi ini memakai {app}; sisa di perangkat {free}
+3086	Pemindaian terakhir: {when}
+3087	Belum pernah dipindai
+3088	{n} hari, sesuai setelan Anda
+3089	Disimpan selamanya
+3090	Pembersihan otomatis terakhir: {when}, membebaskan {size}
+3091	Belum ada pembersihan otomatis
+3092	Cache
+3093	Total {size}; diunduh atau dibangun ulang otomatis bila perlu
+3094	Sedang dipakai
+3095	Sesi berjalan
+3096	Tak berubah 7 hari
+3097	Terakhir diubah: {when}
+3098	Hapus yang dipilih
+3099	File sementara
+3100	Total {size}, {old} di antaranya tak berubah 7 hari. Termasuk keluaran perintah latar belakang dan folder sementara sisa pengujian dan build
+3101	{n} terbesar
+3102	Bersihkan yang lebih dari 7 hari
+3103	File sampingan Antigravity CLI
+3104	Log debug, snapshot shell, log MCP, dan cadangan .claude.json: total {size}; {n} item ({auto}) bisa dibersihkan (lebih dari 30 hari; 5 cadangan terbaru disimpan)
+3105	{n} sesi, total {size}. Sesi tidak pernah dihapus otomatis; hapus dari daftar sesi, dan sesi masuk ke tempat sampah dulu
+3106	Data runtime komponen (~/.agycodroid)
+3107	{name} (dipasang dengan pkg)
+3108	Folder bersama /sdcard/agycodroid
+3109	Program dan file Anda
+3110	Hanya ukuran; tidak ada yang dihapus di sini
+3111	Tempat sampah sesi
+3112	{n} item, {size}; dikosongkan otomatis setelah 30 hari
+3113	Program sisa toolkit lama
+3114	Tinjau
+3115	Data runtime sisa komponen {id} yang dihapus
+3116	Statistik penggunaan
+3117	Tempat pembersihan lain
+3118	✓ Menghapus {n} item, membebaskan {size}
+3119	{n} item tidak dihapus (sedang dipakai atau di luar folder yang diizinkan)
+3120	Tidak ada yang dipilih
+3121	Hapus {n} item sementara yang dipilih? Tidak bisa dibatalkan.
+3122	Hapus data runtime sisa {id}? Saat dipasang ulang akan diunduh lagi.
+3123	✓ Dihapus
+3124	Penyimpanan
+3125	Ruang terpakai
+3126	Pindai
+3127	Penyimpanan sesi
+3128	Secara bawaan Antigravity CLI menghapus sesi yang tak berubah selama 30 hari beserta data terkaitnya, tanpa lewat tempat sampah. Aplikasi ini menyimpannya selamanya: sesi hanya masuk tempat sampah bila Anda menghapusnya dari daftar sesi. Jika Anda sendiri menulis cleanupPeriodDays di ~/.claude/settings.json, jumlah hari Anda yang dipakai.
+3129	Pembersihan otomatis
+3130	Hanya membersihkan cache, file sementara yang tak berubah 7 hari, dan file sampingan Antigravity CLI yang lebih dari 30 hari. Sesi, file Anda, dan program tidak pernah dihapus otomatis
+3131	Atur model tiap API melalui satu jembatan lokal; semua perubahan berlaku setelah disimpan.
+3132	Daftar API
+3133	Tambah API
+3134	Perbarui komponen jembatan untuk menambah beberapa API; konfigurasi satu API yang ada tetap berfungsi.
+3135	{n} model
+3136	Edit satu API setiap kali. Penambahan, penghapusan, dan perubahan model bawaan hanya berlaku setelah menekan Simpan konfigurasi.
+3137	Hapus API “{name}” beserta modelnya? Ini hanya berlaku setelah menekan Simpan konfigurasi; percakapan saat ini tidak berubah.
+3138	ID model yang terlihat bentrok, melebihi 200 karakter, atau berjumlah lebih dari 100; sesuaikan model sebelum menyimpan.
+3139	Simpan semua konfigurasi API?\n\nSaat digunakan, percakapan, hasil alat, dan gambar akan dikirim ke layanan berikut sesuai model yang dipilih:\n{origins}\nMenyimpan tidak memanggil model jarak jauh atau mengganti percakapan saat ini.
+3140	Hapus ({n})
+3141	Hapus {what} secara permanen? Tindakan ini tidak dapat dibatalkan.
+3142	Folder akan dihapus beserta seluruh isinya.
+3143	{n} item dihapus
+3144	Folder ini berisi direktori milik aplikasi atau ruang kerja dan tidak dapat dihapus
+3145	URL daftar model (opsional; jika kosong, /models dicari otomatis dari alamat API)
+3146	Saat terputus, {n} tindakan yang mungkin memiliki efek samping tidak mengembalikan hasil: {list}. Tidak dapat dipastikan apakah sudah dijalankan; periksa dulu sebelum menekan «Lanjutkan».
+3147	Status proses sebelumnya tidak dapat dipulihkan (catatan tidak terbaca atau formatnya salah), jadi giliran yang terputus dan pesan dalam antrean tidak akan muncul; berkas aslinya tetap disimpan.
+3148	Status proses tidak dapat disimpan (penyimpanan mungkin penuh atau tanpa izin). Jika aplikasi ditutup oleh sistem, giliran ini mungkin tidak dapat dipulihkan.
+3149	(Giliran sebelumnya tidak selesai dengan normal; balasan di atas mungkin tidak lengkap)
+3150	Sesi berhasil diimpor, tetapi judul kustom tidak dapat disimpan (penyimpanan mungkin penuh atau tidak ada izin). Judul asli akan tampil setelah mulai ulang
+3151	Daftar sesi tidak dapat dibaca ({msg}); ini bukan berarti tidak ada sesi. Periksa izin penyimpanan lalu segarkan.
+3152	Permintaan habis waktu: gateway tidak merespons ({n} dtk)
+3153	Gateway offline: {msg} · Ketuk untuk mencoba lagi
+3154	Draf tidak bisa disimpan: penyimpanan perangkat penuh. Salin teksnya ke tempat lain, atau kirim dulu.
+3155	Token pengiriman ini dipakai untuk konten lain; kirim ulang pesannya.
+3156	Tidak pasti apakah sudah terkirim: {msg}
+3157	Gateway sudah menerima pesan ini (hanya tanda terimanya yang hilang); tidak perlu dikirim ulang
+3158	Giliran sebelumnya gagal di latar belakang: {msg}
+3159	Alamat mengembalikan {s}, tetapi isi responsnya terlalu besar (lebih dari 8 MB) untuk memastikan kunci valid
+3160	Upstream terputus tanpa penanda akhir, jadi balasan dianggap selesai. Kelengkapannya tidak bisa dipastikan; jika terpotong, kirim “lanjutkan”
+3161	Giliran sebelumnya selesai, tetapi giliran berikutnya tidak mendapat hasil (terputus)
+3162	Direktori tidak ada: {dir}; memakai {cwd} sebagai gantinya
+3163	API mengembalikan error, bukan balasan normal:
+3164	Batas maksimum garis pemadatan adalah 1M; disimpan sebagai 1M
+3165	Contoh templat (bukan layanan nyata; ganti dengan nilai dari penyedia Anda)
+3166	Endpoint pihak ketiga Anda pilih sendiri; aplikasi tidak mengaudit atau mendukungnya. Operator dapat melihat Key, kode, dan percakapan Anda, jadi gunakan hanya layanan yang Anda percaya, dan jangan gunakan akun bersama atau hasil jual ulang.
+3167	HONOR / Huawei dan sistem serupa membekukan Shizuku di latar belakang dan memperlambat aktivasi: di Pengelolaan aplikasi → Shizuku, aktifkan "Abaikan pengoptimalan baterai".
+3168	Menunggu konfirmasi (bukan akibat pemuatan ulang ini)
+3169	Catatan baru atau berkas tambahan
+3170	Pertama dicatat: {time}
+3171	Waktu tidak diketahui
+3172	Berkas konfigurasi diubah dan ditulis ulang menggunakan pengaturan aplikasi saat ini:
+3173	Berkas aplikasi yang berjalan diubah; perlindungan diaktifkan:
+3174	Jendela konteks (opsional, jumlah token, 1k=1024; kosong = 200k)
+3175	Variabel lingkungan, opsional, dipisahkan koma (KEY=nilai)
+3176	Header, opsional, dipisahkan koma (Header: nilai), mis. Authorization: Bearer token-anda
+3177	Header
+3178	MCP jarak jauh memakai header: tulis {bad} dengan titik dua, mis. Authorization: Bearer token-anda
+3179	MCP jarak jauh tidak mendukung variabel lingkungan: tulis header sebagai Header: nilai, mis. Authorization: Bearer token-anda
+3180	Hapus dari konfigurasi
+3181	Header saat ini
+3182	Variabel lingkungan saat ini
+3183	Kosongkan untuk mempertahankan nilai, isi untuk mengubah
+3184	Perubahan {name} tersimpan
+3185	Gagal mengedit: {msg}
+3186	Hanya server MCP yang Anda tambahkan (tingkat pengguna) yang bisa diedit
+3187	Gagal menyimpan: {msg}; konfigurasi lama dipulihkan apa adanya
+3188	Gagal menyimpan: {msg}, dan konfigurasi lama tidak bisa dipulihkan — silakan periksa manual
+3189	Tidak bisa membuka editor: {msg}
+3190	Mengedit {name}: kosongkan = pertahankan nilai, ketuk × untuk hapus, isi untuk mengganti
+3191	Server MCP ini tidak ditemukan (konektor akun tidak bisa diedit)
+3192	Sudah ada server MCP dengan nama ini
+3193	stdio tidak menyimpan header: {names} akan dibuang. Lanjutkan?
+3194	Jika server ada di perangkat ini, isi http://127.0.0.1:port — IP LAN berubah saat jaringan berganti dan koneksi putus
+3195	Ini tampak seperti alamat LAN: jika server ada di perangkat ini, ganti ke http://127.0.0.1:port — IP LAN berubah dan koneksi putus
+3196	Gabungkan PDF
+3197	Ekstrak halaman
+3198	Pisahkan per halaman
+3199	Putar halaman
+3200	Kompres PDF
+3201	PDF ke gambar
+3202	Halaman tidak valid. Gunakan format 1-3,5 dan periksa jumlah halaman.
+3203	Pemrosesan PDF gagal: {code}
+3204	File yang dipilih bukan PDF
+3205	Pindah ke atas
+3206	Pindah ke bawah
+3207	Pilih PDF di panel file atau klik “Pilih PDF…”.
+3208	Alat PDF belum tersedia: {tools}. Instal “Kotak alat PDF” di Ekstensi → Komponen opsional.
+3209	Mengimpor PDF…
+3210	Memproses PDF…
+3211	Pemrosesan selesai
+3212	Kompresi tidak memperkecil ukuran. File asli tetap tersimpan.
+3213	Buka folder hasil
+3214	Koneksi terputus. Mencoba lagi…
+3215	Kotak alat PDF
+3216	File hanya diproses di perangkat ini. File asli tidak ditimpa.
+3217	Operasi
+3218	Buka komponen opsional
+3219	Tambah dari panel file
+3220	Pilih PDF…
+3221	Gabungkan hingga 20 PDF. Pilih satu PDF untuk operasi lain.
+3222	Halaman
+3223	Format: 1-3,5. Kosongkan untuk semua halaman.
+3224	Sudut rotasi
+3225	Kualitas kompresi
+3226	Buku elektronik (ebook)
+3227	File kecil (screen)
+3228	Cetak (printer)
+3229	Format gambar
+3230	Resolusi
+3231	Rendah (72 DPI)
+3232	Tinggi (150 DPI)
+3233	Maksimal 100 halaman per proses. Sisi panjang gambar dibatasi 2048 piksel.
+3234	Folder hasil (baru)
+3235	Mulai pemrosesan
+3236	Pilih maksimal 20 PDF dengan total 256 MB.
+3237	Jumlah halaman PDF tidak boleh melebihi 1000.
+3238	PDF tidak dapat diproses. Pastikan file tidak rusak dan tanpa kata sandi.
+3239	Waktu pemrosesan habis. Kurangi halaman lalu coba lagi.
+3240	Tugas PDF sedang berjalan. Coba lagi nanti.
+3241	Instal komponen kotak alat PDF, lalu buka kembali.
+3242	Masukkan folder hasil baru di lokasi yang dapat ditulis.
+3243	Hasil melebihi 512 MB. Kurangi halaman atau resolusi.
+3244	berkas
+3245	Cadangan dari pemasangan sebelumnya belum dipulihkan. Coba lagi, atau hapus lalu pasang ulang.
+3246	Continue in sandbox
+3247	Always proceed
+3248	Strict
+3249	Plan only
+3250	Tool approval is now “Ask each time”: you’ll be asked before files are edited or commands run. To loosen it, tap the permission tag below. Tools that aren’t pre-approved are soft-denied: the run continues, exit code 0, with a note on stderr.
+3251	Continues inside a sandbox; actions outside it still ask
+3252	Never asks. agy can edit files and run commands without your consent
+3253	Asks whenever it can; the strictest
+3254	Decided automatically by agy
+3255	Tool approval
+3256	Agent mode
+3257	Tools that aren’t pre-approved are soft-denied: the run continues, exit code 0, with a note on stderr.
+3258	Switch to “Always proceed”?\n\nagy will stop asking and can directly rewrite or delete files, run any command, and access the network. Only use it when you trust the current task and can live with the consequences.
+3259	Switched to “{m} · {a}”
+3260	Context {used} / limit {line} · {pct}%
+3261	Sign in with Google
+3262	Authorize once in the browser — no key needed. You can also run interactive agy once in a terminal to authenticate.
+3263	Enter a Gemini API key
+3264	Enter a Gemini API key in Settings; keys for DeepSeek, Zhipu GLM, Qwen, Kimi and other compatible endpoints work too, billed by usage.
+3265	If the browser doesn’t come back (e.g. you authorized on another device): run agy in a terminal, follow its prompts, and paste the auth code from the page to agy.
+3266	Plugin marketplaces (to be verified). You can add other marketplaces (a GitHub repo or a URL).
+3267	Skills (to be verified): whether agy recognizes these skills or how they are invoked is unconfirmed — don’t assume Claude’s skill behaviour.
+3268	No skills here yet.
+3269	Each command is appended to the command history with its time and directory, for later review. (To be verified)
+3270	Stored in user-level settings; applies to all projects.
+3271	Stored in the project’s settings; applies only to this project, and travels with the repo if it’s in git.
+3272	Stored in the project’s local settings; applies only to this project on this device.
+3273	Skills (to be verified): Antigravity CLI’s skill support is unconfirmed, so no official skill catalog is listed here.
+3274	Safe mode: start with only agy’s default configuration, without loading extra settings
+3275	This project has no commands of its own yet. Commands saved here are kept in the project and travel with the repo if it’s in git.
+3276	Help me configure a custom mode for the on-device small model (tools, system prompt, llama-server options).
+3277	Sign in with a Gemini API key
+3278	Usage shows after you send a message (input / output / thinking / cache_read)
+3279	Input {i} · Output {o} · Thinking {th} · Cache read {c} · Total {t}
+3280	Input {i} · Output {o} · Total {t}
+3281	Usage comes from agy’s usage field
+3282	Browser didn’t come back (or you authorized on another device)? Run agy in a terminal and follow its prompts (paste the auth code to agy yourself; this app never sees it).
+3283	Usage at a glance
+3284	Can’t read this provider’s usage
+3285	The key lives only in this app’s private directory on the device and is read by agy on demand (never via environment variables).
+3286	Pinned to installed version: {v}
+3287	Pin to installed version…
+3288	Debug logs, shell snapshots, MCP logs and config file backups, {size} in total; {n} items can be cleared, {auto} of them (older than 30 days; latest 5 backups kept)
+3289	This turn’s usage
+3290	Input {i} · Output {o} · Thinking {th} · Cache read {c}
+3291	Default model name (required)
+3292	Don’t put <code>/v1</code> at the end of the address — agy appends <code>/v1/messages</code> itself.
+3293	(Default, decided by agy)
+3294	No model set — <b>decided by agy</b> (currently defaults to <code>{model}</code>).
+3295	agy’s built-in default
+3296	<br>Enter a model slug above to pin it.
+3297	This provider has no switchable list. To pick a model, enter a model slug above, or edit <code>defaultModel</code> in <code>agyapp-providers.json</code>.
+3298	Total {t} tokens
+3299	(Default, decided by agy per model)
+3300	Running doctor…
+3301	Tool approval: {tp} · Agent mode: {am} · {n} rules
+3302	(decided by agy)
+3303	This Antigravity CLI install has no verification record saved from installation, so this turn wasn’t started. Reinstall it under Settings → Updates to get one.
+3304	The conversation is too long and exceeds the model’s context limit. Start a new conversation to continue (agy has no conversation-compaction feature).
+3305	The provider rejected the sign-in: check under Settings → Providers that the Gemini API key is correct, or that the Google sign-in is still valid.
+3306	The provider can’t find this model or address: check the model name (an unknown model name errors out directly in agy — it isn’t silently swapped).
+3307	The provider errored or is busy: try again later. If it keeps happening, switch models.
+3308	Can’t reach the provider: check the network.
+3309	Usage and spending
+3310	Remind me when usage hits 80% and 95%
+3311	Changes apply from the next message. MCP servers are installed and removed with agy’s commands — this page just runs them for you; how plugins and skills are installed is yet to be verified.
+3312	Save a long prompt you send often as a command, then pick it by typing / in the input box. Text after /name fills $ARGUMENTS in the body. They’re stored as command files, so agy in the terminal can use them too.
+3313	Official skills (to be verified)
+3314	Antigravity CLI’s skill support is yet to be verified; no official catalog is listed here.
+3315	registry.modelcontextprotocol.io: anyone can publish, nobody reviews. This device can install remote services and npm packages; npm packages run on this device, so read the command and source before installing. MCP itself is supported by agy; how the registry is wired up is yet to be verified.
+3316	Enter a model slug (e.g. gemini-3.8-flash-medium); an unknown model is not silently replaced — it errors out.
+3317	Model slug, e.g. gemini-3.8-flash-medium
+3318	Levels vary by model: low / medium / high / xhigh / max.
+3319	Ask each time: you’ll be asked before files are edited or commands run. “Always proceed” means agy edits files and runs commands without asking. Tools that aren’t pre-approved are soft-denied: the run continues, exit code 0, with a note on stderr. Pre-approve them in the permission rules, or use --dangerously-skip-permissions (not as a default).
+3320	request-review · Ask each time (default)
+3321	proceed-in-sandbox · Continue in sandbox
+3322	always-proceed · Always proceed
+3323	strict · Strict
+3324	accept-edits · Auto-accept edits
+3325	auto · Automatic
+3326	plan · Plan only
+3327	Let agy read and write directories outside the workspace
+3328	Let agy read and write directories outside the workspace. These directories also become shortcuts in the file browser.
+3329	Start with only agy’s default configuration, without loading extra settings
+3330	Safe mode: start with only agy’s default configuration, without loading extra settings. Sign-in, keys, sessions and models stay as they are; no files are changed, and turning it off restores everything.
+3331	Wraps every program agy starts
+3332	This app keeps sessions forever: a session only enters the trash when you delete it from the session list.
+3333	Stable channel
+3334	Latest
+3335	Use when a bad configuration, constant refusals, or no answers leave you stuck: Antigravity CLI’s user-level configuration, agycodroid settings and shell startup files go back to how they were when first installed, and app files are re-laid from the install package. The old ones are moved to ~/.agyapp-reset for reference, not deleted; session records, the workspace and the toolkit are untouched, and keys are kept by default. A system confirmation dialog will appear.
+3336	A background process from the previous conversation is still running, so this turn didn’t start. Send a message in agycodroid and confirm in the card that pops up, then try again.
+3337	Can’t start agy: {err}
+3338	Antigravity can’t stop a background task on its own; interrupt the whole turn to stop it.
+3339	Plugins are a Claude Code feature; Antigravity CLI doesn’t have them, and agycodroid doesn’t support them.
+3340	Skills are a Claude Code feature; Antigravity CLI doesn’t have them, and agycodroid doesn’t support them.
+3341	Hooks are a Claude Code feature; Antigravity CLI doesn’t have them, and agycodroid doesn’t support them.
+3342	Changes take effect from the next message. MCP servers are installed and removed by agy’s own commands; this page just runs them for you. Plugins, skills and Hooks are Claude Code features; Antigravity CLI doesn’t have them, and agycodroid doesn’t support them.
+3343	(Antigravity CLI has no skills mechanism; agycodroid doesn’t support it.)
+3344	(Antigravity CLI has no subagent mechanism; agycodroid doesn’t support it.)
+3345	(Antigravity CLI has no plugin mechanism; agycodroid doesn’t support it.)
+3346	The OpenAI bridge can't be connected to chat (agycodroid only supports Google sign-in and Gemini API Key)

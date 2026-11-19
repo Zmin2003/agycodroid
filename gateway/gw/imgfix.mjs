@@ -38,7 +38,7 @@ function head(file) {
 async function toJpeg(src, dst) {
   let env;
   // 和 inlineimg 缩图同一套环境（claude 的 PATH 里有工具包的 magick）；别用 termEnv，它会顺手写终端的钥匙文件
-  try { env = { ...(await import("./claude.mjs")).claudeEnv() }; } catch { env = { ...process.env }; }
+  try { env = { ...(await import("./agy.mjs")).agyEnv() }; } catch { env = { ...process.env }; }
   // 工具包的 bin 在前，网关自己的 PATH 兜底（找不到 magick 就按真实格式命名，见下）
   env.PATH = [env.PATH, process.env.PATH].filter(Boolean).join(":");
   for (const k of Object.keys(env)) if (/KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i.test(k)) delete env[k];

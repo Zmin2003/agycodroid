@@ -1,4 +1,4 @@
-package cc.codroid;
+package cc.agyroid;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -20,7 +20,7 @@ import java.util.Set;
  */
 public final class KeyAttestTest {
     static int fail = 0;
-    static final String PKG = "cc.codroid";
+    static final String PKG = "cc.agyroid";
     static final byte[] CHAL = "challenge-0123456789abcdef".getBytes();
     static final long CREATED = 1793788493719L;
 

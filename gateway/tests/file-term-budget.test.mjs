@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
-const web = path.resolve(process.env.CCAPP_TEST_WEB || fileURLToPath(new URL('../web/', import.meta.url)));
+const web = path.resolve(process.env.AGAPP_TEST_WEB || fileURLToPath(new URL('../web/', import.meta.url)));
 const read = name => readFileSync(path.join(web, 'app', name), 'utf8');
 const files = read('06-files.js'), viewer = read('16-viewer-git.js'), terminal = read('18-terminal.js');
 function section(source, start, end) {

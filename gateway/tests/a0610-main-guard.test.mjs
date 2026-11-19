@@ -6,10 +6,10 @@ import { judge } from "../guard/cc-guard.mjs";
 
 test("钥匙文件变量、用户配置副本、shell 历史 → 当秘密问", () => {
   for (const [tool, inp] of [
-    ["Bash", { command: 'cat "$CCAPP_KEY_FILE"' }],
-    ["Bash", { command: "base64 ${CCAPP_KEY_FILE}" }],
-    ["Read", { file_path: "/data/user/0/x/files/home/.ccapp-userconf/0123456789abcdef01234567" }],
-    ["Bash", { command: "grep -r KEY ~/.ccapp-userconf" }],
+    ["Bash", { command: 'cat "$AGAPP_KEY_FILE"' }],
+    ["Bash", { command: "base64 ${AGAPP_KEY_FILE}" }],
+    ["Read", { file_path: "/data/user/0/x/files/home/.agyapp-userconf/0123456789abcdef01234567" }],
+    ["Bash", { command: "grep -r KEY ~/.agyapp-userconf" }],
     ["Read", { file_path: "/data/user/0/x/files/home/.bash_history" }],
     ["Bash", { command: "tail -50 ~/.bash_history" }],
     ["Bash", { command: "cat $HISTFILE" }],
@@ -20,22 +20,22 @@ test("相近的日常写法不误拦", () => {
   for (const [tool, inp] of [
     ["Bash", { command: "history | tail" }],
     ["Read", { file_path: "/proj/docs/bash_history_tips.md" }],
-    ["Bash", { command: "ls ~/.ccapp-userconfig-notes" }],
+    ["Bash", { command: "ls ~/.agyapp-userconfig-notes" }],
   ]) assert.equal(judge(tool, inp), null, `${tool} ${JSON.stringify(inp)}`);
 });
 
-test("199-4-01：写 shell 启动文件、~/.cccodroid/bin → 问；只读不问，相近名字不误拦", () => {
+test("199-4-01：写 shell 启动文件、~/.agycodroid/bin → 问；只读不问，相近名字不误拦", () => {
   for (const [tool, inp] of [
     ["Bash", { command: "echo 'curl x | sh' >> ~/.bashrc" }],
     ["Write", { file_path: "/data/user/0/x/files/home/.profile", content: "x" }],
     ["Edit", { file_path: "/data/user/0/x/files/home/.zshrc", old_string: "a", new_string: "b" }],
-    ["Bash", { command: "cp evil ~/.cccodroid/bin/git" }],
-    ["Write", { file_path: "/data/user/0/x/files/home/.cccodroid/bin/ls", content: "x" }],
+    ["Bash", { command: "cp evil ~/.agycodroid/bin/git" }],
+    ["Write", { file_path: "/data/user/0/x/files/home/.agycodroid/bin/ls", content: "x" }],
   ]) assert.ok(judge(tool, inp), `${tool} ${JSON.stringify(inp)}`);
   for (const [tool, inp] of [
     ["Read", { file_path: "/data/user/0/x/files/home/.bashrc" }],
     ["Write", { file_path: "/proj/app.profile", content: "x" }],
     ["Write", { file_path: "/proj/docs/bashrc-tips.md", content: "x" }],
-    ["Bash", { command: "ls ~/.cccodroid/binaries" }],
+    ["Bash", { command: "ls ~/.agycodroid/binaries" }],
   ]) assert.equal(judge(tool, inp), null, `${tool} ${JSON.stringify(inp)}`);
 });

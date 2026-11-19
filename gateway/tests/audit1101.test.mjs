@@ -7,7 +7,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 import { routeGit } from "../gw/git.mjs";
 
@@ -25,7 +25,7 @@ async function serve(...routes) {
 }
 const gitGo = await serve(routeGit);
 // 网关跑 git 用终端那套 PATH（假 PREFIX/bin）：把本机的 git 链进去
-{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
   if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
 
 function repo(name) {
@@ -111,7 +111,7 @@ test("B10 CRLF 切在 \\r 与 \\n 之间：事件名和 data 不被拆开", asyn
 
 // ── 会话记录类 ──
 import crypto from "node:crypto";
-const proj = path.join(CFG.home, ".claude", "projects", "-audit");
+const proj = path.join(PATHS.projects, "-audit");
 fs.mkdirSync(proj, { recursive: true });
 /** turns：[[提问, [回复行…]], …]；回复行是对象（会补 uuid / sessionId / parentUuid 链） */
 function session(turns) {
@@ -184,20 +184,24 @@ test("B14 撤销删除后恢复的正文搜得到", async () => {
   assert.ok((await find("橙色海星")).includes(s.sid), "撤销后恢复的要搜得到");
 });
 
-test("B01 一家正在跑时改它的地址或密钥被拒；只改默认型号照常", async () => {
-  const { routeProviders } = await import("../gw/providers.mjs");
+test("B01 gemini 正在跑时改它的密钥被拒；只改默认型号照常", async () => {
+  const { routeProviders, providerById, upsertProvider } = await import("../gw/providers.mjs");
   const { RUNS } = await import("../gw/runs.mjs");
   const go = await serve(routeProviders);
-  const c = await go("/api/providers/save", { label: "B01", baseUrl: "https://a.invalid", apiKey: "old-key-fixture", defaultModel: "m1" });
+  const before = providerById("gemini") || {};
+  const c = await go("/api/providers/save", { id: "gemini", apiKey: "old-key-fixture", defaultModel: "m1" });
   assert.equal(c.status, 200, JSON.stringify(c.body));
-  RUNS.set("b01-run", { provider: c.body.id, ended: false });
+  RUNS.set("b01-run", { provider: "gemini", ended: false });
   try {
-    const r = await go("/api/providers/save", { id: c.body.id, baseUrl: "https://b.invalid", apiKey: "new-key-fixture" });
+    const r = await go("/api/providers/save", { id: "gemini", apiKey: "new-key-fixture" });
     assert.equal(r.status, 409); assert.equal(r.body.error, "busy");
-    assert.equal((await go("/api/providers/save", { id: c.body.id, apiKey: "new-key-fixture" })).status, 409, "只换密钥也不行");
-    assert.equal((await go("/api/providers/save", { id: c.body.id, defaultModel: "m2" })).status, 200, "改型号不碍事");
+    assert.equal((await go("/api/providers/save", { id: "gemini", defaultModel: "m2" })).status, 200, "改型号不碍事");
   } finally { RUNS.delete("b01-run"); }
-  assert.equal((await go("/api/providers/save", { id: c.body.id, baseUrl: "https://b.invalid", apiKey: "new-key-fixture" })).status, 200, "跑完就能改");
+  assert.equal((await go("/api/providers/save", { id: "gemini", apiKey: "new-key-fixture" })).status, 200, "跑完就能改");
+  // 收尾：把 gemini 的密钥/默认型号恢复成测试前的样子，别影响本文件后面的用例
+  if (before.apiKey) upsertProvider("gemini", { apiKey: before.apiKey });
+  else upsertProvider("gemini", { clearKey: true });
+  upsertProvider("gemini", { defaultModel: before.defaultModel || "" });
 });
 
 // ── 定时任务 ──
@@ -249,18 +253,16 @@ test("B16/B17 一次性任务到点排队：计时不把它当过期关掉；排
   assert.ok(S.runlog().some((r) => r.taskId === "b17" && /被关掉或删了/.test(r.msg)));
 });
 
-test("B19 全局是第三方、某个会话单独用官方账户在跑：不许退出登录", async (t) => {
+test("B19 全局是 Gemini API Key、某个会话单独用 Google 登录账户在跑：不许退出登录", async (t) => {
   const { routeLogin } = await import("../gw/login.mjs");
   const { RUNS } = await import("../gw/runs.mjs");
   const { providerById } = await import("../gw/providers.mjs");
-  const login = ["anthropic", "claude"].map((id) => providerById(id)).find((p) => p && p.login);
-  assert.ok(login, "找到官方账户那家");
+  const login = providerById("google");
+  assert.ok(login && login.login, "找到 Google 登录那家");
   const { routeProviders, applyProvider } = await import("../gw/providers.mjs");
   const { SETTINGS } = await import("../gw/settings-store.mjs");
-  // 全局切到一家第三方（用 Key 的），只让那个会话单独用官方账户
-  const pg = await serve(routeProviders);
-  const c = await pg("/api/providers/save", { label: "B19", baseUrl: "https://b19.invalid", apiKey: "k-fixture" });
-  const was = SETTINGS.provider; SETTINGS.provider = c.body.id; applyProvider();
+  // 全局切到 Gemini（用 Key 的），只让那个会话单独用 Google 登录账户
+  const was = SETTINGS.provider; SETTINGS.provider = "gemini"; applyProvider();
   t.after(() => { SETTINGS.provider = was; applyProvider(); });
   const go = await serve(routeLogin);
   RUNS.set("b19", { id: "b19", provider: login.id, ended: false });
@@ -273,7 +275,7 @@ test("B19 全局是第三方、某个会话单独用官方账户在跑：不许�
 test("B29 历史补算把子代理的 token 也算上（和实时统计同一口径）", async () => {
   const { routeUsage } = await import("../gw/usage.mjs");
   const go = await serve(routeUsage);
-  const sid = crypto.randomUUID(), dir = path.join(CFG.home, ".claude", "projects", "-b29"), ts = "2026-01-02T03:04:05.000Z";
+  const sid = crypto.randomUUID(), dir = path.join(PATHS.projects, "-b29"), ts = "2026-01-02T03:04:05.000Z";
   fs.mkdirSync(path.join(dir, sid, "subagents"), { recursive: true });
   const asst = (id, i, o) => JSON.stringify({ type: "assistant", sessionId: sid, timestamp: ts, uuid: crypto.randomUUID(), message: { id, role: "assistant", model: "m-b29", usage: { input_tokens: i, output_tokens: o }, content: [{ type: "text", text: "x" }] } });
   fs.writeFileSync(path.join(dir, sid + ".jsonl"), [JSON.stringify({ type: "user", sessionId: sid, timestamp: ts, uuid: crypto.randomUUID(), message: { role: "user", content: "问" } }), asst("msg-main", 100, 20)].join("\n") + "\n");
@@ -336,7 +338,7 @@ test("B15 会话包里的数据坏了：按 CRC 认出来，不导入；好的�
     const src = path.join(CFG.home, "b15-" + sid + ".jsonl");
     fs.writeFileSync(src, JSON.stringify({ type: "user", uuid: crypto.randomUUID(), sessionId: sid, message: { role: "user", content: "SYNTHETIC 原文".repeat(50) } }) + "\n");
     const man = path.join(CFG.home, "b15-man-" + sid + ".json");
-    fs.writeFileSync(man, JSON.stringify({ format: "cccodroid-sessions", sessions: [{ id: sid }] }));
+    fs.writeFileSync(man, JSON.stringify({ format: "agycodroid-sessions", sessions: [{ id: sid }] }));
     return [{ name: "manifest.json", file: man }, { name: `sessions/${sid}.jsonl`, file: src }];
   };
   // 篡改：把会话那条的数据里能解开但内容变了的一个 bit 找出来
@@ -354,7 +356,7 @@ test("B15 会话包里的数据坏了：按 CRC 认出来，不导入；好的�
   }
   assert.ok(found, "造出一个能解开但内容变了的包");
   await assert.rejects(importSessions(bad), /损坏/);
-  assert.equal(fs.existsSync(path.join(CFG.home, ".claude", "projects")) && fs.readdirSync(path.join(CFG.home, ".claude", "projects"), { recursive: true }).some((f) => String(f).includes(sidBad)), false, "坏的没发布出来");
+  assert.equal(fs.existsSync(PATHS.projects) && fs.readdirSync(PATHS.projects, { recursive: true }).some((f) => String(f).includes(sidBad)), false, "坏的没发布出来");
   const sidOk = crypto.randomUUID(), ok = path.join(CFG.home, "b15-ok.zip");
   await zipToFile(ok, mk(sidOk));
   assert.deepEqual((await importSessions(ok)).imported, [sidOk]);
@@ -362,13 +364,13 @@ test("B15 会话包里的数据坏了：按 CRC 认出来，不导入；好的�
 
 test("B23 旧组件卸载：新底座已接管的同名文件留下，组件自己的照删", async () => {
   const { compRemove, COMP_DIR } = await import("../gw/components.mjs");
-  const P = process.env.CCAPP_PREFIX, info = path.join(P, "var/lib/dpkg/info");
+  const P = process.env.AGAPP_PREFIX, info = path.join(P, "var/lib/dpkg/info");
   fs.mkdirSync(info, { recursive: true });
   fs.mkdirSync(path.join(P, "bin"), { recursive: true });
   for (const f of ["bin/b23-demo", "bin/b23-own"]) fs.writeFileSync(path.join(P, f), "x");
   // 底座的包清单认领 bin/b23-demo；组件自己带的 .list 认领 bin/b23-own（不能算底座的）
-  fs.writeFileSync(path.join(info, "b23-base.list"), `/data/data/cc.codroid/files/usr/bin/b23-demo\n`);
-  fs.writeFileSync(path.join(info, "b23-comp.list"), `/data/data/cc.codroid/files/usr/bin/b23-own\n`);
+  fs.writeFileSync(path.join(info, "b23-base.list"), `/data/data/cc.agyroid/files/usr/bin/b23-demo\n`);
+  fs.writeFileSync(path.join(info, "b23-comp.list"), `/data/data/cc.agyroid/files/usr/bin/b23-own\n`);
   fs.mkdirSync(COMP_DIR, { recursive: true });
   fs.writeFileSync(path.join(COMP_DIR, "b23old.json"), JSON.stringify({ id: "b23old", files: ["bin/b23-demo", "bin/b23-own", "var/lib/dpkg/info/b23-comp.list"], shared: [] }));
   const r = await compRemove("b23old");

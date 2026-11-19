@@ -7,7 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { readSessionForward, readSessionPage, transcriptItems } from "../gw/transcript.mjs";
 
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "stab-d-transcript-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "stab-d-transcript-"));
 const ev = (type, content, extra = {}) => ({ type, uuid: crypto.randomUUID(), timestamp: new Date().toISOString(), message: { role: type, content }, ...extra });
 function write(lines) {
   const f = path.join(DIR, crypto.randomUUID() + ".jsonl");

@@ -2,7 +2,7 @@
   const PRIV_TEXT = {
         not_installed: ["warn", t("没装 Shizuku")],
         not_running: ["warn", t("Shizuku 已安装，但服务没在运行（重启手机后需要在 Shizuku 里重新启动）")],
-        no_permission: ["warn", t("Shizuku 在运行，还没授权给 cccodroid")],
+        no_permission: ["warn", t("Shizuku 在运行，还没授权给 agycodroid")],
         unreachable: ["err", t("连不上应用的后台服务")],
   };
   const SETUP_BUSY = ["downloading", "installing", "connecting", "pairing", "starting", "permission"];
@@ -24,17 +24,17 @@
         oppo: t("OPPO / 一加 / 真我：应用信息 → 耗电管理 → <b>允许后台行为</b>、<b>允许自启动</b>（常见路径）"),
         oneplus: t("OPPO / 一加 / 真我：应用信息 → 耗电管理 → <b>允许后台行为</b>、<b>允许自启动</b>（常见路径）"),
         realme: t("OPPO / 一加 / 真我：应用信息 → 耗电管理 → <b>允许后台行为</b>、<b>允许自启动</b>（常见路径）"),
-        vivo: t("vivo / iQOO：设置 → 电池 → 后台耗电管理 → cccodroid <b>允许后台高耗电</b>；i管家里允许<b>自启动</b>（常见路径）"),
-        huawei: t("华为 / 荣耀：设置 → 应用启动管理 → cccodroid 关闭「自动管理」，手动允许<b>自启动</b>和<b>后台活动</b>（常见路径）"),
-        honor: t("华为 / 荣耀：设置 → 应用启动管理 → cccodroid 关闭「自动管理」，手动允许<b>自启动</b>和<b>后台活动</b>（常见路径）"),
+        vivo: t("vivo / iQOO：设置 → 电池 → 后台耗电管理 → agycodroid <b>允许后台高耗电</b>；i管家里允许<b>自启动</b>（常见路径）"),
+        huawei: t("华为 / 荣耀：设置 → 应用启动管理 → agycodroid 关闭「自动管理」，手动允许<b>自启动</b>和<b>后台活动</b>（常见路径）"),
+        honor: t("华为 / 荣耀：设置 → 应用启动管理 → agycodroid 关闭「自动管理」，手动允许<b>自启动</b>和<b>后台活动</b>（常见路径）"),
   };
   function renderBg(fz) {
     const show = fz && fz.count > 0;
     $("bg-field").classList.toggle("hidden", !show);
     if (!show) return;
-        $("bg-state").textContent = t("检测到 cccodroid 在后台被系统冻结过 {n} 次（最近一次约 {sec} 秒，{at}）。", { n: fz.count, sec: Math.round(fz.ms / 1000), at: new Date(fz.at).toLocaleString() }) +
+        $("bg-state").textContent = t("检测到 agycodroid 在后台被系统冻结过 {n} 次（最近一次约 {sec} 秒，{at}）。", { n: fz.count, sec: Math.round(fz.ms / 1000), at: new Date(fz.at).toLocaleString() }) +
       t("冻结期间网关和正在跑的任务全部停住，回到前台才继续。前台服务挡不住这类厂商冻结器。");
-    $("bg-how").innerHTML = BG_HOW[fz.vendor] || t("在系统设置里给 cccodroid 允许后台运行、关闭电池优化、允许自启动（各家叫法不同）。");
+    $("bg-how").innerHTML = BG_HOW[fz.vendor] || t("在系统设置里给 agycodroid 允许后台运行、关闭电池优化、允许自启动（各家叫法不同）。");
   }
   $("bg-actions").addEventListener("click", async (e) => {
     const act = e.target.dataset && e.target.dataset.act;
@@ -74,22 +74,22 @@
         <a class="btn sm ghost" href="https://shizuku.rikka.app/download/" target="_blank" rel="noopener">${t("手动下载")} ↗</a>` :
       st.state === "not_running" ? (wl ? `<button class="btn sm" data-act="activate" ${busy ? "disabled" : ""}>${t("一键激活（无线调试）")}</button>` : "") +
         `<button class="btn sm ghost" data-act="open">${t("打开 Shizuku")}</button>` :
-      st.state === "no_permission" ? `<button class="btn sm" data-act="request">${t("授权给 cccodroid")}</button>` : "";
+      st.state === "no_permission" ? `<button class="btn sm" data-act="request">${t("授权给 agycodroid")}</button>` : "";
     // Shizuku 在跑，但没有（或已失效的）无线调试配对：重启后就没法自动激活。这种情况平时看不出来，主动提示
     if (st.state === "ok" && wl && !st.paired && !busy) {
       se.classList.remove("hidden");
       se.className = "prov-state warn";
       se.textContent = st.pairOk === 0
-                ? t("无线调试里 cccodroid 的配对已被取消：现在还能用，但重启手机后没法自动激活。")
-        : t("Shizuku 不是由 cccodroid 激活的：重启手机后 cccodroid 没法自动激活它。配对一次即可。");
+                ? t("无线调试里 agycodroid 的配对已被取消：现在还能用，但重启手机后没法自动激活。")
+        : t("Shizuku 不是由 agycodroid 激活的：重启手机后 agycodroid 没法自动激活它。配对一次即可。");
       $("priv-actions").insertAdjacentHTML("afterbegin", `<button class="btn sm" data-act="repair">${st.pairOk === 0 ? t("重新配对") : t("配对")}</button>`);
     }
     // 说的是「这次开机」，允许了自启动也要等下次开机才会消失；点「已允许」就收起到下次开机
     if (st.bootMissed && !(st.bootAt && Math.abs(st.bootAt - (+localStorage.getItem("cc.bootAck") || 0)) <= 1)) {
       se.classList.remove("hidden");
       se.className = "prov-state warn";
-      se.textContent = t("这次开机系统没通知 cccodroid（被系统的「自启动」管理拦了），所以开机没能自动激活；打开 cccodroid 时会补上。") +
-        t("想开机就激活：在应用详情里允许 cccodroid 自启动 / 后台启动，下次开机生效。");
+      se.textContent = t("这次开机系统没通知 agycodroid（被系统的「自启动」管理拦了），所以开机没能自动激活；打开 agycodroid 时会补上。") +
+        t("想开机就激活：在应用详情里允许 agycodroid 自启动 / 后台启动，下次开机生效。");
       $("priv-actions").insertAdjacentHTML("beforeend", `<button class="btn sm ghost" data-act="appsettings">${t("去允许自启动")}</button>` +
         (st.bootAt ? `<button class="btn sm ghost" data-act="bootack" data-boot="${esc(st.bootAt)}">${t("已允许，下次开机再看")}</button>` : ""));
     }
@@ -124,7 +124,7 @@
     if (busy && pageOn("settings")) privPoll = setTimeout(loadPriv, 1500);
   }
   // 经 priv 执行过的命令（谁发起、命令、退出码、用时）。再点一次收起
-  const privBy = (k) => ({ claude: "Claude", terminal: t("终端"), gateway: "cccodroid", "cc-mem": t("内存管家"), other: t("其他") })[k] || k;
+  const privBy = (k) => ({ claude: "Antigravity", terminal: t("终端"), gateway: "agycodroid", "cc-mem": t("内存管家"), other: t("其他") })[k] || k;
   async function togglePrivAudit() {
     const box = $("priv-audit");
     if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
@@ -175,7 +175,7 @@
   // 打开要在原生对话框里点头（再验一次锁屏存档）：没允许时开关按实际状态弹回去
   $("priv-auto").addEventListener("change", (e) => post("/api/app/shz_autostart", { enable: e.target.checked }).catch(() => {}).finally(() => setTimeout(loadPriv, 300)));
 
-  // ── 更新：应用本体 / 开发工具包 / Claude Code ──
+  // ── 更新：应用本体 / 开发工具包 / Antigravity CLI ──
     const UPD_TEXT = { uptodate: t("已是最新"), available: t("有新版本"), downloading: t("下载中"), ready: t("已下载，待安装"), installing: t("安装中"), error: t("出错"), unknown: t("未检查"), verifying: t("校验中"), damaged: t("已损坏"), missing: t("未安装") };
   let updPoll = null;
   let updFollowUntil = 0;
@@ -231,7 +231,7 @@
       if (st.only36) now += " · " + t("系统已不让装 targetSdk 28，只能用 36");
       $("upd-flavor-now").textContent = now;
     }
-    $("upd-channel").querySelector("option[value=pinned]").textContent = st.channel === "pinned" && st.pin ? t("CLI：固定 {v}", { v: st.pin }) : t("CLI：固定版本…");
+    $("upd-channel").querySelector("option[value=pinned]").textContent = st.channel === "pinned" && st.pin ? t("钉住已装版本：{v}", { v: st.pin }) : t("钉住已装版本…");
     let moving = st.checking;
     $("upd-items").innerHTML = st.items.map((it) => {
       const busy = it.state === "downloading" || it.state === "installing" || it.state === "verifying";
@@ -247,10 +247,10 @@
       const verifyBtn = it.id === "devkit" && it.current && ["uptodate", "unknown", "error", "damaged"].includes(it.state)
         ? `<button class="btn sm ghost" data-item="devkit" data-act="verify">${t("校验")}</button>` : "";
       // 从本地文件装（离线、或者已经用电脑下好了）：外壳弹系统文件选择器，认身份、替换都在外壳里做
-      const localBtn = it.id === "devkit" && !busy && window.CCApp && CCApp.pickDevkit
+      const localBtn = it.id === "devkit" && !busy && window.AGApp && AGApp.pickDevkit
         ? `<button class="btn sm ghost" data-item="devkit" data-act="local" title="${esc(t("选一个已经下好的工具包文件来安装"))}">${t("本地文件…")}</button>` : "";
-      // 卸载：工具包回到首装（重选来源和模块）、Claude Code 重新下载；外壳做，老外壳没有这个接口就不显示
-      const unBtn = (it.id === "devkit" || it.id === "claude") && it.current && !busy && window.CCApp && CCApp.uninstall
+      // 卸载：工具包回到首装（重选来源和模块）、Antigravity CLI 重新下载；外壳做，老外壳没有这个接口就不显示
+      const unBtn = (it.id === "devkit" || it.id === "claude") && it.current && !busy && window.AGApp && AGApp.uninstall
         ? `<button class="btn sm ghost danger" data-item="${esc(it.id)}" data-act="uninstall">${t("卸载")}</button>` : "";
       const verBtn = it.id === "claude" && it.current && !busy
         ? `<button class="btn sm ghost" data-item="claude" data-act="versions">${t("版本…")}</button>` : "";
@@ -269,15 +269,15 @@
     // 点完按钮 / 换完渠道后的一小段时间也接着刷：后台的检查、换版本要过一会儿才开始，只看「正在进行」会漏掉结果
     if ((moving || st.checking || Date.now() < updFollowUntil) && pageOn("settings")) updPoll = setTimeout(loadUpd, 1500);
   }
-  /** Claude Code 版本选单：跟随 stable / latest，或固定到某一版（固定后自动更新、检查更新都不动它） */
-  async function openClaudeVersions() {
+  /** Antigravity CLI 版本选单：跟随 stable / latest，或固定到某一版（固定后自动更新、检查更新都不动它） */
+  async function openAntigravityVersions() {
     if ($("ccv-pick")) return;
     const it = ((lastUpd && lastUpd.items) || []).find((x) => x.id === "claude") || {};
     const mode = (lastUpd && lastUpd.channel) || "stable", pin = (lastUpd && lastUpd.pin) || "";
     const m = document.createElement("div");
     m.id = "ccv-pick";
     m.innerHTML = `<div class="sheet-panel mp-panel">
-      <div class="mp-head"><b>${t("Claude Code 版本")}</b><button class="mp-x" type="button" aria-label="${t("关闭")}">${uiI("x")}</button></div>
+      <div class="mp-head"><b>${t("Antigravity CLI 版本")}</b><button class="mp-x" type="button" aria-label="${t("关闭")}">${uiI("x")}</button></div>
       <div class="mp-lbl">${t("跟随渠道（自动更新跟着它走）")}</div><div class="ccv-ch"><div class="tiny">${t("读取中…")}</div></div>
       <div class="mp-lbl">${t("固定到某一版（自动更新不再改它）")}</div>
       <label class="searchbox mp-sb"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input class="mp-q" type="search" inputmode="decimal" autocomplete="off" placeholder="${t("搜索版本号")}"></label>
@@ -334,18 +334,18 @@
     const item = e.target.dataset && e.target.dataset.item;
     if (!item) return;
     const act = e.target.dataset.act;
-    if (act === "pick" || act === "versions") { openClaudeVersions(); return; }   // 卸载后重装、平时换版本：都走版本选单
+    if (act === "pick" || act === "versions") { openAntigravityVersions(); return; }   // 卸载后重装、平时换版本：都走版本选单
     if (act === "uninstall") {
       const msg = item === "devkit"
         ? t("卸载开发工具包？\n\n会删掉整个工具包，连同装在里面的组件、加装的模块、你用 pip / npm -g / pkg 装的东西，然后回到首次安装，重新选下载来源和模块。\n\n会话、工作区、登录和设置都保留。正在跑的终端会被关掉。")
-        : t("卸载 Claude Code？\n\n删掉已下载的 Claude Code 程序，之后不会自动装回。要用时在这里点「安装…」，自己选版本（stable、latest 或具体版本号）。\n\n登录、会话和设置都保留；没装的时候发消息会提示先安装。");
+        : t("卸载 Antigravity CLI？\n\n删掉已下载的 Antigravity CLI 程序，之后不会自动装回。要用时在这里点「安装…」，自己选版本（stable、latest 或具体版本号）。\n\n登录、会话和设置都保留；没装的时候发消息会提示先安装。");
       if (!confirm(msg)) return;
-      CCApp.uninstall(item);
+      AGApp.uninstall(item);
       return;
     }
     if (act === "local") {
-      if (!confirm(t("从本地文件安装开发工具包？\n\n选一个 devkit-cc.codroid.tar.gz（或 .tar），可以在 GitHub 发布页或 cccodroid.net 下载。装之前会核对它是不是已发布的版本；装的时候暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
-      CCApp.pickDevkit();
+      if (!confirm(t("从本地文件安装开发工具包？\n\n选一个 devkit-cc.agyroid.tar.gz（或 .tar），可以在 GitHub 发布页或 cccodroid.net 下载。装之前会核对它是不是已发布的版本；装的时候暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
+      AGApp.pickDevkit();
       return;
     }
     if (act === "verify" || act === "repair") {
@@ -360,7 +360,7 @@
     toast(r.message || (r.ok ? t("开始") : t("失败")), !r.ok);
     followUpd(); setTimeout(loadUpd, 500);
   });
-  // ── 通知（只有 cccodroid：GatewayService 订阅事件流发通知）──
+  // ── 通知（只有 agycodroid：GatewayService 订阅事件流发通知）──
   async function loadNotify() {
     let st;
     try { st = await api("/api/app/notify_status"); }
@@ -392,7 +392,7 @@
   // 去系统设置里改完通知权限再回来，设置页不会重新打开：状态要自己重拉一次，不然一直显示改之前的（稳定性报告 FIND-031）
   document.addEventListener("visibilitychange", () => { if (!document.hidden && setOpen) loadNotify(); });
 
-  // ── 设备工具（只有 cccodroid：DeviceTools.java + A11y.java，经 device-mcp.mjs 给 Claude）──
+  // ── 设备工具（只有 agycodroid：DeviceTools.java + A11y.java，经 device-mcp.mjs 给 Antigravity）──
   const devName = (n) => ({
     device_status: t("设备状态"), notify: t("发通知"), clipboard_read: t("读剪贴板"), clipboard_write: t("写剪贴板"),
     open: t("打开应用 / 链接 / 日历…"), share_file: t("分享文件"), app_list: t("已装应用列表"),
@@ -421,7 +421,7 @@
     s.textContent = a.connected ? t("无障碍服务：已连接") : a.mode === "off" ? t("无障碍服务：关") : t("无障碍服务：现在没开（用到时再开）");
     // 自己开不了（没 WRITE_SECURE_SETTINGS）时，只能让用户去系统设置里开；安卓 13+ 侧载的应用还要先「允许受限设置」
     $("dev-a11y-how").textContent = a.mode !== "off" && !a.canToggle
-      ? t("还没激活 Shizuku，应用没法自己开关无障碍：去系统无障碍设置里手动打开 cccodroid。安卓 13 起，侧载的应用要先在 应用信息 → 右上角菜单 → 允许受限设置。")
+      ? t("还没激活 Shizuku，应用没法自己开关无障碍：去系统无障碍设置里手动打开 agycodroid。安卓 13 起，侧载的应用要先在 应用信息 → 右上角菜单 → 允许受限设置。")
       : "";
     if (st.message) toast(st.message, true);
   }
@@ -493,7 +493,7 @@
     .then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd())).catch((e2) => updBack(e2.message)));
   $("upd-channel").addEventListener("change", (e) => {
     // 固定版本要先挑一版：开选单，下拉框先退回原样，挑完 loadUpd 会刷新成「固定 x.y.z」
-    if (e.target.value === "pinned") { e.target.value = (lastUpd && lastUpd.channel) || "stable"; openClaudeVersions(); return; }
+    if (e.target.value === "pinned") { e.target.value = (lastUpd && lastUpd.channel) || "stable"; openAntigravityVersions(); return; }
     followUpd(); post("/api/app/upd_set", { channel: e.target.value }).then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd())).catch((e2) => updBack(e2.message));
   });
   $("priv-ka").addEventListener("change", async (e) => {
@@ -676,7 +676,7 @@
     h += enChart(t("本应用 CPU 时间"), "", enBars(d.bars, [["c", ""]], (v) => fmtDur(v * 1000), every));
     if (d.native) h += enChart(t("亮屏时间"), enDot("s", t("亮屏")) + enDot("f", t("本应用在前台")), enBars(d.bars, [["s", "s"], ["f", "f"]], (v) => fmtDur(v * 1000), every));
     if (empty) h += `<div class="tiny">${esc(t("刚开始记录，每 5 分钟采一次，过一会儿再来看。"))}</div>`;
-    if (!d.native) h += `<div class="tiny">${esc(t("这个版本没有原生层，只记 CPU 时间（电量、亮屏、前台时长要 cccodroid）。"))}</div>`;
+    if (!d.native) h += `<div class="tiny">${esc(t("这个版本没有原生层，只记 CPU 时间（电量、亮屏、前台时长要 agycodroid）。"))}</div>`;
     box.innerHTML = h;
     const b = d.battery;
     // currentUa 按微安上报（Android BATTERY_PROPERTY_CURRENT_NOW 的口径）：一律 /1000 成 mA。

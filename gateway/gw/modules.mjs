@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { LAST_LANG, PREFIX, log, tr, tz } from "./config.mjs";
-import { killTree } from "./claude.mjs";
+import { killTree } from "./agy.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { compBaseDeps, compJobsDeps, compNeeds, compRecords, compRun, devkitIdentity, sha256File, breathe } from "./components.mjs";
 import { archiveProblem, parseTarListing } from "./archive-check.mjs";
@@ -150,7 +150,7 @@ async function modInstallJob(id, { repair = false } = {}) {
   return x.job ? x : { r: x, job: null };
 }
 async function modStart(id, repair) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   const mj = modulesInfo();
   if (!mj) return { ok: false, message: tz("当前是整包工具包，没有模块可装") };
   const m = blockOf(mj, id);
@@ -328,7 +328,7 @@ function modCancel(id) {
 // ── 卸 ────────────────────────────────────────────────────────────────
 /** 卸 id；它依赖的共享层没有别的已装模块在用时一并卸掉 */
 function modRemove(id) {
-  if (!PREFIX) return { ok: false, message: "only available in cccodroid" };
+  if (!PREFIX) return { ok: false, message: "only available in agycodroid" };
   const mj = modulesInfo();
   if (!mj) return { ok: false, message: tz("当前是整包工具包，没有模块可卸") };
   const m = blockOf(mj, id);

@@ -84,7 +84,7 @@ export async function archiveView(sid) {
  */
 export async function archiveHint(sid) {
   const lang = LAST_LANG;
-  const rule = `Session archiving (cccodroid): this app keeps an archive of every session; each context compaction ends one chapter, and the session list shows the latest chapter's title. Whenever the context has just been compacted (you see a compaction summary, or a note saying so), first file the chapter that just ended, then continue your task: read ${specFile(lang)} once for the rules, then run \`node ${ARCHIVE_CLI} --title "<title>"\` (add --same if it continues the previous chapter's work; add --misc only if the whole session is a throwaway with no real work, such as checking a connection, trying out a model or a greeting; coding, debugging, running tests and investigating are real work, and when unsure leave it out). Write titles in ${langName(lang)}. If the command rejects the title, fix it as told and run it again. Don't mention archiving to the user unless asked.`;
+  const rule = `Session archiving (agycodroid): this app keeps an archive of every session; each context compaction ends one chapter, and the session list shows the latest chapter's title. Whenever the context has just been compacted (you see a compaction summary, or a note saying so), first file the chapter that just ended, then continue your task: read ${specFile(lang)} once for the rules, then run \`node ${ARCHIVE_CLI} --title "<title>"\` (add --same if it continues the previous chapter's work; add --misc only if the whole session is a throwaway with no real work, such as checking a connection, trying out a model or a greeting; coding, debugging, running tests and investigating are real work, and when unsure leave it out). Write titles in ${langName(lang)}. If the command rejects the title, fix it as told and run it again. Don't mention archiving to the user unless asked.`;
   if (!sid) return { rule, note: "" };
   const rec = await lineageRecord(sid).catch(() => null);
   if (!rec) return { rule, note: "" };
@@ -111,7 +111,7 @@ export async function routeArchive(req, res, u, p) {
   }
   if (req.method !== "POST") return sendJson(res, 405, { error: "method" });
   let b; try { b = JSON.parse((await readBody(req)) || "{}"); } catch { return sendJson(res, 400, { error: "bad json" }); }
-  // AI 交档带的是本轮编号（环境变量 CCAPP_RUN_ID），网关换成会话号；界面上手改直接给会话号
+  // AI 交档带的是本轮编号（环境变量 AGAPP_RUN_ID），网关换成会话号；界面上手改直接给会话号
   let sid = b.session ? String(b.session) : "", by = b.session ? "user" : "ai";
   if (!sid && b.run) sid = RUNS.get(String(b.run))?.sessionId || "";
   if (!sid) return sendJson(res, 400, { ok: false, errors: ["cannot tell which session this is (run not found)"] });

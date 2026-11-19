@@ -11,8 +11,8 @@ import { runShutdown } from "../gw/crashguard.mjs";
 import { usageAdd } from "../gw/usage.mjs";
 import { setSessModel } from "../gw/sessmodel.mjs";
 
-const USAGE = path.join(CFG.home, "ccapp-usage.json");
-const SESS = path.join(CFG.home, "ccapp-session-models.json");
+const USAGE = path.join(CFG.home, "agyapp-usage.json");
+const SESS = path.join(CFG.home, "agyapp-session-models.json");
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
 test("runShutdown：usage 的 5 秒防抖、sessmodel 的 300ms 防抖都立刻落盘", () => {

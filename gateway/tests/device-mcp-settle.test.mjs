@@ -27,7 +27,7 @@ async function withMcp(reply, fn) {
     });
   });
   await new Promise((r) => srv.listen(sock, r));
-  const p = spawn(process.execPath, [MCP], { env: { ...process.env, CCAPP_PRIV_SOCK: sock }, stdio: ["pipe", "pipe", "inherit"] });
+  const p = spawn(process.execPath, [MCP], { env: { ...process.env, AGAPP_PRIV_SOCK: sock }, stdio: ["pipe", "pipe", "inherit"] });
   const rl = readline.createInterface({ input: p.stdout });
   const waiting = new Map();
   rl.on("line", (l) => { const m = JSON.parse(l); waiting.get(m.id)?.(m); });

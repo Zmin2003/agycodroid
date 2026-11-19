@@ -1,23 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────
 //  theme.js —— 外观：五套风格（原生 / 求索 / 逐月 / 构成 / 拾色）× 浅色 / 深色 / 跟随系统（无依赖；放在 <head> 里同步加载，避免先闪一下深色）
 //
-//  设置存在 localStorage["ccapp.theme"]："auto"（默认）| "light" | "dark"，求索风格加前缀 "qs-"，逐月加 "zy-"，构成加 "gc-"，拾色加 "ss-"。
+//  设置存在 localStorage["agyapp.theme"]："auto"（默认）| "light" | "dark"，求索风格加前缀 "qs-"，逐月加 "zy-"，构成加 "gc-"，拾色加 "ss-"。
 //  结果写到 <html data-theme="light|dark" data-skin="native|qiusuo|zhuyue|goucheng|shise">，样式只认这两个属性（style.css 里的变量表）。
 //
 //  「跟随系统」靠什么判断：
-//    · 壳里有 CCApp.nightMode() 就以它为准 —— 应用主题固定是深色时，WebView 的
+//    · 壳里有 AGApp.nightMode() 就以它为准 —— 应用主题固定是深色时，WebView 的
 //      prefers-color-scheme 不跟系统走，只有原生层知道系统现在是不是夜间模式；
 //      系统切换时壳调用 Theme.system(true|false) 通知这里。
 //    · 没有壳（浏览器里打开）就用 matchMedia。
-//  定下来以后再告诉壳 CCApp.setBars(dark)，让状态栏 / 导航栏跟着换色。
+//  定下来以后再告诉壳 AGApp.setBars(dark)，让状态栏 / 导航栏跟着换色。
 // ─────────────────────────────────────────────────────────────────────
 
-// ── 原生桥口令（cccodroid 0.4.6 起）：壳的 CCApp 里有副作用的方法第一个参数要带口令，
-//    口令只经首页地址的 #k= 交给主框架（不进请求行，11-03 审查 M-3）（存 sessionStorage，刷新还在）。HTML 预览的 iframe 同样被注入了 CCApp，
-//    但和界面不同源，拿不到口令，调了也没用。这里把 CCApp 换成自动带口令的一层，其余代码照旧写 CCApp.xxx(…)。
-//    放在 theme.js 开头，因为它是第一个碰 CCApp 的脚本。开发端 / 测试壳没有 keyed()，原样不动
+// ── 原生桥口令（agycodroid 0.4.6 起）：壳的 AGApp 里有副作用的方法第一个参数要带口令，
+//    口令只经首页地址的 #k= 交给主框架（不进请求行，11-03 审查 M-3）（存 sessionStorage，刷新还在）。HTML 预览的 iframe 同样被注入了 AGApp，
+//    但和界面不同源，拿不到口令，调了也没用。这里把 AGApp 换成自动带口令的一层，其余代码照旧写 AGApp.xxx(…)。
+//    放在 theme.js 开头，因为它是第一个碰 AGApp 的脚本。开发端 / 测试壳没有 keyed()，原样不动
 (function () {
-  const raw = window.CCApp;
+  const raw = window.AGApp;
   if (!raw || typeof raw.keyed !== "function") return;
   let k = (/[#&]k=([0-9a-f]{32})/.exec(location.hash) || [])[1] || "";
   try { if (k) sessionStorage.setItem("cc.bk", k); else k = sessionStorage.getItem("cc.bk") || ""; } catch {}
@@ -27,11 +27,11 @@
   const w = {};
   for (const m of PLAIN) if (typeof raw[m] === "function") w[m] = (...a) => raw[m](...a);
   for (const m of KEYED) if (typeof raw[m] === "function") w[m] = (...a) => raw[m](k, ...a);
-  window.CCApp = w;
+  window.AGApp = w;
 })();
 
 (function () {
-  const LS = "ccapp.theme";
+  const LS = "agyapp.theme";
   const MODES = ["auto", "light", "dark", "qs-auto", "qs-light", "qs-dark", "zy-auto", "zy-light", "zy-dark", "gc-auto", "gc-light", "gc-dark", "ss-auto", "ss-light", "ss-dark"];
   const PREFIX = { native: "", qiusuo: "qs-", zhuyue: "zy-", goucheng: "gc-", shise: "ss-" };
   const skinOf = (p) => (p.startsWith("qs-") ? "qiusuo" : p.startsWith("zy-") ? "zhuyue" : p.startsWith("gc-") ? "goucheng" : p.startsWith("ss-") ? "shise" : "native");
@@ -39,7 +39,7 @@
   // 状态栏 / 导航栏底色要和页面底色一致（壳那边也有一份同样的表：BrowserPane.bg）
   const BAR = { native: { dark: "#1f1e1d", light: "#faf9f5" }, qiusuo: { dark: "#151517", light: "#ffffff" }, zhuyue: { dark: "#111111", light: "#ffffff" }, goucheng: { dark: "#151412", light: "#f3eee3" }, shise: { dark: "#141218", light: "#fdf7ff" } };   // 拾色的两格由 shisePaint 按种子色改写
   const mq = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
-  const app = () => (window.CCApp && typeof window.CCApp.nightMode === "function" ? window.CCApp : null);
+  const app = () => (window.AGApp && typeof window.AGApp.nightMode === "function" ? window.AGApp : null);
 
   let pref = "auto";
   try { pref = localStorage.getItem(LS) || "auto"; } catch {}
@@ -70,7 +70,7 @@
     // 先告诉壳风格，再让它换栏色 —— 栏色按风格取
     if (a && typeof a.skinPref === "function") { try { a.skinPref(skin); } catch {} }
     if (a && typeof a.setBars === "function") { try { a.setBars(dark); } catch {} }
-    // 外壳记下这个选择，下次启动的安装页 / 空白页照着上色（cccodroid 0.1.20 起有）；壳只认 auto/light/dark
+    // 外壳记下这个选择，下次启动的安装页 / 空白页照着上色（agycodroid 0.1.20 起有）；壳只认 auto/light/dark
     if (a && typeof a.themePref === "function") { try { a.themePref(mode); } catch {} }
     const s = document.getElementById("set-theme");
     if (s && s.value !== pref) s.value = pref;
@@ -81,7 +81,7 @@
     return name;
   }
 
-  // ── 强调色（0.4.20）：用户在设置 → 通用里挑的颜色，存在 ccapp-ui.json 的 accent（本地镜像 localStorage cc.ui，这里同步读，启动不闪）。
+  // ── 强调色（0.4.20）：用户在设置 → 通用里挑的颜色，存在 agyapp-ui.json 的 accent（本地镜像 localStorage cc.ui，这里同步读，启动不闪）。
   //   同一个颜色在浅底、深底上看得清的深浅不一样：按当前外观的底色把亮度往对比度够的方向推，直到正文对比 ≥ 4.5:1；
   //   按钮上的字（--on-accent）在白和近黑里挑对比高的；选中项的浅底（--active-bg）也由它派生。三套外观都盖：构成的红、逐月的蓝点缀也换成它
   const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -143,11 +143,11 @@
   }
 
   // ── 拾色（0.5.15，Material You）：整套颜色从一个种子色推出来 ──
-  //   种子：设置里自定的强调色 > 壁纸主色（安卓 12+，外壳 CCApp.wallColor 读系统 system_accent1_500）> 默认紫 #6750a4。
+  //   种子：设置里自定的强调色 > 壁纸主色（安卓 12+，外壳 AGApp.wallColor 读系统 system_accent1_500）> 默认紫 #6750a4。
   //   推法：在 OKLCH 里固定种子的色相，按 Material 3 的「色调」（tone，0 黑 – 100 白）取不同明度：
   //     主色 primary 用种子彩度（不足就补到 0.09），次要色 secondary 彩度 0.035，中性色 neutral 0.008、neutral-variant 0.018。
   //   这是 Material 官方 HCT 色彩空间的近似（HCT 的 tone 就是 L*，这里用 OKLCH 明度线性映射代替），省掉一整个色彩库。
-  //   M3 的「色彩角色」→ 我们的变量见 SS_ROLES；外壳要的 8 种颜色经 CCApp.skinPal 交过去
+  //   M3 的「色彩角色」→ 我们的变量见 SS_ROLES；外壳要的 8 种颜色经 AGApp.skinPal 交过去
   const WALL = "cc.wall";
   const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const gam = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
@@ -211,9 +211,9 @@
     try { w = localStorage.getItem(WALL) || ""; } catch {}
     return /^#[0-9a-f]{6}$/.test(w) ? w : "";
   }
-  // ── 构成浅色的纸色（群友反馈「看着偏黄，能不能调」）：ccapp-ui.json 的 gcPaper，0 偏白 … 50 现在的样子 … 100 原版牛皮纸 ──
+  // ── 构成浅色的纸色（群友反馈「看着偏黄，能不能调」）：agyapp-ui.json 的 gcPaper，0 偏白 … 50 现在的样子 … 100 原版牛皮纸 ──
   //   每个底色 / 线色 / 浅字色两头各有一个端点：白端 = 同亮度的中性灰（越亮的往白提得越多），黄端 = 现在的颜色离白端再走同样一段；
-  //   中间按 RGB 线性插。只动浅色，深色不变；状态栏和外壳的颜色经 CCApp.gcPal 跟着换
+  //   中间按 RGB 线性插。只动浅色，深色不变；状态栏和外壳的颜色经 AGApp.gcPal 跟着换
   const GC_BASE = { "--bg": "#f3eee3", "--bg2": "#faf7ef", "--bg3": "#e9e2d2", "--bg4": "#ddd4c0", "--line": "#cdc2aa", "--fg2": "#4f483d", "--fg3": "#6b6255",
     "--code-bg": "#e9e2d2", "--think-bg": "#eee8db", "--more-bg": "#e9e2d2", "--more-line": "#cdc2aa", "--user-bg": "#faf7ef", "--tool-bg": "#faf7ef",
     "--tool-sep": "#e9e2d2", "--cmd-bg": "#eeeadf", "--panel": "#faf7ef", "--input-bg": "#faf7ef", "--on-accent": "#faf7ef" };
@@ -302,20 +302,20 @@
   document.addEventListener("DOMContentLoaded", apply);
 
   // ── 字体与正文字号：和配色一样同步生效，避免先闪一下系统字体 ──
-  //   界面字体  ccapp.uifont   cc（默认：自带 Inter + 思源黑体）| system（跟随系统）
-  //   回复字体  ccapp.readfont serif（默认：自带 Spectral + 思源宋体）| sans
-  //   正文字号  ccapp.fs       s | m（默认）| l | xl（特大，给看不清的人；审查 #49 待确认-1）
+  //   界面字体  agyapp.uifont   cc（默认：自带 Inter + 思源黑体）| system（跟随系统）
+  //   回复字体  agyapp.readfont serif（默认：自带 Spectral + 思源宋体）| sans
+  //   正文字号  agyapp.fs       s | m（默认）| l | xl（特大，给看不清的人；审查 #49 待确认-1）
   //   界面、回复两个字体槽位还能填导入的字体 "u:<id>"（0.4.20 起，见 gw/fonts.mjs；等宽不开放：终端和代码按格子排，换字体容易错位），这时属性写 "u"，具体是哪个字体由下面注入的 <style id="user-fonts"> 定。
   //   结果写到 <html data-uifont data-readfont data-fs>，样式只认这几个属性
   const TYPE = { uifont: ["cc", "system"], readfont: ["serif", "sans"], fs: ["m", "s", "l", "xl"] };
   const SLOTS = ["uifont", "readfont"];
   // 导入字体的清单在网关（/api/fonts），这里缓存一份，好在页面一开头就把 @font-face 写进去；界面启动后会再和网关对一次
-  const UF = "ccapp.ufonts";
+  const UF = "agyapp.ufonts";
   let ufonts = [];
   try { const j = JSON.parse(localStorage.getItem(UF) || "[]"); if (Array.isArray(j)) ufonts = j.filter((f) => f && /^[0-9a-f]{12}$/.test(f.id)); } catch {}
   const okVal = (k, v) => (TYPE[k] || []).includes(v) || (SLOTS.includes(k) && typeof v === "string" && v.startsWith("u:") && ufonts.some((f) => "u:" + f.id === v));
   const typePref = {};
-  for (const k in TYPE) { let v = null; try { v = localStorage.getItem("ccapp." + k); } catch {} typePref[k] = okVal(k, v) ? v : TYPE[k][0]; }
+  for (const k in TYPE) { let v = null; try { v = localStorage.getItem("agyapp." + k); } catch {} typePref[k] = okVal(k, v) ? v : TYPE[k][0]; }
   // 格式只取表里的：本地存的值会原样进 CSS 字符串（审查 10-30 第九份 前端低3）
   const FMT = { ttf: "truetype", otf: "opentype", woff: "woff", woff2: "woff2" };
   const fam = (id) => `"CCU ${id}"`;
@@ -344,7 +344,7 @@
     if (!okVal(k, v)) return;
     const was = typePref[k];
     typePref[k] = v;
-    try { localStorage.setItem("ccapp." + k, v); } catch {}
+    try { localStorage.setItem("agyapp." + k, v); } catch {}
     applyType();
     if (was !== v) document.dispatchEvent(new CustomEvent("cc:type", { detail: { key: k, value: v } }));
   }

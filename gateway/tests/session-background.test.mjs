@@ -1,6 +1,6 @@
-// 后台守护会话（Claude Code 的 sessionKind=daemon / daemon-worker）不能进用户会话列表；
+// 后台守护会话（Antigravity CLI 的 sessionKind=daemon / daemon-worker）不能进用户会话列表；
 // 尤其要在按时间截断之前滤掉，否则最近的守护会话会占掉 limit，把用户自己的对话挤出去。
-// 但 sessionKind=bg 是用户自己甩到后台的对话，Claude Code 的 /resume 照常显示，这里也不能藏。
+// 但 sessionKind=bg 是用户自己甩到后台的对话，Antigravity CLI 的 /resume 照常显示，这里也不能藏。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { listSessions } from "../gw/sessions.mjs";
 // 别的测试文件留在 projects 里的会话会污染计数。把 PATHS.projects 换成本文件
 // 私有的临时目录，让 listSessions 只扫到本文件的 fixtures（每文件独立进程，不影响别人）。
 const realProjects = PATHS.projects;
-const tmpRoot = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "bg-list-"));
+const tmpRoot = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "bg-list-"));
 PATHS.projects = tmpRoot;
 const dir = path.join(tmpRoot, "zz-bg-list-test");
 fs.mkdirSync(dir, { recursive: true });

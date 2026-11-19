@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────
-//  server.mjs —— Claude CLI 的 HTTP + SSE 网关
+//  server.mjs —— Antigravity CLI 的 HTTP + SSE 网关
 //
-//  把本机的 Claude Code CLI（走 DeepSeek API）包成完整的图形化入口：
+//  把本机的 Antigravity CLI 包成完整的图形化入口：
 //
-//    · 会话管理   读 claude 自己的 transcript（~/.claude/projects/*.jsonl），
+//    · 会话管理   读网关自己写的 transcript（~/agyapp-sessions/*.jsonl），
 //                 可以列表 / 恢复 / 删除 / 重命名 —— 多上下文并存
-//    · 斜杠命令   /context /cost /model /status /mcp … 在 -p 模式下能直接执行，
-//                 原样转发即可拿到 CLI 的本地命令输出
-//    · 能力清单   工具 / 技能 / 代理 / 斜杠命令 / MCP / 插件，全部可见
-//    · 设置       模型、权限模式、附加目录、输出风格、思考强度
+//    · 斜杠命令   /model /effort /status /mcp … 网关本地处理，
+//                 其余 /… 原样发给 agy 当普通消息
+//    · 能力清单   工具 / 斜杠命令 / MCP，全部可见（agy 没有技能、子代理、插件）
+//    · 设置       模型 slug、权限（toolPermission / agentMode）、输出风格、effort 档位
 //
 //  用法: node server.mjs [port]
 //
 //  代码按功能分在 gw/ 下，本文件只管路由分发与启动：
 //
 //    config      路径、环境、工具函数、提示语多语言     http        回 JSON、静态文件、读请求体
-//    providers   厂商目录、密钥、余额与消费             access      令牌、Host/Origin 校验
+//    providers   厂商目录、密钥（Google OAuth / Gemini API Key） access      令牌、Host/Origin 校验
 //    settings    设置                                   bus         事件总线（SSE）
 //    models      模型清单                               runs        正在跑的轮次、最近会话
 //    claude      shell、DNS 桥、claude 进程环境         queue       排队、车道、被杀接续、空闲压缩
@@ -45,7 +45,7 @@ import { SETTINGS, routeSettings, saveSettings } from "./gw/settings.mjs";
 import { API_KEY, PROVIDER, routeProviders } from "./gw/providers.mjs";
 import { fetchModels, normEffort, routeModels } from "./gw/models.mjs";
 import { listSessions, routeSessions } from "./gw/sessions.mjs";
-import { bridgeProc, killTree, reapOrphans, routeClaude } from "./gw/claude.mjs";
+import { killTree, reapOrphans, routeAntigravity } from "./gw/agy.mjs";
 import { expireTrash } from "./gw/sessionops.mjs";
 import { routeCaps, builtinCommands } from "./gw/caps.mjs";
 import { NEXT, sendJson, serveStatic } from "./gw/http.mjs";
@@ -94,7 +94,7 @@ import { COOKIE, SESSION, UI_HOST, cookieHostOk, denyLog, denyReason, localAddr,
 import { startWorkIsland, stopWorkIslandSync } from "./gw/work-island.mjs";
 
 // 各模块的路由函数，按原来分支的先后排；返回 NEXT 表示不归它管
-const ROUTES = [routeClaude, routeFeedback, routeUsage, routeCaps, routeProviders, routeSettings, routeProjects, routeBookmarks, routeFonts, commandRoutes(builtinCommands), routeUi, routeSched, routeSessModel, routeBackfill, routeMerge, routeProfile, routeLineage, routeArchive, routeSessions, routeExtensions, routeModels, routeTerminal, routeComponents, routeModules, routeOrphans, routeStorage, routeCustom, routeGit, routeLocal, routeOffice, routePdfTools, routeArc, routeFiles, routePreview, routeBus, routeQueue, routeDevside, routeLogin, routeRun, routeNotices, routeReconcile];
+const ROUTES = [routeAntigravity, routeFeedback, routeUsage, routeCaps, routeProviders, routeSettings, routeProjects, routeBookmarks, routeFonts, commandRoutes(builtinCommands), routeUi, routeSched, routeSessModel, routeBackfill, routeMerge, routeProfile, routeLineage, routeArchive, routeSessions, routeExtensions, routeModels, routeTerminal, routeComponents, routeModules, routeOrphans, routeStorage, routeCustom, routeGit, routeLocal, routeOffice, routePdfTools, routeArc, routeFiles, routePreview, routeBus, routeQueue, routeDevside, routeLogin, routeRun, routeNotices, routeReconcile];
 
 // ── 路由 ──────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -121,7 +121,7 @@ const server = http.createServer(async (req, res) => {
     req.resume();
     return sendJson(res, deny, { error: deny === 421 ? "bad host" : "forbidden" });
   }
-  if (req.socket && req.ccAuthed) req.socket.__cc = 1;      // 带凭据过了鉴权：连接槽快满时不挤它（见 guardSlots）；/ 这类不要凭据的页面不算
+  if (req.socket && req.ccAuthed) req.socket.__agy = 1;      // 带凭据过了鉴权：连接槽快满时不挤它（见 guardSlots）；/ 这类不要凭据的页面不算
   // App 核身份用（见 access.mjs 的 proof）：不要令牌，回的东西没有令牌算不出来
   if (req.method === "GET" && p === "/__proof") {
     const r = proofFor(u, localAddr(req));
@@ -130,7 +130,7 @@ const server = http.createServer(async (req, res) => {
     return res.end(r);
   }
   // 宿主 WebView 首次加载首页时带 ?t=令牌：种 Cookie，之后同源请求自动带上
-  // cccodroid 里只在界面专用地址上种（见 access.mjs 的 UI_HOST）；App 现在直接用 CookieManager 种，这条留给开发端
+  // agycodroid 里只在界面专用地址上种（见 access.mjs 的 UI_HOST）；App 现在直接用 CookieManager 种，这条留给开发端
   if (req.method === "GET" && (p === "/" || p === "/index.html") && cookieHostOk(req) && tokenOk(u.searchParams.get("t") || "")) {
     res.setHeader("Set-Cookie", `${COOKIE}=${SESSION}; Path=/; HttpOnly; SameSite=Strict`);
   }
@@ -185,7 +185,7 @@ function guardSlots(srv) {
   const socks = new Set();
   srv.on("connection", (s) => {
     socks.add(s); s.on("close", () => socks.delete(s));
-    if (socks.size > 200) for (const o of socks) if (!o.__cc && o !== s) { o.destroy(); break; }
+    if (socks.size > 200) for (const o of socks) if (!o.__agy && o !== s) { o.destroy(); break; }
   });
 }
 guardSlots(server); guardSlots(uiServer);
@@ -203,7 +203,7 @@ server.listen(CFG.port, "127.0.0.1", () => {
   if (UI_HOST !== "127.0.0.1") uiServer.listen(CFG.port, UI_HOST);
   else log("⚠️ 这台设备上 127.0.0.2 连不通，界面改走 127.0.0.1（应用启动时探测，见 Env.checkHost）");
   // 浏览器直接开这个地址只拿得到静态页，/api 按来源校验一律 403；界面要从应用里开（0.6.9 审计 195-G.6）
-  log(`claude-apk 网关 v3 已启动  http://127.0.0.1:${CFG.port}（界面请从 cccodroid 应用里打开）`);
+  log(`claude-apk 网关 v3 已启动  http://127.0.0.1:${CFG.port}（界面请从 agycodroid 应用里打开）`);
   log(`  运行时 ${CFG.runtime}`);
   log(`  工作区 ${CFG.workspace}`);
   log(`  前端   ${PATHS.web}  存在=${fs.existsSync(PATHS.web)}`);
@@ -211,7 +211,7 @@ server.listen(CFG.port, "127.0.0.1", () => {
   log(`  模型   ${SETTINGS.model}   权限 ${SETTINGS.permissionMode}`);
   if (!fs.existsSync(PATHS.claude)) log(`  ⚠️ 未找到 claude: ${PATHS.claude}`);
   if (!fs.existsSync(PATHS.loader)) log(`  ⚠️ 未找到 glibc loader: ${PATHS.loader}`);
-  if (process.env.CCAPP_EXEC === "loader") {
+  if (process.env.AGAPP_EXEC === "loader") {
     // 经加载器（targetSdk 36）：APK 里的 ld.so 必须和工具包里的 libc 同版本，不同就是 APK 先升了、工具包还没跟上
     let same = false;
     try { same = fs.readFileSync(PATHS.loader).equals(fs.readFileSync(path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1"))); } catch {}
@@ -264,7 +264,7 @@ setTimeout(async () => {
 const shutdown = (sig) => {
   for (const r of RUNS.values()) if (r.child && !r.ended) { try { killTree(r.child); } catch {} }
   if (sig === "SIGTERM") for (const t of TERMS.values()) if (t.alive) { try { killTree(t.child); } catch {} }
-  try { bridgeProc?.kill(); } catch {}
+  // 旧版这里还杀 bridgeProc（Claude 桥进程）；agy 没有桥进程，run.mjs 起的 CLI 子进程都在上面收了。
   runShutdown();
   try { stopWorkIslandSync(); } catch {}
   process.exit(0);

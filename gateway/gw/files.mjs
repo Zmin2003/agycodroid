@@ -29,7 +29,7 @@ const UPLOAD_MAX = 4 * 1024 ** 3;   // 单个附件上限（流式落盘）
  *  说明：这台网关本就只监听 127.0.0.1，且 /api/chat 等于本机任意命令执行 ——
  *  这一层是「别让取文件接口顺手把密钥递出去」的防呆，不是完整的鉴权边界。 */
 const SECRET_NAMES = new Set([
-  "ccapp-providers.json", "ccapp-config.json", "ccapp-seed.json",
+  "agyapp-providers.json", "agyapp-config.json", "agyapp-seed.json",
   "keystore.json", "debug.keystore", "id_ed25519", "id_rsa", "id_ecdsa",
 ]);
 const SECRET_RE = /(^|\/)(\.ssh|\.gnupg|\.aws|\.config\/gcloud)(\/|$)/;
@@ -143,7 +143,7 @@ export function fileRoots() {
   };
   add(UPLOAD_DIR);
   add(CFG.workspace);
-  add(process.env.CCAPP_SHARED);
+  add(process.env.AGAPP_SHARED);
   add("/sdcard/DeepSeekHarness");
   add("/sdcard/Pictures"); add("/sdcard/DCIM/Camera"); add("/sdcard/Download"); add("/sdcard/Documents");
   add("/sdcard");
@@ -167,7 +167,7 @@ function uploadCleanParts() {
 }
 
 // ── 截屏 ──────────────────────────────────────────────────────────────
-/** 整屏截图（PNG）。cccodroid：priv 的 stdout 是干净的二进制通道，直接收；
+/** 整屏截图（PNG）。agycodroid：priv 的 stdout 是干净的二进制通道，直接收；
  *  开发端的 rish 会把输出随机拆到 stdout / stderr，二进制会坏 —— 先写到共享存储再读回来 */
 async function screencap(shot) {
   let last = "";
@@ -186,7 +186,7 @@ function screencapOnce(shot) {
       // 直接走 priv 的套接字（协议见 Priv.java / priv.mjs）：界面领来的一次性截屏码放在请求里，不进命令行和环境变量
       const out = [], err = [];
       let buf = Buffer.alloc(0), code = null, got = 0;
-      const s = net.connect({ path: process.env.CCAPP_PRIV_SOCK || "/data/data/cc.codroid/files/.priv.sock" }, () => {
+      const s = net.connect({ path: process.env.AGAPP_PRIV_SOCK || "/data/data/cc.agyroid/files/.priv.sock" }, () => {
         s.write(JSON.stringify({ op: "exec", argv: ["/system/bin/sh", "-c", "screencap -p"], cwd: "/", shot: String(shot || "") }) + "\n");
         s.write(Buffer.from([0, 0, 0, 0, 0]));          // 没有 stdin：空帧
       });
@@ -217,7 +217,7 @@ function screencapOnce(shot) {
       s.on("close", () => { clearTimeout(t); resolve({ buf: Buffer.concat(out), code, err: Buffer.concat(err).toString().trim().slice(0, 160) }); });
       return;
     }
-    const tmp = "/sdcard/Download/.ccapp-screen.png";
+    const tmp = "/sdcard/Download/.agyapp-screen.png";
     execFile("priv", [`screencap -p ${tmp}`], { timeout: 20000, env: process.env }, (e) => {
       let buf = null; try { buf = fs.readFileSync(tmp); fs.rmSync(tmp, { force: true }); } catch {}
       resolve({ buf, err: e ? e.message.slice(0, 160) : "" });
@@ -258,7 +258,7 @@ export async function routeFiles(req, res, u, p) {
       "accept-ranges": "bytes",
       "cache-control": "no-store",
       "x-mtime": String(r.mtime),     // 编辑器保存时带回来做冲突检测
-      // 文件内容不可信（Claude 写的、别处下的）：哪怕被整页打开，也只当不透明源、不跑脚本，碰不到网关的 Cookie 和 /api
+      // 文件内容不可信（Antigravity 写的、别处下的）：哪怕被整页打开，也只当不透明源、不跑脚本，碰不到网关的 Cookie 和 /api
       "content-security-policy": "sandbox",
       "x-content-type-options": "nosniff",
     };
@@ -300,7 +300,7 @@ export async function routeFiles(req, res, u, p) {
     if (r.error) return sendJson(res, r.status || 404, { error: r.error });
     return sendJson(res, 200, { path: r.file, dir: false, size: r.size, mtime: r.mtime, kind: fileKind(r.file, false) });
   }
-  // ── 文件编辑器保存：带上打开时的 mtime，磁盘上的已经被别人（多半是 Claude）改过就拒绝，免得互相覆盖 ──
+  // ── 文件编辑器保存：带上打开时的 mtime，磁盘上的已经被别人（多半是 Antigravity）改过就拒绝，免得互相覆盖 ──
   if (req.method === "POST" && p === "/api/file/save") {
     const r = safeWritePath(u.searchParams.get("path"));
     if (r.error) return sendJson(res, r.status || 400, { error: r.error });
@@ -438,7 +438,7 @@ export async function routeFiles(req, res, u, p) {
       size, mime: mimeOf(out), kind,
     });
   }
-  // ── 截屏给 Claude：经 priv 以 shell 身份 screencap，存进 uploads 当附件。delay 秒后再截（先切到要截的应用），截完叫回前台 ──
+  // ── 截屏给 Antigravity：经 priv 以 shell 身份 screencap，存进 uploads 当附件。delay 秒后再截（先切到要截的应用），截完叫回前台 ──
   if (req.method === "POST" && p === "/api/screenshot") {
     let b; try { b = JSON.parse((await readBody(req)) || "{}"); } catch { return sendJson(res, 400, { error: "bad json" }); }
     const delay = Math.max(0, Math.min(30, Number(b.delay) || 0));

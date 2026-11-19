@@ -141,8 +141,8 @@ export function appGuard(root, { onRestart, expect, onBadList } = {}) {
 
 // 网关自己用的那一份：只在部署出来的目录上（有 FILES）
 let idleTimer = null;
-const FILES_SHA = process.env.CCAPP_FILES_SHA || "";
-delete process.env.CCAPP_FILES_SHA;
+const FILES_SHA = process.env.AGAPP_FILES_SHA || "";
+delete process.env.AGAPP_FILES_SHA;
 export const APP = appGuard(HERE, {
   expect: FILES_SHA,
   // 刚起来、还没有回话和终端：直接退出，应用重拉前按安装包还原（AppFiles.tampered 也核 FILES 自己）

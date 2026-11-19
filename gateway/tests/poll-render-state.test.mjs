@@ -6,7 +6,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const web = process.env.CCAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
+const web = process.env.AGAPP_TEST_WEB || fileURLToPath(new URL("../web/", import.meta.url));
 const read = name => fs.readFileSync(path.join(web, "app", name), "utf8");
 const take = (text, start, end) => {
   const a = text.indexOf(start), b = text.indexOf(end, a);
@@ -28,6 +28,7 @@ function components() {
   const make = id => {
     const listeners = new Map();
     return { id, innerHTML: "", textContent: "", dataset: {}, classList: classes(), listeners,
+      closest: () => null, querySelector: () => null,
       addEventListener(type, fn) { const list = listeners.get(type) || []; list.push(fn); listeners.set(type, list); },
       querySelectorAll() { return []; } };
   };
@@ -42,7 +43,7 @@ function components() {
     get: () => html,
     set: s => {
       html = s; count++;
-      cards = [...s.matchAll(/data-comp="([^"]+)"/g)].map(m => ({ dataset: { comp: m[1] }, classList: classes() }));
+      cards = [...s.matchAll(/data-comp="([^"]+)"/g)].map(m => ({ dataset: { comp: m[1] }, classList: classes(), closest: () => null }));
     },
   });
   box.querySelectorAll = sel => sel === ".ccard.open" ? cards.filter(c => c.classList.contains("open")) : sel === ".ccard" ? cards : [];

@@ -1,6 +1,6 @@
-# cccodroid session archiving spec v1
+# agycodroid session archiving spec v1
 
-You are working inside cccodroid. cccodroid keeps an archive for every session: each time the context is compacted, one "chapter" ends. The session list shows the title of the latest chapter; earlier chapters can be looked up in Lineage. You write the titles, because you know best what each chapter did.
+You are working inside agycodroid. agycodroid keeps an archive for every session: each time the context is compacted, one "chapter" ends. The session list shows the title of the latest chapter; earlier chapters can be looked up in Lineage. You write the titles, because you know best what each chapter did.
 
 ## When to file
 
@@ -35,7 +35,7 @@ node <archive command path> --title "Title" [--same] [--misc] [--status ongoing|
 
 | Bad | Good |
 |---|---|
-| Hello Claude | Take over gateway fixes and verify |
+| Hello Antigravity | Take over gateway fixes and verify |
 | Discussion about the toolkit | Add which to the toolkit and re-verify |
 | Release on 2026-10-22 | Ship v0.3.12 in-app notices |
 | Fixed some bugs. | Fix first-run install button off screen |

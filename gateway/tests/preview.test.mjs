@@ -40,14 +40,14 @@ test("默认断网：带 CSP 和回报地址，拦下的外站记下来；点「
   const csp = (await fetch(r.url)).headers.get("content-security-policy") || "";
   assert.match(csp, /connect-src 'self'/);
   assert.match(csp, /form-action 'self'/);
-  assert.match(csp, new RegExp(`report-uri /__cc/csp/${cap}$`));
+  assert.match(csp, new RegExp(`report-uri /__agy/csp/${cap}$`));
   assert.ok(!/default-src[^;]*\*/.test(csp), "default-src 不能放开");
   const origin = new URL(r.url).origin;
-  const rep = await fetch(`${origin}/__cc/csp/${cap}`, { method: "POST", headers: { "content-type": "application/csp-report" }, body: JSON.stringify({ "csp-report": { "blocked-uri": "https://evil.example/x?d=1" } }) });
+  const rep = await fetch(`${origin}/__agy/csp/${cap}`, { method: "POST", headers: { "content-type": "application/csp-report" }, body: JSON.stringify({ "csp-report": { "blocked-uri": "https://evil.example/x?d=1" } }) });
   assert.equal(rep.status, 204);
   // 别人的凭证、乱写的报告不出错也不记
-  assert.equal((await fetch(`${origin}/__cc/csp/${"0".repeat(24)}`, { method: "POST", body: "{}" })).status, 204);
-  assert.equal((await fetch(`${origin}/__cc/csp/${cap}`, { method: "POST", body: "not json" })).status, 204);
+  assert.equal((await fetch(`${origin}/__agy/csp/${"0".repeat(24)}`, { method: "POST", body: "{}" })).status, 204);
+  assert.equal((await fetch(`${origin}/__agy/csp/${cap}`, { method: "POST", body: "not json" })).status, 204);
   const st = await (await fetch(`http://127.0.0.1:${gw.address().port}/api/preview/state?cap=${cap}`)).json();
   assert.deepEqual(st, { net: false, blocked: ["evil.example"] });
   // 打开联网：同一凭证、不带 CSP、拦截记录清空

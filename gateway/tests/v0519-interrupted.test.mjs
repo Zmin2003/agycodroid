@@ -9,7 +9,7 @@ import { CFG } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 import * as Q from "../gw/queue.mjs";
 
-const MARK = path.join(CFG.home, "ccapp-run-mark.json"), INTR = path.join(CFG.home, "ccapp-interrupted.json");
+const MARK = path.join(CFG.home, "agyapp-run-mark.json"), INTR = path.join(CFG.home, "agyapp-interrupted.json");
 const sid = (n) => `0000000${n}-0000-4000-8000-000000000000`;
 
 test("三轮同时被结束：三条中断记录各归各的会话，没建会话的那轮也留着", () => {

@@ -142,7 +142,7 @@ test("打开后原文件被改名：带着打开时的 mtime 保存要 409，不
 
 test("保存路径末尾的 /. 不能绕过密钥文件检查", async () => {
   fs.mkdirSync(CFG.workspace, { recursive: true });
-  const file = path.join(CFG.workspace, "ccapp-providers.json");
+  const file = path.join(CFG.workspace, "agyapp-providers.json");
   fs.writeFileSync(file, "ORIGINAL");
   const req = Readable.from([Buffer.from("PWNED")]);
   req.method = "POST"; req.headers = {};

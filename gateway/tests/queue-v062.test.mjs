@@ -19,7 +19,7 @@ await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
 after(() => srv.close());
 const post = async (p, b) => { const r = await fetch(`http://127.0.0.1:${srv.address().port}${p}`, { method: "POST", body: JSON.stringify(b) }); return { status: r.status, body: await r.json() }; };
 
-const RUN_MARK = path.join(CFG.home, "ccapp-run-mark.json");
+const RUN_MARK = path.join(CFG.home, "agyapp-run-mark.json");
 const fake = [];
 let n = 0;
 // 占满并行槽：入队的条目只留在队列里，pump 不会真的起 claude

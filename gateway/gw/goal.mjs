@@ -5,7 +5,7 @@ import { findSessionFile } from "./sessions.mjs";
 import { RUNS } from "./runs.mjs";
 import { publish } from "./bus.mjs";
 
-// ── /goal 目标（上游 2.1.x：设一个完成条件，Claude 跨轮一直干到满足为止）──
+// ── /goal 目标（上游 2.1.x：设一个完成条件，Antigravity 跨轮一直干到满足为止）──
 // -p 模式下目标状态不进事件流，只记在会话记录里：attachment.type === "goal_status"
 //   设定 → {met:false, sentinel:true, condition}；没达成 → {met:false, condition, reason}；
 //   达成 → {met:true, iterations, durationMs, tokens}；做不到 → {failed:true, reason}
