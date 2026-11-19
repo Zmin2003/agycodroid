@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────
-//  notice.mjs —— 发应用内通知（经 cccodroid.net 推给所有用户；App 里显示在顶栏下面的一条横幅）
+//  notice.mjs —— 发应用内通知（经 fork 的 GitHub raw 通知文件推给所有用户；App 里显示在顶栏下面的一条横幅）
 //
 //  node scripts/notice.mjs list
 //  node scripts/notice.mjs add --id 20261022-github --zh "标题|正文" --en "Title|Body"
@@ -10,7 +10,7 @@
 //  node scripts/notice.mjs publish            只重签、推送、等官网（手改过 notices.json 时用）
 //
 //  add / rm 之后自动：签名（组件索引那把 ed25519 钥匙，INDEX_SIGNING_KEY_FILE）→ 自验签 → 提交推送 main
-//  → 触发官网生成器（SITE_KICK）→ 等 cccodroid.net/notices.json 与本地逐字节一致。
+//  → 提交推送 main 后，App 直接从 raw.githubusercontent.com 取最新版（不再经官网生成器/SITE_KICK；raw 有几分钟缓存）。
 //  App 每 3 小时取一次（打开、切回前台时也会看是否到期），所以推送后最迟几个小时内大家都看得到。
 //  写法：一两句话说清「出了什么事、该怎么办」；中英各写各的。内容按纯文本显示，不支持 Markdown。
 // ─────────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ import path from "node:path";
 import { ROOT, die, loadPublished, signAndPublish } from "./signed-pub.mjs";
 
 const F = path.join(ROOT, "notices/notices.json");
-const SITE = "https://cccodroid.net/notices.json";
+const SITE = "https://raw.githubusercontent.com/Zmin2003/agycodroid/main/notices/notices.json";
 const argv = process.argv.slice(2);
 const opt = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : undefined; };
 const flag = (k) => { const i = argv.indexOf(k); return i >= 0 ? (argv.splice(i, 1), true) : false; };

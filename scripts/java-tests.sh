@@ -22,4 +22,14 @@ if [ -f "$AJAR" ]; then
   # 05-工具包重装丢组件：同一版重装时组件自己 dpkg 包清单里的文件要跟着搬（只造 MANIFEST，不碰 org.json）
   javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/InstallerCarryTest.java"
   java -cp "$OUT:$AJAR" cc.agyroid.InstallerCarryTest
+  # 网关取回：put(swap) 流式改前缀（GwRuntime.swapCopy），不整文件读内存
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/GwRuntimeSwapTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.GwRuntimeSwapTest
+  # M1 文件名白名单（emoji / CJK 扩展 B 区）、NT-14 cmpVer 预发布比较、ST-07 诊断包脱敏
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/MainActivityNameTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.MainActivityNameTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/UpdaterCmpVerTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.UpdaterCmpVerTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/ShareScrubTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.ShareScrubTest
 else echo "跳过 WhatsNewPickTest（没有 android.jar）"; fi

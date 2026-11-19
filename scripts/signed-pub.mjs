@@ -1,12 +1,12 @@
 // 签名发布的公共部分（notice.mjs、agy-verified.mjs 共用）：
-// PUB_DRY=1 只签名自验、把内容打出来（演练用）；PUB_LOCAL=1 签名写文件并本地提交、不推送。正常：用组件索引那把 ed25519 钥匙签名 → 用 App 里的公钥自验 → 写文件与 .sig → 提交推送 main → 触发官网生成器 → 等 cccodroid.net 上的副本与本地逐字节一致
+// PUB_DRY=1 只签名自验、把内容打出来（演练用）；PUB_LOCAL=1 签名写文件并本地提交、不推送。正常：用组件索引那把 ed25519 钥匙签名 → 用 App 里的公钥自验 → 写文件与 .sig → 提交推送 main → 等 raw.githubusercontent.com/Zmin2003/agycodroid/main 上的副本与本地逐字节一致（raw 有几分钟缓存；不再经官网生成器）
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 export const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const KEYFILE = process.env.INDEX_SIGNING_KEY_FILE || (fs.existsSync("/data/user/0/li.dsh.claudecli/files/bldtools") ? "/data/user/0/li.dsh.claudecli/files/bldtools" : (process.env.BLDTOOLS || process.env.HOME + "/.bldtools")) + "/index-signing-ed25519.pem";
+const KEYFILE = process.env.INDEX_SIGNING_KEY_FILE || (process.env.BLDTOOLS || process.env.HOME + "/.bldtools") + "/index-signing-ed25519.pem";
 export const die = (s) => { console.error("✗ " + s); process.exit(1); };
 const git = (...a) => execFileSync("git", ["-c", "safe.directory=*", "-c", "user.name=Zmin2003", "-c", "user.email=zmin2003@users.noreply.github.com", "-C", ROOT, ...a], { encoding: "utf8" }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,7 +23,7 @@ export function loadPublished(F, empty, ok) {
   return d;
 }
 
-/** @param file 仓库里的相对路径  @param data 要发布的对象  @param msg 提交说明  @param site cccodroid.net 上的地址 */
+/** @param file 仓库里的相对路径  @param data 要发布的对象  @param msg 提交说明  @param site 通知文件的公开地址（raw.githubusercontent.com/Zmin2003/agycodroid/main/…） */
 export async function signAndPublish({ file, data, msg, site }) {
   const F = path.join(ROOT, file);
   const body = Buffer.from(JSON.stringify(data, null, 1) + "\n");
@@ -57,15 +57,13 @@ export async function signAndPublish({ file, data, msg, site }) {
   git("push", "-q", "origin", "HEAD:main");
   console.log(`✓ 已推送 ${git("rev-parse", "--short", "HEAD")}`);
 
-  if (!process.env.SITE_KICK) console.log("  没给 SITE_KICK：等官网 30 分钟的定时同步");
+  // fork 没有官网生成器（SITE_KICK 已废弃）：直接等 raw.githubusercontent.com 的缓存换新（几分钟）。
   for (let i = 0; i < 40; i++) {
-    // 生成器从 raw.githubusercontent.com 取，那边缓存几分钟：第一次触发可能还拿到旧的，每 5 分钟再触发一次
-    if (process.env.SITE_KICK && i % 10 === 0) execFileSync("sh", [process.env.SITE_KICK], { stdio: "inherit" });
     try {
       const r = await fetch(`${site}?t=${Date.now()}`, { signal: AbortSignal.timeout(20000) });
       if (r.ok && Buffer.from(await r.arrayBuffer()).equals(body)) { console.log(`✓ ${site} 已是这一版。App 最迟 3 小时内取到`); return; }
     } catch {}
     await sleep(30000);
   }
-  die(`20 分钟官网还没同步到这一版（看 agycodroid-site.service 的日志）`);
+  die(`20 分钟 raw.githubusercontent.com 还没同步到这一版（看 GitHub 上 main 分支的文件是否已更新）`);
 }

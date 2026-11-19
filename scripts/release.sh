@@ -11,8 +11,7 @@
 # ─────────────────────────────────────────────────────────────────────
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-OLDB=/data/user/0/li.dsh.claudecli/files/bldtools     # 旧开发端；不在就是 agycodroid 终端的 ~/.bldtools
-[ -d "$OLDB" ] || OLDB=${BLDTOOLS:-$HOME/.bldtools}
+OLDB=${BLDTOOLS:-$HOME/.bldtools}   # 工具与钥匙目录（旧开发端回落已清掉，见 C 报告 F8）
 TOKEN=${TOKEN:-$OLDB/gh-token-agycodroid}
 REPO=Zmin2003/agycodroid
 APK="$ROOT/dist/agycodroid.apk"

@@ -94,7 +94,7 @@
       "duckdb",
       "imagemagick"
     ],
-    "claude": [
+    "agy": [
       "glibc"
     ],
     "go": [
@@ -127,7 +127,7 @@
     "cli",
     "graphics",
     "media",
-    "claude",
+    "agy",
     "adb"
   ],
   "_doc_modules": "modules：模块化工具包的划分（devkit.mjs modules）。base 必装；其余随装随卸。闭包里被两个以上模块共用、又不小于 sharedMinMB 的包自动提成共享层（不单独显示，没人用时跟着卸）；更小的共用包各模块各带一份，装卸靠共享文件计数。uses 是 App 里用到它的功能，面板照着显示。key：主要命令（卡片和给 Antigravity 的本机实况先列它们；完整命令表打包时从 usr/bin 收集）",
@@ -139,7 +139,7 @@
         "core",
         "vcs",
         "lang",
-        "claude",
+        "agy",
         "adb"
       ],
       "name": {
@@ -151,7 +151,7 @@
         "en": "Core command-line tools, git/ssh, Python, Node.js, adb, and the glibc that Antigravity CLI runs on. Required."
       },
       "uses": [
-        "claude",
+        "agy",
         "git",
         "terminal",
         "shizuku"

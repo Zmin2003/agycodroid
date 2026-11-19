@@ -4,9 +4,9 @@
 import crypto from "node:crypto";
 
 // 服务端公钥（SPKI PEM）；私钥只在发布机与组件仓库的 CI 密钥里。
-// 与 APK 里 Ed25519.INDEX_PUBKEY_B64（4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=）是同一把，测试里会核对
-export const PUBKEY_B64 = "4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=";
-const PUBKEY = crypto.createPublicKey("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=\n-----END PUBLIC KEY-----\n");
+// 与 APK 里 Ed25519.INDEX_PUBKEY_B64（QJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=）是同一把，测试里会核对
+export const PUBKEY_B64 = "QJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=";
+const PUBKEY = crypto.createPublicKey("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAQJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=\n-----END PUBLIC KEY-----\n");
 
 /** 下载地址里的 release tag（与 APK 的 Updater.tagOf 同一个正则） */
 export const tagOf = (base) => { const m = /\/download\/([^/]+)\/?$/.exec(String(base || "")); return m ? m[1] : ""; };

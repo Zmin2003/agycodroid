@@ -16,7 +16,7 @@ final class Ed25519 {
     private Ed25519() {}
 
     /** 签名公钥（32 字节原始公钥，base64）：与 gateway/gw/components.mjs 的 COMP_INDEX_PUBKEY 是同一把 */
-    static final String INDEX_PUBKEY_B64 = "4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=";
+    static final String INDEX_PUBKEY_B64 = "QJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=";
 
     private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
     private static final BigInteger L = BigInteger.ONE.shiftLeft(252).add(new BigInteger("27742317777372353535851937790883648493"));

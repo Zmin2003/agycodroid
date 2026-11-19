@@ -12,7 +12,7 @@ if (!pem) { console.error("✗ 没给签名私钥（INDEX_SIGNING_KEY 或 INDEX_
 const body = fs.readFileSync(file);
 const sig = crypto.sign(null, body, crypto.createPrivateKey(pem));
 // 签完用 App 内置的同一把公钥自检一遍，钥匙拿错了当场发现
-const PUB = crypto.createPublicKey({ key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from("4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=", "base64")]), format: "der", type: "spki" });
+const PUB = crypto.createPublicKey({ key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from("QJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=", "base64")]), format: "der", type: "spki" });
 if (!crypto.verify(null, body, PUB, sig)) { console.error("✗ 签出来的和 App 内置公钥对不上：钥匙拿错了"); process.exit(1); }
 fs.writeFileSync(file + ".sig", sig.toString("base64") + "\n");
 console.log(`✓ ${file}.sig`);

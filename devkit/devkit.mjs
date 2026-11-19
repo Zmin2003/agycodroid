@@ -739,8 +739,8 @@ if (cmd === "ldso") {
 //   node devkit.mjs gwpin --pin <devkit-pin.json> [--target 包名] [--out 文件] [--vendored 目录]
 // --target 和钉的工具包不是同一个包名时（开发版 cc.codrdev 用正式版的工具包），按同样的等长替换改一遍前缀再算
 const BIONIC_SYS = new Set(["libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so"]);
-// claude（Bun，glibc）要的：版本号写在 soname 里、多年不变，直接列
-const CLAUDE_GLIBC = ["ld-linux-aarch64.so.1", "libc.so.6", "librt.so.1", "libpthread.so.0", "libdl.so.2", "libm.so.6"];
+// agy（Bun，glibc）要的：版本号写在 soname 里、多年不变，直接列
+const AGY_GLIBC = ["ld-linux-aarch64.so.1", "libc.so.6", "librt.so.1", "libpthread.so.0", "libdl.so.2", "libm.so.6"];
 // 网关的库运行时按不带版本的名字 dlopen 的：libcrypto 初始化时 COMP_zlib 开 "libz.so"（strace 实测 11-05）。
 // files/gw 里没有就落到 RUNPATH 的 $PREFIX/lib，等于从 pkg 管的目录加载代码
 const GW_DLOPEN = ["libz.so"];
@@ -830,10 +830,10 @@ if (cmd === "gwpin") {
     }
   }
   for (const n of GW_DLOPEN) gw[n] = must("lib/" + n, "网关的库运行时 dlopen");
-  // glibc：claude 直接要的之外，glibc 自己还会按需 dlopen（libnss_*、libresolv…），--library-path 只给受保护的那份，
+  // glibc：agy 直接要的之外，glibc 自己还会按需 dlopen（libnss_*、libresolv…），--library-path 只给受保护的那份，
   // 所以 glibc/lib 顶层所有 ELF 共享库（连软链的名字）都收进来，约 5 MB
   const glibc = {};
-  for (const n of CLAUDE_GLIBC) glibc[n] = must("glibc/lib/" + n, "claude");
+  for (const n of AGY_GLIBC) glibc[n] = must("glibc/lib/" + n, "agy");
   for (const r of files.keys()) {
     const m = /^glibc\/lib\/([^/]+\.so(?:\.[\d.]+)?)$/.exec(r);
     if (!m || glibc[m[1]]) continue;

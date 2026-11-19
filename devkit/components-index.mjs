@@ -5,7 +5,7 @@
 // 每个构建按底座（工具包 gz 的 sha256）区分；已有的 components.json 里别的底座的构建会保留，
 // 这样工具包升级前后的用户都能装到匹配自己那一版的组件（livehime 浏览器组件同一个思路）。
 // 资产文件名：<id>-<版本>-for-<底座前 12 位>.tar.gz
-// 社区组件不走这里，走 greyoak111/cccodroid-components 仓库的 CI（同一把签名钥匙）
+// 社区组件不走这里，走 Zmin2003/agycodroid-components 仓库的 CI（同一把（新）签名钥匙）
 import fs from "node:fs";
 import path from "node:path";
 
@@ -30,8 +30,11 @@ for (const f of inputs) {
   const def = MAN.components[c.id] || {};
   const asset = `${c.id}-${c.version}-for-${c.base.gz.slice(0, 12)}.tar.gz`;
   const e = idx.components[c.id] || { builds: [] };
-  e.name = def.name || e.name || { zh: c.id, en: c.id };
-  e.desc = def.desc || e.desc || null;
+  // 名字/简介先看主仓库 devkit.json 的登记表；配方没登记时取配方自带的（CP-16：以前这里
+  // 直接掉到 id/空，社区配方进索引后名字只剩 id、简介是空的）。登记表优先：同一组件两边
+  // 都写时以主仓库为准；再不行才沿用旧索引里那份，最后才退到 id。
+  e.name = def.name || c.name || e.name || { zh: c.id, en: c.id };
+  e.desc = def.desc || c.desc || e.desc || null;
   e.builds = e.builds.filter((b) => b.base !== c.base.gz);
   e.builds.unshift({
     base: c.base.gz, version: c.version, upstream: c.upstream,

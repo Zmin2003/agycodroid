@@ -14,8 +14,8 @@ const BASE = "https://github.com/greyoak111/cccodroid/releases/download/devkit-2
 const make = (over = {}) => JSON.stringify({ release: "devkit-2026.10.15.1", packages: [{ name: "bash", version: "5.3" }], ...over });
 
 test("公钥与 APK 里 Ed25519.INDEX_PUBKEY_B64 是同一把", () => {
-  assert.equal(PUBKEY_B64, "4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=");
-  const pem = crypto.createPublicKey("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=\n-----END PUBLIC KEY-----\n");
+  assert.equal(PUBKEY_B64, "QJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=");
+  const pem = crypto.createPublicKey("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAQJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=\n-----END PUBLIC KEY-----\n");
   const raw = pem.export({ type: "spki", format: "der" }).subarray(-32).toString("base64");
   assert.equal(raw, PUBKEY_B64);
 });

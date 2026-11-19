@@ -3,7 +3,7 @@
 //  ship.mjs —— App 发版一条命令：改版本号 → 更新日志 → 提交 → 打包 → 核包 →（点头后）推送 → Release → 对账 → 装机
 //
 //  用法:  node scripts/ship.mjs <版本> [--title "一句话"]       本地走到核包为止（改版本号、提交、打包），不碰网络
-//         node scripts/ship.mjs <版本> --publish                 接着推送、建 Release、下载回来核哈希、同步官网并清 CF 直链缓存
+//         node scripts/ship.mjs <版本> --publish                 接着推送、建 Release、下载回来核哈希（fork 没有官网，site 步骤跳过）
 //         node scripts/ship.mjs <版本> … --install               最后用 priv 覆盖安装到本机（会关掉正在用的 agycodroid）
 //         node scripts/ship.mjs <版本> --from <步骤>             从某步重来（之前的步骤视为已完成）
 //         node scripts/ship.mjs <版本> --check                   只对账：清单、包、提交、Release 逐项核一遍，不改东西
@@ -23,9 +23,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const HOME = process.env.HOME;
 const REPO = "Zmin2003/agycodroid";
-// 旧开发端（li.dsh.claudecli）的工具链目录在就用它；否则是 agycodroid 终端：aapt2 在 PATH，钥匙在 ~/.bldtools（和 build.sh 一致）
-const F = "/data/user/0/li.dsh.claudecli/files", P = `${F}/toolchain/dshtc/prefix`, OLD = fs.existsSync(P);
-const BLD = process.env.BLDTOOLS || (OLD ? `${F}/bldtools` : path.join(HOME, ".bldtools"));
+// agycodroid 终端：aapt2 在 PATH，钥匙在 ~/.bldtools（和 build.sh 一致；旧开发端回落已清掉，见 C 报告 F8）
+const BLD = process.env.BLDTOOLS || path.join(HOME, ".bldtools");
 const MANI = path.join(ROOT, "android/AndroidManifest.xml");
 const WN = path.join(ROOT, "android/assets/whatsnew");
 const APK = path.join(ROOT, "dist/agycodroid.apk");
@@ -33,8 +32,10 @@ const APK = path.join(ROOT, "dist/agycodroid.apk");
 const APK36 = path.join(ROOT, "dist/agycodroid-36.apk");
 const STEPS = ["preflight", "bump", "changelog", "commit", "build", "verify", "push", "release", "check", "site", "install"];
 const PUBLIC = ["push", "release", "check", "site"];
-// 官网 cccodroid.net：VPS 上的 agycodroid-site.service 从 GitHub 生成静态站（含 /dl/ 直链），前面是 Cloudflare
-const SITE = "https://cccodroid.net", VPS = "root@167.160.161.115", VPS_KEY = path.join(HOME, ".ssh/vps-keys/167.160.161.115-root");
+// fork 现状（2026-11-19）：agycodroid 没有自己的域名和服务器。上游的官网/镜像站（cccodroid.net、VPS root@167.160.161.115、Cloudflare zone cccodroid.net）不是 fork 的，不能用。
+// 因此 site 步骤目前是跳过（见 S.site / siteVerify）：发版只到 GitHub Release 为止，不做官网同步、不清 CDN 缓存。
+// 前置条件（将来要恢复 site 步骤）：fork 自己的域名 + 服务器 + 部署好静态站生成器，再把下面三项指过去。
+const SITE = "", VPS = "", VPS_KEY = ""; // 占位：fork 目前没有官网/服务器
 
 const argv = process.argv.slice(2);
 const opt = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : undefined; };
@@ -85,7 +86,7 @@ function fuseOk(files) {
   if (bad.length) throw new Error("FUSE 报的大小和实际内容不一致（等几秒再跑）：\n  " + bad.join("\n  "));
 }
 const badging = (apk = APK) => {
-  const out = OLD ? sh("env", [`LD_LIBRARY_PATH=${P}/lib`, `${P}/bin/aapt2`, "dump", "badging", apk]) : sh("aapt2", ["dump", "badging", apk]);
+  const out = sh("aapt2", ["dump", "badging", apk]);
   const m = out.match(/versionCode='(\d+)' versionName='([^']*)'/);
   if (!m) throw new Error(`aapt2 dump badging 没报出版本：${apk}`);
   return { code: +m[1], name: m[2], pkg: (out.match(/package: name='([^']+)'/) || [])[1], sdk: +((out.match(/targetSdkVersion:'(\d+)'/) || [])[1] || 0) };
@@ -193,35 +194,16 @@ const S = {
     console.log(`  ✓ ${rel.html_url}  下载哈希一致${rel.prerelease ? "（预发布）" : "，已是 Latest"}`);
   },
   async site() {
-    // 1) 让 VPS 现在就重新生成（平时靠定时器，等不及）；钥匙只交路径，不读出来
-    run("ssh", ["-F", "/dev/null", "-i", path.join(VPS_KEY, "id_ed25519"), "-o", "IdentitiesOnly=yes", "-o", `UserKnownHostsFile=${path.join(VPS_KEY, "known_hosts")}`,
-      "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15", VPS, "systemctl start agycodroid-site.service"]);
-    // 2) 清 CF 上直链的缓存：不清的话 /dl/agycodroid.apk 还会给旧包（0.4.11 起每次都要手动清）
-    const files = ["/dl/agycodroid.apk", "/dl/agycodroid-36.apk", `/dl/v${VER}/agycodroid.apk`, `/dl/v${VER}/agycodroid-36.apk`, "/", "/known-issues"].map((f) => SITE + f);
-    run("cf", ["POST", "/zones/zone:cccodroid.net/purge_cache", JSON.stringify({ files })], { env: { ...process.env, CF_WRITE: "1" }, stdio: ["ignore", "ignore", "inherit"] });
-    siteVerify();
+    // fork 没有自己的域名/服务器：跳过官网同步与 CDN 清缓存（见文件头 SITE/VPS 的说明）。
+    console.log("  跳过 site：没有官网/镜像站可同步（发版到 GitHub Release 为止）");
   },
 };
 
 // 官网直链给的是不是新包（先按大小等 CF 边缘换新，几秒的事、重试几次；对上了再下回来核 sha256，审查 10-29 L20）。
 // 预发布不进 /dl/agycodroid.apk，只核带版本号的。--check 也用它（只读）
 function siteVerify() {
-  const want = [[`/dl/v${VER}/agycodroid.apk`, state.size, state.sha], [`/dl/v${VER}/agycodroid-36.apk`, state.size36, state.sha36]];
-  if (!state.prerelease) want.push(["/dl/agycodroid.apk", state.size, state.sha], ["/dl/agycodroid-36.apk", state.size36, state.sha36]);
-  for (const [f, size, sha] of want) {
-    let got = "";
-    for (let i = 0; i < 6; i++) {
-      if (i) spawnSync("sleep", ["5"]);
-      try { got = (sh("curl", ["-fsSI", SITE + f]).match(/^content-length:\s*(\d+)/im) || [])[1] || ""; } catch { got = "失败"; }
-      if (+got === size) break;
-    }
-    if (+got !== size) throw new Error(`${SITE}${f} 给的是 ${got} 字节，新包 ${size}；等一会儿再跑同一条命令`);
-    const tmp = path.join(W, "site.apk");
-    run("curl", ["-fsSL", "--retry", "3", "-o", tmp, SITE + f]);
-    const h = shaFile(tmp); fs.rmSync(tmp);
-    if (h !== sha) throw new Error(`${SITE}${f} 下回来的 sha256 ${h} ≠ 新包 ${sha}`);
-    console.log(`  ✓ ${f}  ${size}  sha256 对上`);
-  }
+  // fork 没有自己的域名/服务器：site 步骤是跳过的，这里只记一声，不核官网直链。
+  console.log("  跳过 siteVerify：没有官网直链可核（发版到 GitHub Release 为止）");
 }
 
 Object.assign(S, {

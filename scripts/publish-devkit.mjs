@@ -10,14 +10,19 @@
 //  状态记在 ~/.work/publish/<tag>/state.json：中途断了（网络、CI 失败）再跑同一条命令，从没做完的那步接着来。
 //  最后的 check 不信状态文件，从 GitHub / 市场 / 镜像 / APK 重新取一遍逐项核对，有一项不对就退出码 1。
 //
-//  要的东西（都不进仓库）：gh 已登录（cccodroid 与市场仓库可写）；
+//  要的东西（都不进仓库）：gh 已登录（agycodroid 与市场仓库可写）；
 //    INDEX_SIGNING_KEY_FILE  组件索引签名钥匙（缺省 bldtools/index-signing-ed25519.pem），重签浏览器组件索引用
-//    SITE_KICK               一个脚本，触发 cccodroid.net 生成器立刻同步（不给就等它的 30 分钟定时）
-//    MARKET                  市场仓库目录（缺省与本仓库同级的 cccodroid-components）
+//    SITE_KICK               （fork 没有自己的镜像站/官网生成器，mirror 步骤目前跑不起来：见 DL 与 step.mirror；本行留作将来搭了镜像站时用）
+//    MARKET                  市场仓库目录（缺省与本仓库同级的 agycodroid-components；首次发布：仓库不存在时 market 步跳过，种子推好后 --from market 补跑）
 //    TEST_WT                 test 分支的工作树（有就把 main 合过去，没有就跳过）
 //    CHROM_CACHE             浏览器组件的下载缓存（缺省 ~/.work/chrom22/cache）
-//  预览包只打不装；加 --install 才用 priv 覆盖安装（会关掉正在用的 cccodroid）。
+//  预览包只打不装；加 --install 才用 priv 覆盖安装（会关掉正在用的 agycodroid）。
 //  这个脚本只管工具包。App 正式发版仍是 build.sh + release.sh，且要用户点头。
+//  fork 现状（2026-11-19）：REPO/MREPO 已指到 Zmin2003/agycodroid；没有自己的镜像站（DL 为空），mirror 步跑不起来；
+//  首次发 components Release 的自举（CP-02）：市场仓库不存在时 preflight 不拦、market 步跳过（devkit-only），种子推好后 --from market 补跑；
+//  仓库目录在但 bases.json 缺失时从空 bases 生成；chromium 步在 components Release 不存在时从空生成预置索引、上传前先建空 Release；
+//  recipes/ 为空且社区索引不存在时 checkMarket 跳过并注明，有配方时缺索引报明确错误。
+//  preflight/tag/ci/fetch/pin/preview/testmerge/check（除镜像项、市场项）不受影响。
 // ─────────────────────────────────────────────────────────────────────
 import fs from "node:fs";
 import path from "node:path";
@@ -26,12 +31,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const HOME = process.env.HOME;
-const REPO = "greyoak111/cccodroid", MREPO = "greyoak111/cccodroid-components";
-const MARKET = process.env.MARKET || path.join(ROOT, "..", "cccodroid-components");
-const KEYFILE = process.env.INDEX_SIGNING_KEY_FILE || (fs.existsSync("/data/user/0/li.dsh.claudecli/files/bldtools") ? "/data/user/0/li.dsh.claudecli/files/bldtools" : (process.env.BLDTOOLS || process.env.HOME + "/.bldtools")) + "/index-signing-ed25519.pem";
+const REPO = "Zmin2003/agycodroid", MREPO = "Zmin2003/agycodroid-components";
+const MARKET = process.env.MARKET || path.join(ROOT, "..", "agycodroid-components");
+const KEYFILE = process.env.INDEX_SIGNING_KEY_FILE || (process.env.BLDTOOLS || process.env.HOME + "/.bldtools") + "/index-signing-ed25519.pem";
 const TEST_WT = process.env.TEST_WT || path.join(HOME, ".work/cc-testwt");
 const CHROM_CACHE = process.env.CHROM_CACHE || path.join(HOME, ".work/chrom22/cache");
-const DL = "https://dl.cccodroid.net";
+const DL = ""; // fork 目前没有自己的镜像站（上游是 https://dl.cccodroid.net）；mirror 步骤见 step.mirror，会直接报停
 const STEPS = ["preflight", "tag", "ci", "fetch", "pin", "market", "chromium", "mirror", "preview", "testmerge", "check"];
 
 const argv = process.argv.slice(2);
@@ -54,8 +59,10 @@ const save = () => fs.writeFileSync(SF, JSON.stringify(state, null, 1) + "\n");
 const sh = (cmd, args, o = {}) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 256 << 20, stdio: ["ignore", "pipe", "pipe"], ...o }).trim();
 const run = (cmd, args, o = {}) => { const r = spawnSync(cmd, args, { stdio: "inherit", ...o }); if (r.status !== 0) throw new Error(`${cmd} ${args.slice(0, 3).join(" ")} … 退出码 ${r.status}`); };
 const gh = (...a) => sh("gh", a);
+// gh release download/view 在 Release（或附件）不存在时的报错：当成“线上没有”，别当成流程失败
+const ghMissing = (e) => /404|not found|no assets match/i.test(`${e.message}\n${e.stderr || ""}`);
 const git = (dir, ...a) => sh("git", ["-c", "safe.directory=*", "-C", dir, ...a]);
-const gitc = (dir, ...a) => sh("git", ["-c", "safe.directory=*", "-c", "user.name=greyoak111", "-c", "user.email=kbai2743@gmail.com", "-C", dir, ...a]);
+const gitc = (dir, ...a) => sh("git", ["-c", "safe.directory=*", "-c", "user.name=Zmin2003", "-c", "user.email=zmin2003@users.noreply.github.com", "-C", dir, ...a]);
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const shaFile = (f) => new Promise((ok, no) => { const h = crypto.createHash("sha256"); fs.createReadStream(f).on("data", (d) => h.update(d)).on("end", () => ok(h.digest("hex"))).on("error", no); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -106,17 +113,21 @@ const step = {};
 step.preflight = async () => {
   gh("auth", "status");
   if (!fs.existsSync(KEYFILE)) fail(`没有索引签名钥匙 ${KEYFILE}（INDEX_SIGNING_KEY_FILE）`);
-  if (!fs.existsSync(path.join(MARKET, "bases.json"))) fail(`市场仓库不在 ${MARKET}（MARKET）`);
-  if (git(ROOT, "rev-parse", "--abbrev-ref", "HEAD") !== "main") fail("cccodroid 不在 main 上");
-  if (git(ROOT, "status", "--porcelain")) fail("cccodroid 工作区有未提交的改动：工具包要对应一个确定的提交");
+  // 市场仓库（agycodroid-components）还不存在时不拦死：只发 devkit（devkit-only 发布），
+  // market 步与 check 里的市场项在仓库建好之前跳过（首次发布分支，CP-02a）；chromium 步从空生成预置组件索引。
+  const marketOk = fs.existsSync(path.join(MARKET, "bases.json"));
+  if (!marketOk) say(`  ⚠ 首次发布：市场仓库不在 ${MARKET}（MARKET/bases.json 不存在），这次只发 devkit（devkit-only），不发市场组件；market 步与 check 里的市场项跳过，种子推好后用 --from market 补跑`);
+  if (git(ROOT, "rev-parse", "--abbrev-ref", "HEAD") !== "main") fail("agycodroid 不在 main 上");
+  if (git(ROOT, "status", "--porcelain")) fail("agycodroid 工作区有未提交的改动：工具包要对应一个确定的提交");
   git(ROOT, "fetch", "-q", "origin", "main", "--tags");
-  if (git(ROOT, "rev-parse", "HEAD") !== git(ROOT, "rev-parse", "origin/main")) fail("cccodroid 的 main 和 origin/main 不一致：先推送或拉取");
+  if (git(ROOT, "rev-parse", "HEAD") !== git(ROOT, "rev-parse", "origin/main")) fail("agycodroid 的 main 和 origin/main 不一致：先推送或拉取");
   if (git(ROOT, "tag", "-l", TAG)) fail(`tag ${TAG} 已经有了（本地或远端）：换个号，或用 --from 接着之前那次`);
-  if (git(MARKET, "status", "--porcelain")) fail("市场仓库工作区有未提交的改动");
+  if (marketOk && git(MARKET, "status", "--porcelain")) fail("市场仓库工作区有未提交的改动");
   const prev = json(path.join(ROOT, "devkit-pin.json")).tag;
-  if (!process.env.SITE_KICK) say("  ⚠ 没给 SITE_KICK：镜像要等生成器的 30 分钟定时，mirror 这步会多等一会");
+  if (!DL) say("  ⚠ fork 没有自己的镜像站：mirror 这步跑不起来（见文件头说明），其余步骤继续");
+  else if (!process.env.SITE_KICK) say("  ⚠ 没给 SITE_KICK：镜像要等生成器的 30 分钟定时，mirror 这步会多等一会");
   say(`  上一版 ${prev} → 这一版 ${TAG}；提交 ${git(ROOT, "rev-parse", "--short", "HEAD")}`);
-  return { prev, commit: git(ROOT, "rev-parse", "HEAD") };
+  return { prev, commit: git(ROOT, "rev-parse", "HEAD"), market: marketOk, firstRelease: !marketOk };
 };
 
 step.tag = async () => {
@@ -201,15 +212,39 @@ step.pin = async () => {
 };
 
 step.market = async () => {
-  git(MARKET, "fetch", "-q", "origin", "main");
-  git(MARKET, "checkout", "-q", "-B", "main", "origin/main");
   const bp = path.join(MARKET, "bases.json");
+  // 首次发布分支（CP-02a）：preflight 已判市场仓库未就绪（market:false），或 bases.json 不存在。
+  // 仓库目录根本不在 → 跳过（devkit-only），不当成失败，日志写清原因与补跑办法；
+  // 目录在但 bases.json 缺失 → 先同步远端（种子可能已推、本地只是没拉到），同步后仍无则从空 bases 生成再继续。
+  if (state.done.preflight?.market === false || !fs.existsSync(bp)) {
+    if (!fs.existsSync(MARKET)) {
+      say(`  · 首次发布：市场仓库不在 ${MARKET}，market 步跳过（这次只发 devkit）；种子推好后用 --from market 补跑`);
+      return { skipped: true, firstRelease: true, reason: `market repo missing: ${MARKET}` };
+    }
+    if (!fs.existsSync(path.join(MARKET, ".git"))) fail(`市场目录 ${MARKET} 在，但不是 git 仓库：把 agycodroid-components 克隆到这里（或设 MARKET），再 --from market 重跑`);
+    try {
+      git(MARKET, "fetch", "-q", "origin", "main");
+      git(MARKET, "checkout", "-q", "-B", "main", "origin/main");
+    } catch (e) {
+      say(`  · 首次发布：市场仓库 ${MARKET} 还没有可同步的 main（种子未推），market 步跳过（这次只发 devkit）；种子推好后用 --from market 补跑`);
+      return { skipped: true, firstRelease: true, reason: "market repo has no main yet" };
+    }
+    if (!fs.existsSync(bp)) {
+      say(`  · 首次发布：${bp} 不存在，从空 bases 生成（空多行数组，与种子 bases.json 同格式），再继续`);
+      writeFresh(bp, `{\n  "bases": [\n  ]\n}\n`);
+    }
+  } else {
+    git(MARKET, "fetch", "-q", "origin", "main");
+    git(MARKET, "checkout", "-q", "-B", "main", "origin/main");
+  }
   const b = json(bp);
   let commit;
   if (b.bases[0]?.tag === TAG) { say("  bases.json 第一行已经是它"); commit = git(MARKET, "rev-parse", "HEAD"); }
   else {
     if (b.bases.some((x) => x.tag === TAG)) fail(`bases.json 里已有 ${TAG} 但不在第一行`);
-    const s = fs.readFileSync(bp, "utf8").replace(/("bases": \[\n)/, `$1    { "tag": "${TAG}" },\n`);
+    // 空数组（首次发布、种子 bases.json）时上面这一插会在 ] 前多一个尾逗号（…},\n  ]），JSON 不认：去掉它再验
+    let s = fs.readFileSync(bp, "utf8").replace(/("bases": \[\n)/, `$1    { "tag": "${TAG}" },\n`);
+    try { JSON.parse(s); } catch { s = s.replace(/,\n(\s*\])/, "\n$1"); }
     if (JSON.parse(s).bases[0]?.tag !== TAG) fail("bases.json 插不进去，格式变了");
     writeFresh(bp, s);
     fuseOk(MARKET, ["bases.json"]);
@@ -232,13 +267,28 @@ step.market = async () => {
   return { commit, run: id };
 };
 
-// 市场索引：验签；每个配方在新底座上都有构建
+// 市场索引：验签；每个配方在新底座上都有构建。
+// 首次发布（CP-02c）：社区索引 Release 还不存在（404）时——recipes/ 为空就跳过并注明（不算失败），
+// 有配方就报明确错误（缺索引、等市场 CI 发 index Release）；其它错误（网络等）照常抛。
 async function checkMarket(gz = state.done.fetch.gz) {
-  const body = await getBuf(`https://github.com/${MREPO}/releases/download/index/components.json`);
+  const recipesDir = path.join(MARKET, "recipes");
+  const recipes = fs.existsSync(recipesDir)
+    ? fs.readdirSync(recipesDir).filter((d) => fs.statSync(path.join(recipesDir, d)).isDirectory())
+    : [];
+  let body;
+  try {
+    body = await getBuf(`https://github.com/${MREPO}/releases/download/index/components.json`);
+  } catch (e) {
+    if (!/HTTP 404/.test(e.message)) throw e;
+    if (!recipes.length) {
+      say(`  · 首次发布：社区索引 Release 还不存在（https://github.com/${MREPO}/releases/download/index/components.json 404），且 recipes/ 为空——checkMarket 跳过（不算失败）；等市场 CI 发出第一个空签名索引后，用 --from market 或 --check 再核对`);
+      return { skipped: true, firstRelease: true, reason: "community index Release missing, no recipes" };
+    }
+    fail(`社区索引 Release 不存在（https://github.com/${MREPO}/releases/download/index/components.json 404），但 recipes/ 里已有 ${recipes.length} 个配方（${recipes.join(" ")}）：先确认市场 CI 已跑过并发出 index Release（.github/workflows/build.yml，名含 build），再 --from market 重跑`);
+  }
   const sig = (await getBuf(`https://github.com/${MREPO}/releases/download/index/components.json.sig`)).toString();
   if (!verifySig(body, sig)) fail("市场索引验签失败");
   const idx = JSON.parse(body);
-  const recipes = fs.readdirSync(path.join(MARKET, "recipes")).filter((d) => fs.statSync(path.join(MARKET, "recipes", d)).isDirectory());
   const miss = recipes.filter((id) => !idx.components[id]?.builds.some((b) => b.base === gz));
   if (miss.length) fail(`市场索引里这些组件没有 ${gz.slice(0, 12)} 的构建：${miss.join(" ")}`);
   const ver = recipes.filter((id) => idx.components[id].builds.find((b) => b.base === gz).verified).length;
@@ -248,22 +298,39 @@ async function checkMarket(gz = state.done.fetch.gz) {
 step.chromium = async () => {
   const D = path.join(W, "chromium");
   fs.rmSync(D, { recursive: true, force: true }); fs.mkdirSync(D, { recursive: true });
-  run("node", [path.join(ROOT, "devkit/devkit.mjs"), "component", "chromium", "--target", "cc.codroid", "--base", path.join(REL, "devkit.lock.json"), "--out", D, "--cache", CHROM_CACHE], { cwd: path.join(ROOT, "devkit") });
+  run("node", [path.join(ROOT, "devkit/devkit.mjs"), "component", "chromium", "--target", "cc.agyroid", "--base", path.join(REL, "devkit.lock.json"), "--out", D, "--cache", CHROM_CACHE], { cwd: path.join(ROOT, "devkit") });
   const meta = json(path.join(D, "component-chromium.json"));
   if (meta.base.gz !== state.done.fetch.gz) fail(`浏览器组件打在了 ${meta.base.gz.slice(0, 12)} 上`);
   // 线上那份索引会被合并后重签：先验它的签名，不然有仓库写权限的人改一下 Release 附件，就能借发布机的钥匙签出「官方」组件（11-03 审查 M-4）
-  gh("release", "download", "components", "-R", REPO, "-p", "components.json", "-p", "components.json.sig", "-D", D, "--clobber");
-  if (!verifySig(fs.readFileSync(path.join(D, "components.json")), fs.readFileSync(path.join(D, "components.json.sig"), "utf8"))) fail("线上的预置组件索引验签失败，不合并");
+  // components Release 还不存在（第一次发）时 download 会失败：当成“线上无索引、从空生成”
+  // （components-index.mjs 在输出文件不存在时就是从空生成）；其它错误（网络等）照常抛，不当成无索引。
+  let onlineIndex = false;
+  try {
+    gh("release", "download", "components", "-R", REPO, "-p", "components.json", "-p", "components.json.sig", "-D", D, "--clobber");
+    onlineIndex = true;
+  } catch (e) {
+    if (!ghMissing(e)) throw e;
+    say("  · 线上还没有 components Release：从空生成预置组件索引");
+  }
+  if (onlineIndex && !verifySig(fs.readFileSync(path.join(D, "components.json")), fs.readFileSync(path.join(D, "components.json.sig"), "utf8"))) fail("线上的预置组件索引验签失败，不合并");
   run("node", [path.join(ROOT, "devkit/components-index.mjs"), path.join(D, "components.json"), `https://github.com/${REPO}/releases/download/components/`, path.join(D, "component-chromium.json")], { env: { ...process.env, INDEX_SIGNING_KEY_FILE: KEYFILE } });
   const body = fs.readFileSync(path.join(D, "components.json"));
   if (!verifySig(body, fs.readFileSync(path.join(D, "components.json.sig"), "utf8"))) fail("新签的预置组件索引验不过");
   const b = JSON.parse(body).components.chromium.builds.find((x) => x.base === state.done.fetch.gz);
   if (!b) fail("新索引里没有这版工具包的浏览器构建");
-  const tgz = path.join(D, "component-chromium-cc.codroid.tar.gz"), h = await shaFile(tgz);
+  const tgz = path.join(D, "component-chromium-cc.agyroid.tar.gz"), h = await shaFile(tgz);
   if (h !== b.sha256 || fs.statSync(tgz).size !== b.bytes) fail(`浏览器包 ${h.slice(0, 12)} 和索引 ${b.sha256.slice(0, 12)} 对不上`);
   const asset = path.join(D, b.asset);
   fs.copyFileSync(tgz, asset);
-  const online = new Map(JSON.parse(gh("release", "view", "components", "-R", REPO, "--json", "assets")).assets.map((a) => [a.name, a.size]));
+  let online = new Map();
+  try {
+    online = new Map(JSON.parse(gh("release", "view", "components", "-R", REPO, "--json", "assets")).assets.map((a) => [a.name, a.size]));
+  } catch (e) {
+    // Release 不存在（download 那步已确认过线上无索引）才建一个；其它错误照常抛
+    if (onlineIndex || !ghMissing(e)) throw e;
+    say("  · 线上还没有 components Release：先建一个空的再传");
+    run("gh", ["release", "create", "components", "-R", REPO, "--title", "components", "--notes", "预置组件索引（components.json + chromium 包），由 scripts/publish-devkit.mjs 的 chromium 步首次创建"]);
+  }
   if (online.get(b.asset) === b.bytes) say(`  ${b.asset} 已在线上（大小一致），不重传`);
   else run("gh", ["release", "upload", "components", "-R", REPO, asset, "--clobber"]);
   // 先传包、后传索引：索引指向的包一定已经在了
@@ -272,6 +339,9 @@ step.chromium = async () => {
 };
 
 step.mirror = async () => {
+  // fork 目前没有自己的镜像站（DL 为空）：这步跑不起来，直接报停，不等 45 分钟。
+  // 前置条件：搭好镜像站（域名 + 生成器 + SITE_KICK），并把上面 DL 指过去。
+  if (!DL) fail("没有镜像站（DL 为空）：mirror 这步跑不起来；先搭镜像站，或跳过这步直接跑后面的步骤");
   if (process.env.SITE_KICK) run("sh", [process.env.SITE_KICK]);
   const u = `${DL}/devkit/${TAG}/modules.json.sig`;
   for (let i = 0; ; i++) {
@@ -315,10 +385,10 @@ step.preview = async () => {
   writeFresh(mf, m0.replace(`android:versionName="${v}"`, `android:versionName="${pv}"`));
   try { run("sh", [path.join(ROOT, "scripts/build.sh")], { cwd: ROOT }); }
   finally { git(ROOT, "checkout", "-q", "android/AndroidManifest.xml"); }
-  const apk = path.join(ROOT, "dist/cccodroid.apk");
+  const apk = path.join(ROOT, "dist/agycodroid.apk");
   const inApk = sh("unzip", ["-p", apk, "assets/devkit-pin.json"]);
   if (inApk !== fs.readFileSync(path.join(ROOT, "devkit-pin.json"), "utf8").trim()) fail("APK 里带的 devkit-pin.json 和仓库里的不一样");
-  const out = `/sdcard/Download/cccodroid-${pv}.apk`;
+  const out = `/sdcard/Download/agycodroid-${pv}.apk`;
   fs.copyFileSync(apk, out);
   const h = await shaFile(out);
   say(`  ✓ 预览包 ${out}（${pv}，sha256 ${h.slice(0, 16)}…，钉 ${TAG}）`);
@@ -365,12 +435,25 @@ step.check = async () => {
     say(`  ✓ Release 清单验签；origin/main 钉的就是它（gz ${lock.gz.sha256.slice(0, 12)}）`);
   });
   await t("市场", async () => {
+    // 首次发布：这次 market 步已跳过（devkit-only），或市场仓库根本不在，就不对账、不算失败，日志写清原因
+    if (state.done.market?.skipped) { say(`  · 市场：这次是首次发布（devkit-only），market 步已跳过，不对账`); return; }
+    if (!fs.existsSync(path.join(MARKET, "bases.json"))) { say(`  · 市场：市场仓库不在 ${MARKET}（首次发布、devkit-only），跳过`); return; }
     git(MARKET, "fetch", "-q", "origin", "main");
-    if (JSON.parse(git(MARKET, "show", "origin/main:bases.json")).bases[0]?.tag !== TAG) fail("市场 bases.json 第一行不是它");
+    let basesRaw;
+    try { basesRaw = git(MARKET, "show", "origin/main:bases.json"); }
+    catch (e) { fail(`市场仓库 origin/main 上没有 bases.json（首次发布、种子未推？）：先推种子，再 --from market 补跑`); }
+    if (JSON.parse(basesRaw).bases[0]?.tag !== TAG) fail("市场 bases.json 第一行不是它");
     await checkMarket(gz);
   });
   await t("预置浏览器", async () => {
-    const body = await getBuf(`https://github.com/${REPO}/releases/download/components/components.json`);
+    let body;
+    try {
+      body = await getBuf(`https://github.com/${REPO}/releases/download/components/components.json`);
+    } catch (e) {
+      // components Release 还没发：报“未发”，不对账失败（其它错误照常算失败）
+      if (/HTTP 404/.test(e.message)) { say("  · 预置浏览器：components Release 还没发（未发）"); return; }
+      throw e;
+    }
     if (!verifySig(body, (await getBuf(`https://github.com/${REPO}/releases/download/components/components.json.sig`)).toString())) fail("预置组件索引验签失败");
     const b = JSON.parse(body).components.chromium.builds.find((x) => x.base === gz);
     if (!b) fail("预置索引里没有这版工具包的浏览器");
@@ -378,7 +461,7 @@ step.check = async () => {
     if (+r.headers.get("content-length") !== b.bytes) fail(`${b.asset} 线上大小 ${r.headers.get("content-length")} ≠ ${b.bytes}`);
     say(`  ✓ 预置索引验签；浏览器 ${b.version} 的包在线上（${b.asset}）`);
   });
-  await t("镜像", checkMirror);
+  await t("镜像", async () => { if (!DL) { say("  · 镜像：fork 没有镜像站，跳过"); return; } await checkMirror(); });
   await t("预览包", async () => {
     const p = state.done.preview;
     if (!p) { say("  · 预览包：这次没打（没有记录），不核"); return; }
@@ -387,7 +470,7 @@ step.check = async () => {
     say(`  ✓ 预览包 ${p.apk} 钉的是这版`);
   });
   if (bad) fail(`对账有 ${bad} 项不对`);
-  say(`\n✓ ${TAG} 全链对上了。下一步：在 cccodroid 里升级工具包，然后终端跑 node /sdcard/DeepSeekHarness/claude-workspace/verify.mjs`);
+  say(`\n✓ ${TAG} 全链对上了。下一步：在 agycodroid 里升级工具包，然后终端跑 node /sdcard/DeepSeekHarness/claude-workspace/verify.mjs`);
 };
 
 // ── 主流程 ──

@@ -15,34 +15,21 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC=${SRC:-$ROOT/gateway}
-F=/data/user/0/li.dsh.claudecli/files
-P=$F/toolchain/dshtc/prefix
-if [ -d "$P" ]; then
-  # 作者的旧开发端（li.dsh.claudecli）：工具链在它的私有目录里
-  B=${BLDTOOLS:-$F/bldtools}
-  J=$P/lib/jvm/java-17-openjdk/bin
-  CC_ANDROID=${CC_ANDROID:-cc4}
-  JAVAC=${JAVAC:-"env LD_LIBRARY_PATH=$P/lib $J/javac"}
-  D8=${D8:-"env LD_LIBRARY_PATH=$P/lib $J/java -cp $P/share/java/d8.jar com.android.tools.r8.D8"}
-  AAPT2=${AAPT2:-"env LD_LIBRARY_PATH=$P/lib $P/bin/aapt2"}
-  AJAR=${ANDROID_JAR:-$P/framework/android.jar}
+# agycodroid 终端（作者 11-05 起在开发版里发版）：工具都在 PATH，钥匙与 android.jar 在 ~/.bldtools
+B=${BLDTOOLS:-$HOME/.bldtools}
+# 原生小库优先用旧开发端搬来的 GCC 10（~/.bldtools/cc4），产物和以前逐字节一致；没有才用 clang
+if [ -x "$B/cc4" ]; then CC_ANDROID=${CC_ANDROID:-$B/cc4}; else CC_ANDROID=${CC_ANDROID:-cc}; fi
+# 旧开发端搬来的 JDK 17 与 d8.jar（~/.bldtools/jdk17）：javac 21 编出的 dex 不同，用它才和以前的包逐字节一致
+K=$B/jdk17
+if [ -x "$K/java-17-openjdk/bin/javac" ]; then
+  JAVAC=${JAVAC:-"env LD_LIBRARY_PATH=$K/prefixlib $K/java-17-openjdk/bin/javac"}
+  D8=${D8:-"env LD_LIBRARY_PATH=$K/prefixlib $K/java-17-openjdk/bin/java -cp $K/d8.jar com.android.tools.r8.D8"}
 else
-  # agycodroid 终端（作者 11-05 起在开发版里发版）：工具都在 PATH，钥匙与 android.jar 在 ~/.bldtools
-  B=${BLDTOOLS:-$HOME/.bldtools}
-  # 原生小库优先用旧开发端搬来的 GCC 10（~/.bldtools/cc4），产物和以前逐字节一致；没有才用 clang
-  if [ -x "$B/cc4" ]; then CC_ANDROID=${CC_ANDROID:-$B/cc4}; else CC_ANDROID=${CC_ANDROID:-cc}; fi
-  # 旧开发端搬来的 JDK 17 与 d8.jar（~/.bldtools/jdk17）：javac 21 编出的 dex 不同，用它才和以前的包逐字节一致
-  K=$B/jdk17
-  if [ -x "$K/java-17-openjdk/bin/javac" ]; then
-    JAVAC=${JAVAC:-"env LD_LIBRARY_PATH=$K/prefixlib $K/java-17-openjdk/bin/javac"}
-    D8=${D8:-"env LD_LIBRARY_PATH=$K/prefixlib $K/java-17-openjdk/bin/java -cp $K/d8.jar com.android.tools.r8.D8"}
-  else
-    JAVAC=${JAVAC:-javac}
-    D8=${D8:-d8}
-  fi
-  AAPT2=${AAPT2:-aapt2}
-  AJAR=${ANDROID_JAR:-$B/android.jar}
+  JAVAC=${JAVAC:-javac}
+  D8=${D8:-d8}
 fi
+AAPT2=${AAPT2:-aapt2}
+AJAR=${ANDROID_JAR:-$B/android.jar}
 KEY=${KEY:-$B/agycodroid-release.json}
 SIGN=${SIGN:-apklib}
 A=$ROOT/android
@@ -117,6 +104,10 @@ echo "  tag $TAG"
 # 逐文件清单（sha256 + 相对路径）：启动时应用按它核对 files/app，被改过、多出来的就从安装包还原（防项目钩子 / MCP 之类偷偷改网关）
 node -e 'const fs=require("fs"),p=require("path"),c=require("crypto"),R=process.argv[1],o=[];const w=(d)=>{for(const e of fs.readdirSync(p.join(R,d),{withFileTypes:true})){const r=d?d+"/"+e.name:e.name;if(e.name.startsWith("."))continue;if(e.isDirectory())w(r);else if(r!=="FILES")o.push(c.createHash("sha256").update(fs.readFileSync(p.join(R,r))).digest("hex")+" "+r)}};w("");o.sort((a,b)=>a.slice(65)<b.slice(65)?-1:1);fs.writeFileSync(p.join(R,"FILES"),o.join("\n")+"\n")' "$A/assets/app" || exit 1
 echo "  清单 $(wc -l < "$A/assets/app/FILES") 个文件"
+# 打包进 APK 的网关副本必须和源码一致，且公钥与 Java 侧 Ed25519.java 是同一把（安全 H4）：
+# assets/app 是上面 rm -rf 后从 gateway/ 与 android/assets/bin/ 重拷的，正常总是一致；
+# 但若拷入逻辑被改坏、或源码里的钥匙换了而产物没刷新，这里要让构建停下来，而不是把旧钥匙发出去
+node -e 'const fs=require("fs");const m=fs.readFileSync(process.argv[1],"utf8").match(/INDEX_PUBKEY_B64 = "([^"]+)"/);if(!m){console.error("✗ Ed25519.java 里找不到 INDEX_PUBKEY_B64");process.exit(1)}const k=m[1];for(const f of process.argv.slice(2)){if(!fs.readFileSync(f,"utf8").includes(k)){console.error("✗ "+f+" 里的索引公钥与 Ed25519.java:19 不一致（旧钥匙？构建产物没刷新？）");process.exit(1)}}console.log("  ✓ assets/app 里的索引公钥与 Ed25519.java 一致（"+k.slice(0,12)+"…）")' "$A/java/cc/agyroid/Ed25519.java" "$A/assets/app/gw/components.mjs" "$A/assets/app/gw/notices.mjs" "$A/assets/app/bin/lockcheck.mjs" || exit 1
 
 # 第三方库：Shizuku-API 13.1.5（MIT，Maven Central 原样，sha1 已核）
 LIBS=$(ls "$ROOT"/third_party/shizuku/*.jar | tr '\n' ':')
@@ -134,6 +125,9 @@ $D8 --release --min-api 26 \
 # 仓库里 android/prebuilt/glibc 存了一份，和锁文件对得上就不联网
 PIN_BASE=$(node -p 'require(process.argv[1]).base' "$A/assets/devkit-pin.json")
 PIN_TARGET=$(node -p 'require(process.argv[1]).target' "$A/assets/devkit-pin.json")
+# gwpin 的 target 必须是 APP 自己的包名（cc.agyroid），不能用 PIN_TARGET（那是 devkit 的目标包名 cc.codroid，见 gwpin 排查报告第 2 节）。
+# 只给下面 gwpin 那行用；ldso 的 --target 保持 PIN_TARGET 不动（改了会回归：Env.ldsoMatches() 会对不上）。
+APP_PKG=$(node -p 'require("fs").readFileSync(process.argv[1],"utf8").match(/package="([^"]+)"/)[1]' "$A/AndroidManifest.xml")
 LOCK="$ROOT/devkit/cache/lock-$(node -p 'require(process.argv[1]).tag' "$A/assets/devkit-pin.json").json"
 mkdir -p "$ROOT/devkit/cache" "$A/build/lib/arm64-v8a"
 [ -s "$LOCK" ] || curl -fsSL --retry 3 -o "$LOCK" "${PIN_BASE}devkit.lock.json"
@@ -145,7 +139,13 @@ if(h!==p.lock.sha256){fs.rmSync(process.argv[2],{force:true});console.error("✗
 cp "$NL/"libcc*.so "$A/build/lib/arm64-v8a/"
 # 网关和 agy 执行链上来自工具包的文件该有的 sha256（安全 4 第 2 层，见 devkit.mjs gwpin、GwRuntime.java）。
 # 算一次要下基础模块包（约 130 MB），结果按包名存在 android/prebuilt/，钉的工具包没变就直接用
-node "$ROOT/devkit/devkit.mjs" gwpin --pin "$A/assets/devkit-pin.json" --target "$PIN_TARGET" --vendored "$A/prebuilt" --out "$A/assets/gwpin.json" || exit 1
+node "$ROOT/devkit/devkit.mjs" gwpin --pin "$A/assets/devkit-pin.json" --target "$APP_PKG" --vendored "$A/prebuilt" --out "$A/assets/gwpin.json" || exit 1
+# gwpin 的 key 必须与同一份 pin 同源（网关 M4）：key = "gwpin3:<tag>:<modules.sha256>"
+# （算法见 devkit/devkit.mjs gwpin 的那行；pin-devkit.mjs 只生成 pin，不定义 key）。
+# 只断言一致性、不硬编码具体值，新旧 pin 都成立；错配（新 gwpin + 旧 pin 或反过来）时
+# 网关起 agy 前的 put() 校验必失败，构建到这里就停下，而不是把错配的包发出去。
+# 注意 key 里只有 tag 和 modules.sha256，gz.sha256 不在里面——那一项仍由发版检查单人工核对。
+node -e 'const fs=require("fs");const pin=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const gw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));const sha=(pin.modules&&pin.modules.sha256)||"";if(!/^[0-9a-f]{64}$/.test(sha)){console.error("✗ devkit-pin.json 里没有 modules.json 的 sha256");process.exit(1)}const want="gwpin3:"+(pin.tag||"")+":"+sha;if(gw.key!==want){console.error("✗ gwpin.json 的 key 是 "+gw.key+"，按 devkit-pin.json 算应为 "+want+"（tag / modules.sha256 对不上：pin 和 gwpin 不是同一版）");process.exit(1)}console.log("  ✓ gwpin key 与 devkit-pin.json 同源（"+want.slice(0,24)+"…）")' "$A/assets/devkit-pin.json" "$A/assets/gwpin.json" || exit 1
 node "$ROOT/devkit/devkit.mjs" ldso --lock "$LOCK" --target "$PIN_TARGET" --release "$PIN_BASE" --vendored "$A/prebuilt/glibc" --out "$A/build/lib/arm64-v8a/libldlinux.so"
 
 echo "▸ aapt2 + 签名"

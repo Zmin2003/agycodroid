@@ -1,54 +1,20 @@
 {
  "v": 1,
- "updated": "2026-11-13T12:14:18.190Z",
+ "updated": "2026-11-19T14:16:31.000Z",
  "notices": [
   {
-   "id": "20261113-letter",
+   "id": "20261119-welcome",
    "level": "info",
-   "from": "2026-11-13",
+   "from": "2026-11-19",
+   "until": "2026-12-31",
    "title": {
-    "zh": "致正在使用agycodroid的你",
-    "en": "To everyone using agycodroid"
+    "zh": "这里是 agycodroid 的通知渠道",
+    "en": "This is agycodroid's notice channel"
    },
    "body": {
-    "zh": "首先说明一下，这一大段来自于开发者本人，不是ai代笔。\n历时一个月，agycodroid也走完了六个大版本，目前已经进入了一个长期稳定的版本，这是好消息。\n那必然也有一个坏消息。\n开发者本人的三个 claude pro号在两天前先后被封，因此v0.6.18开始的修补都是使用deepseek完成的。\ndeepseek进行bug修复与项目维护尚可，但如果是功能改进与进一步迭代，恐怕存在很大的技术风险。加之开发者本人现实生活压力近期较大，因此到v0.6.20为止，后续的一段时间内确实很难有什么更新了。\n在此期间遇到问题，尽可以去github或交流群反馈，但我更希望阐明的是这样一个观念——等靠要长远来看是不可取的，遇到问题首先要思考的是怎样自己解决，只要有办法克服就自行克服，除非无能为力，否则绝不要萌生向他人求助的依赖心理，这是对自己也是对他人最大的负责。\n自己动手，丰衣足食，vibe coding的时代里，只要你敢想，很多很多都并非不可能，在这里和大家共勉。\n就让我们在v0.7.0再见吧，希望agycodroid会成为你最好的移动端助力。\n—— Grey Oak 于 2026 年农历十月初五",
-    "en": "First, let me be clear: the following lines come from me, the developer, not from an AI on my behalf.\nIn the space of a month, agycodroid has gone through six major releases and has now settled into a long-term stable version. That is the good news.\nAnd so, inevitably, there is bad news as well.\nTwo days ago, my three Antigravity Pro accounts were banned, one after another. As a result, every fix since v0.6.18 has been made with DeepSeek.\nDeepSeek is up to the task of bug fixing and project maintenance, but when it comes to feature improvements and further iteration, the technical risk is likely to be considerable. Add to that the heavier pressure in my personal life lately, and the reality is that, as of v0.6.20, meaningful updates will indeed be hard to come by for some time.\nIf you run into problems in the meantime, by all means report them on GitHub or in the community group. But what I would rather make clear is this: waiting for help, leaning on others, and expecting to be handed solutions will not serve you in the long run. When a problem arises, the first thing to consider is how to solve it yourself; if there is a way through, find it yourself. Unless you truly have no alternative, never let a dependence on others take root. That is the greatest responsibility you can show—to yourself and to others.\nDo it with your own hands, and you will lack for nothing. In the age of vibe coding, if you dare to imagine it, a great many things are far from impossible. I share these words with all of you.\nLet us meet again at v0.7.0. I hope agycodroid will become your best ally on mobile.\n— Grey Oak, on the fifth day of the tenth lunar month, 2026"
+    "zh": "agycodroid 是 cccodroid 的移植 fork，由 Zmin2003 维护。这里只发 agycodroid 自己的通知：重要问题、绕过办法和版本提醒。\n遇到问题请到 github.com/Zmin2003/agycodroid 反馈。",
+    "en": "agycodroid is a ported fork of cccodroid, maintained by Zmin2003. Only agycodroid's own notices appear here: important issues, workarounds, and version reminders.\nTo report a problem, visit github.com/Zmin2003/agycodroid."
    }
-  },
-  {
-   "id": "20261103-adb",
-   "level": "warn",
-   "from": "2026-11-03",
-   "title": {
-    "zh": "请升级到 0.6.2",
-    "en": "Please update to 0.6.2"
-   },
-   "body": {
-    "zh": "0.6.1 及更早版本激活 Shizuku 后，会在本机留下一个任何应用都能连的 adb 服务。升级到 0.6.2 后第一次打开会自动清理；暂时不升级的话，重启手机也能清掉。",
-    "en": "After activating Shizuku, versions 0.6.1 and earlier leave an adb server on the device that any app can connect to. The first launch after updating to 0.6.2 cleans it up automatically; if you can't update yet, restarting the phone also clears it."
-   },
-   "until": "2026-12-03",
-   "maxVer": "0.6.1",
-   "link": "https://github.com/greyoak111/cccodroid/security/advisories/GHSA-jghr-jjxm-vp8f",
-   "linkText": {
-    "zh": "看说明",
-    "en": "Details"
-   }
-  },
-  {
-   "id": "20261104-priv",
-   "level": "info",
-   "from": "2026-11-03",
-   "title": {
-    "zh": "特权命令可以少问了",
-    "en": "Fewer privileged-command prompts"
-   },
-   "body": {
-    "zh": "只想放行一个会话：确认框里勾「这个会话后面的特权命令都允许」。全都不想逐条确认：设置 → 设备与权限 →「特权命令不再逐条确认（风险自负）」。",
-    "en": "To allow just one session, tick \"Allow all later privileged commands in this session\" in the prompt. To stop confirming them altogether: Settings → Device & permissions → \"Stop confirming privileged commands one by one (at your own risk)\"."
-   },
-   "until": "2026-11-18",
-   "minVer": "0.6.1"
   }
  ]
 }

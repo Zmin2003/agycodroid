@@ -29,14 +29,16 @@ import { writeAtomic } from "./statefile.mjs";
 //   · 状态：absent / downloading / verifying / installing / ok / outdated（工具包变了）/ damaged / error
 // 只在 agycodroid（有 Termux 前缀）上可用；开发端没有 $PREFIX，接口返回 supported:false。
 const COMP_INDEX = process.env.AGAPP_COMPONENTS_INDEX ||
-  "https://github.com/greyoak111/cccodroid/releases/download/components/components.json";
-// 社区组件（v0.2.0 起）：greyoak111/cccodroid-components 仓库，CI 按配方打包、出签名索引
+  "https://github.com/Zmin2003/agycodroid/releases/download/components/components.json";
+// 社区组件（v0.2.0 起）：Zmin2003/agycodroid-components 仓库，CI 按配方打包、出签名索引。
+// 注意：这个仓库现在还不存在，社区索引拉不到（组件页会提示“部分组件清单取不到”），
+// 等仓库建好、发了签名索引就能用；测试用 AGAPP_COMPONENTS_COMMUNITY_INDEX 覆盖。
 const COMP_COMMUNITY_INDEX = process.env.AGAPP_COMPONENTS_COMMUNITY_INDEX ||
-  "https://github.com/greyoak111/cccodroid-components/releases/download/index/components.json";
+  "https://github.com/Zmin2003/agycodroid-components/releases/download/index/components.json";
 // 索引签名公钥（ed25519）：每份索引旁边都有 <索引>.sig（对原始字节的签名，base64），验不过整份不用。
 // 索引里有每个包的 sha256，所以验了索引就等于验了包。私钥只在发布机和组件仓库的 CI 密钥里。
 const COMP_INDEX_PUBKEY = crypto.createPublicKey(
-  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4u1V3UuRVZgXwqXXQaQIBaefPf2PCGqKqvsna9Pgzzs=\n-----END PUBLIC KEY-----\n");
+  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAQJPFI78YJdSCFuHjAsDXBjpEPJYBMH4Ib+elSkcuxSQ=\n-----END PUBLIC KEY-----\n");
 export const COMP_DIR = PREFIX ? path.join(path.dirname(PREFIX), "components") : "";
 /** 读普通文件（lstat + O_NOFOLLOW|O_NONBLOCK）：FIFO/设备文件直接当读不到，别把网关事件循环卡死 */
 function readSmall(f, max = 1 << 20) {
@@ -111,14 +113,15 @@ function compFetch(src, quick) {
       (e, so, se) => (e ? reject(new Error(String(se || e.message).trim().slice(0, 200))) : resolve(so)));
   });
 }
-// 备用源：cccodroid.net 镜像了两份索引（连同 .sig，逐字节同 GitHub）。主地址拉不到才用；照样验签，镜像不需要被信任
-const COMP_INDEX_MIRROR = { preset: process.env.AGAPP_COMPONENTS_INDEX_MIRROR || "https://cccodroid.net/components/official/components.json",
-  community: process.env.AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR || "https://cccodroid.net/components/community/components.json" };   // 环境变量只给测试用
-/** 取一份索引并验签。没签名、签名不对一律拒绝；只有网关启动时带了 AGAPP_COMPONENTS_ALLOW_UNSIGNED=1（测试用）才放行。
+// 备用源：没有自己的镜像站，默认不配镜像；只认环境变量（测试用）。主地址拉不到才用；照样验签，镜像不需要被信任
+const COMP_INDEX_MIRROR = { preset: process.env.AGAPP_COMPONENTS_INDEX_MIRROR || "",
+  community: process.env.AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR || "" };
+/** 取一份索引并验签。没签名、签名不对一律拒绝；只有开发端（!LIVE）网关启动时带了 AGAPP_COMPONENTS_ALLOW_UNSIGNED=1（测试用）才放行。
+ *  发行版上这个开关一律不认（和 notices.mjs 的测试钥匙门 !LIVE 一个口径，security L1）：
  *  以前看私有目录里有没有 allow-unsigned 文件，应用身份跑的任何程序（包括模型自己）touch 一下就把签名关了（审查 v0.5.9 D2） */
-const allowUnsigned = () => process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED === "1";
-// 上回主地址拉不到、靠镜像拉到的：这回先试镜像（记在磁盘缓存里，重开 App 也记得）
-// 镜像地址 → 改用镜像的时刻（两份索引各记各的）；一天后重新先试主地址——镜像是定时同步的，可能比 GitHub 晚一拍
+const allowUnsigned = () => !LIVE && process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED === "1";
+// 镜像已去掉：默认不配镜像，只走主地址。compFetchIndex 的 mirror 参数只在调用方显式传入（环境变量覆盖、测试）时生效
+// （上回靠镜像拉到的，这回先试镜像，记在磁盘缓存里，重开 App 也记得；一天后重新先试主地址）
 let compIndexViaMirror = {};
 async function compFetchIndex(src, mirror) {
   let body;
@@ -236,16 +239,28 @@ async function compIndexFetch() {
     { source: "preset", url: local && fs.existsSync(local) ? "file://" + local : COMP_INDEX },
     { source: "community", url: COMP_COMMUNITY_INDEX },
   ];
-  const got = await Promise.all(sources.map((s) => compFetchIndex(s.url, s.url.startsWith("file://") ? null : COMP_INDEX_MIRROR[s.source]).then((d) => ({ ...s, d }), (e) => ({ ...s, e }))));
+  const got = await Promise.all(sources.map((s) => compFetchIndex(s.url, s.url.startsWith("file://") ? null : (COMP_INDEX_MIRROR[s.source] || null)).then((d) => ({ ...s, d }), (e) => ({ ...s, e }))));
   const components = compMerge(got), errors = [];
-  for (const g of got) if (g.e) errors.push(`${g.source}: ${g.e.message}`);
+  for (const g of got) {
+    if (!g.e) continue;
+    // 索引地址 404：不是网络问题，是那份清单还没发出来 —— 别把裸 curl 文本（curl: (22)…）直接推给用户（components H4）
+    if (/(^|\D)404(\D|$)/.test(g.e.message || "")) {
+      // 社区源 404 是已知暂态（仓库还没建好）：静默，只记调试日志，不计入 error、也不因此缩短缓存（components M2）
+      if (g.source === "community") { log("[comp] 社区组件清单还没发布（404），先按没有社区组件处理"); continue; }
+      errors.push(`${g.source}: ${tz("组件清单还没发布")}`);
+      continue;
+    }
+    errors.push(`${g.source}: ${g.e.message}`);
+  }
   // 某个来源这次没取到：沿用上次那个来源的条目，免得已装组件的状态跳成"不在索引里"
   const prev = (compIndexCache.data && compIndexCache.data.components) || {};
   for (const g of got) if (g.e) for (const [id, e] of Object.entries(prev)) if (e.source === g.source && !components[id]) components[id] = e;
   const anyOk = got.some((g) => !g.e);
+  // 预置索引 404 = 组件清单还没发出来（不是网络问题）：前端据此显示一句平静的话，而不是整页报错（components H4）
+  const notPublished = got.some((g) => g.source === "preset" && g.e && /(^|\D)404(\D|$)/.test(g.e.message || ""));
   compIndexCache = anyOk || !compIndexCache.data
-    ? { at: errors.length ? Date.now() - 9 * 60e3 : Date.now(), data: { components }, error: errors.join("；") }   // 有失败的一分钟后再试
-    : { at: Date.now() - 9 * 60e3, data: compIndexCache.data, error: errors.join("；") };
+    ? { at: errors.length ? Date.now() - 9 * 60e3 : Date.now(), data: { components }, error: errors.join("；"), notPublished }   // 有失败的一分钟后再试
+    : { at: Date.now() - 9 * 60e3, data: compIndexCache.data, error: errors.join("；"), notPublished };
   if (anyOk) {
     // 缓存里只存这次拿到、能复核的正文与签名；沿用来的旧条目在缓存里没有可信来源，不存
     const raw = {};
@@ -330,6 +345,7 @@ async function compList(force) {
   try { for (const f of fs.readdirSync(COMP_DIR)) if (f.endsWith(".json")) ids.add(f.slice(0, -5)); } catch {}
   const items = [...ids].map((id) => {
     const e = comps[id] || null, b = e && compBuildFor(e, dk), rec = compRecord(id), job = COMP_JOBS.get(id);
+    if (rec) compNoteInstalled(id);   // 列表页看到已装记录就补记进“装过的组件”清单（components M4：1.0 时装好的也算）
     return {
       id, name: e ? e.name : { zh: id, en: id }, desc: e ? e.desc : null,
       version: b ? b.version : null, bytes: b ? b.bytes : 0, installed: b ? b.installed : 0,
@@ -339,9 +355,10 @@ async function compList(force) {
       error: job && job.error ? tr(LAST_LANG, job.error) : "",
       bin: (b && b.bin) || (rec && rec.bin) || [],
       selftest: (b && b.selftest) || "",
-      // 来源与可信度：预置组件由 agycodroid 发布、随版本测过；社区组件看 verified（真机验证记录）
-      source: e ? e.source : (rec && rec.source) || "", signed: e ? !!e.signed : true,
-      verified: e ? e.source === "preset" || !!(b && b.verified) : true,
+      // 来源与可信度：预置组件由 agycodroid 发布、随版本测过；社区组件看 verified（真机验证记录）。
+      // 索引里没有条目的已装组件：来源不明，别默认给勾（components L4）—— verified 为假时界面显示“未经真机验证”
+      source: e ? e.source : (rec && rec.source) || "", signed: e ? !!e.signed : false,
+      verified: e ? e.source === "preset" || !!(b && b.verified) : false,
       license: (e && e.license) || "", homepage: (e && e.homepage) || "", needs: (e && e.needs) || {},
       category: (e && e.category) || "",          // 扩展页分类索引条用（配方的 category）
       // 依赖：requires 了哪些组件、各自装好没有；谁在依赖它（卸载前要先卸那些）；本机能不能用
@@ -355,7 +372,7 @@ async function compList(force) {
     };
   });
   // 签名检查关着就一直挂个警示（审查 10-29 第六份 低5）
-  return { supported: true, devkit: dk ? (dk.sha256 || "").slice(0, 12) : null, indexError: ix.error, refreshing: !!ix.refreshing, allowUnsigned: allowUnsigned(), items };
+  return { supported: true, devkit: dk ? (dk.sha256 || "").slice(0, 12) : null, indexError: ix.error, indexNotPublished: !!ix.notPublished, refreshing: !!ix.refreshing, allowUnsigned: allowUnsigned(), items };
 }
 
 // 给了 size 且是小文件就一次读完再算：逐个开流对成千个小文件很慢（gpu-driver-glibc 末尾 5600 多个小文件，
@@ -713,12 +730,17 @@ async function compStart(id) {
   // 防回滚：已装好且索引里的构建版本更旧，不装。过期索引（镜像晚一拍、缓存十分钟）里常有上一版，
   // 用户点一下「更新」反而把新版换掉；损坏/装到一半的记录不拦，那是修复（0.6.9 审计 195-V.1）。
   // 只比同一个工具包上的记录：换过工具包后旧记录（outdated）不能拿旧版本号拦住新工具包的构建 ——
-  // 旧构建已经装不回来了，这不是降级（05-工具包重装丢组件）
+  // 旧构建已经装不回来了，这不是降级（05-工具包重装丢组件）。
+  // 注意顺序：降级判断只看版本号，放在形状校验之前 —— 一个又旧又缺字段的索引条目，
+  // 最准确的回答是「拒绝降级」而不是「信息不完整」；形状校验只拦真正要装的构建。
   {
     const oldRec = compRecordInfo(id).rec;
     if (oldRec && oldRec.state === "ok" && compOnDevkit(oldRec, dk) && compOlder(b, oldRec))
       return { ok: false, message: tz("索引里的版本（{v}）比已装的（{now}）旧，已拒绝降级", { v: b.version, now: oldRec.version }) };
   }
+  // 安装前校验构建形状：缺字段的已签名构建不要等到安装中途才抛 TypeError（components L3）
+  if (!/^[0-9a-f]{64}$/i.test(b.sha256 || "") || !(Number(b.bytes) > 0) || !/^https:\/\//.test(b.url || ""))
+    return { ok: false, message: tz("这个组件的信息不完整（缺下载地址、大小或校验值），装不了") };
   // 模块化工具包：组件依赖的底座包所在的模块得先装上
   const needMods = modulesMissingFor(b.baseDeps);
   if (needMods.length) return { ok: false, needModules: needMods.map((m) => m.id), message: tz("要先装工具包模块：{names}（扩展页上方「工具包模块」）", { names: needMods.map((m) => m.name.zh || m.id).join("、") }) };
@@ -844,6 +866,9 @@ async function sweepRecover() {
         // 拿旧快照算删除集会删掉刚放回的旧版文件
         const rec = compRecord(id);
         if (!rec || rec.state !== "installing") return;
+        // first-run 失败的安装：文件已搬进去了，但首次配置没跑完 —— 不自动补 ok、也不回滚，
+        // 记录留在 installing，界面显示可重装（components M3）。重装会写新记录覆盖这个标记
+        if (rec.firstRunFailed) { log(`[comp] ${id}：上次安装的首次配置没跑完，记录留在 installing，可以重新安装`); return; }
         // 心跳写着另一任还活着的网关（双网关重叠）：人家正在装，别动它的记录
         const hb = readSmall(mark, 4096);
         if (hb) {
@@ -967,8 +992,14 @@ export function compHealSkills() {
     if (!f.endsWith(".json")) continue;
     const id = f.slice(0, -5), rec = compRecord(id);
     if (!rec || rec.state !== "ok" || rec.skill || (COMP_JOBS.get(id) && !COMP_JOBS.get(id).finished)) continue;
-    const rel = `usr/share/agycodroid/components/${id}/skill`;
-    if (!fs.existsSync(path.join(PREFIX, rel.slice(4), "SKILL.md"))) continue;
+    // 1.0 时按旧包名前缀装的组件，技能在 usr/share/cccodroid/components/<id>/skill：
+    // 新路径没有就认一次旧路径（components L2；只读旧位置，补装仍写到新技能目录）
+    let rel = `usr/share/agycodroid/components/${id}/skill`;
+    if (!fs.existsSync(path.join(PREFIX, rel.slice(4), "SKILL.md"))) {
+      const oldRel = `usr/share/cccodroid/components/${id}/skill`;
+      if (!fs.existsSync(path.join(PREFIX, oldRel.slice(4), "SKILL.md"))) continue;
+      rel = oldRel;
+    }
     try { fs.rmdirSync(path.join(SKILLS_DIR, id)); } catch {}     // 当时留下的空目录（只删空的）
     // 这段跑在启动定时器里（网关没装 uncaughtException 兜底）：哪一步抛了都只跳过这一个组件
     try {
@@ -1038,14 +1069,7 @@ async function compClearStage(id, beat = () => {}) {
   }
 }
 
-// 组件包的镜像地址：官网生成器把两份签名索引里的包同步到 dl.cccodroid.net/components/<official|community>/<文件名>
-let compMirrorFirst = false;
-function compMirrorUrl(b) {
-  const asset = b.asset || String(b.url || "").split("/").pop();
-  if (!/^https:\/\/github\.com\//.test(b.url || "") || !/^[\w.+-]+$/.test(asset)) return "";
-  return `https://dl.cccodroid.net/components/${b.source === "community" ? "community" : "official"}/${asset}`;
-}
-
+// 组件包只走 GitHub（b.url）：没有自己的镜像站；gh-proxy 只排最后兜底
 async function compRunInstall(id, b, job) {
   const stage = path.join(COMP_DIR, ".staging"), gz = path.join(stage, `${id}-${b.sha256.slice(0, 12)}.tar.gz`), tree = path.join(stage, id);
   fs.mkdirSync(stage, { recursive: true });
@@ -1062,17 +1086,18 @@ async function compRunInstall(id, b, job) {
   if (!fs.existsSync(gz)) {
     const part = gz + ".part";
     {
-      // 几个来源轮流试：GitHub 与 dl.cccodroid.net 镜像（逐字节同一份，内容一律按签名索引里的 sha256 把关，镜像不需要被信任）。
-      // 同一个 .part 接着续传；哪边成功了下回先试哪边。gh-proxy 只排最后兜底。分段并行下载见 pget.mjs
-      const urls = (compMirrorFirst ? [compMirrorUrl(b), b.url] : [b.url, compMirrorUrl(b)]).concat(ghProxy(b.url));
-      const srcs = urls.filter(Boolean);
+      // 几个来源轮流试：GitHub 在前，gh-proxy 只排最后兜底。内容一律按签名索引里的 sha256 把关。
+      // 同一个 .part 接着续传；分段并行下载见 pget.mjs
+      const srcs = [b.url].concat(ghProxy(b.url)).filter(Boolean);
       let lastErr;
       for (let i = 0; i < 4 && !job.cancelled; i++) {
         const url = srcs[i % srcs.length];
-        job.via = url === b.url ? "GitHub" : url.startsWith("https://gh-proxy.com/") ? "gh-proxy.com" : "dl.cccodroid.net";
+        job.via = url === b.url ? "GitHub" : "gh-proxy.com";
         const err = await pget({ curl: path.join(PREFIX, "bin", "curl"), url, file: part, total: b.bytes,
           onProgress: (d) => { job.done = d; }, cancelled: () => !!job.cancelled });
-        if (!err) { lastErr = null; if (url === b.url || url === compMirrorUrl(b)) compMirrorFirst = url !== b.url; break; }
+        if (!err) { lastErr = null; break; }
+        // 索引指向的包还没传上去：404 再试多少次都一样，不重试、直接报错（components L5）
+        if (/(^|\D)404(\D|$)/.test(err)) throw new Error(tz("组件包还没发布"));
         lastErr = new Error(err); if (job.cancelled) break; log(`[comp] ${id} 从 ${job.via} 下载中断：${err}`);
       }
       if (job.cancelled) throw new Error("cancelled");
@@ -1133,9 +1158,18 @@ async function compRunInstall(id, b, job) {
     job.phase = "installing";
     return compSwitch(id, b, tree, job);   // 回调返回的 Promise 由 compFsExclusive 的 then 展开
   });
-  // 4) 首次运行配置（各包 postinst），失败不算安装失败
+  // 4) 首次运行配置（各包 postinst）：失败就是安装失败，写进安装结果里（components M3）。
+  // 以前只记一条日志、最终状态照样写 ok，组件显示“装好了”实际却没配好。现在抛错，安装任务以 error 收尾、
+  // 界面能看到原因；同时把 firstRunFailed 钉在记录里，启动恢复（compRecover）不会把它自动补成 ok，
+  // 记录留在 installing，可以重装或卸载
   const fr = path.join(PREFIX, lx, "first-run.sh");
-  if (fs.existsSync(fr)) { try { await compRun(job, path.join(PREFIX, "bin", "sh"), [fr]); } catch (e) { log(`[comp] ${id} first-run：${e.message}`); } }
+  let firstRunError = "";
+  if (fs.existsSync(fr)) { try { await compRun(job, path.join(PREFIX, "bin", "sh"), [fr]); } catch (e) { firstRunError = e.message; log(`[comp] ${id} first-run：${e.message}`); } }
+  if (firstRunError) {
+    rec.firstRunFailed = true;
+    if (!compWriteRecord(id, rec)) log(`[comp] ${id}：首次配置失败的标记没写进安装记录，下次启动恢复可能把它补成 ok`);
+    throw new Error(tz("首次配置没跑完（{err}），组件可能没配好，请重新安装", { err: firstRunError.slice(0, 200) }));
+  }
   // 首启脚本在锁外跑（可能几分钟）；收尾这步重新进锁：技能目录、共享文件复核、ok 记录
   // 和别的组件卸载时的删文件不能交错（196-供应链.1）
   await compFsExclusive(async () => {
@@ -1225,6 +1259,7 @@ async function compSwitch(id, b, tree, job) {
     else try { fs.rmSync(prevFile, { force: true }); } catch {}   // 上次失败留下的 .prev 别跟着新装走（复核 P2-15）
     // 记录写不进去就不能往下搬：文件搬进 $PREFIX 却没有清单，以后既卸不干净也认领不了（195-Z.10）
     if (!compWriteRecord(id, rec)) throw new Error(tz("安装记录写不进去（存储满了或没有权限），这次安装没有继续"));
+    compNoteInstalled(id);   // 本机装过这个组件：索引以后拉不到时，运行数据清理还能认出它（components M4）
     const backed = [], moved = [];
     try {
       for (const r of replaceable) {
@@ -1365,11 +1400,47 @@ export async function compRemove(id) {
 function compDataDir(id) { return path.join(CFG.home, ".agycodroid", id); }
 // ~/.agycodroid 下别的子系统的目录：不是组件的运行数据，永远不许按「组件」删（11-03 审查 M-8）
 const COMP_DATA_RESERVED = new Set(["custom", "bin", "services", "agents", "local-mode", "cache", "tmp", "logs"]);
+// ── 本机“装过的组件 id”清单（components M4）──
+// 索引拉不到时，已卸组件的运行数据（~/.agycodroid/<id>/）按索引口径清不掉：
+// compDataKnown 只认索引里有的 id。安装时把 id 记一份在这里，索引缺失时也允许清理；
+// 索引在时保持现有严格口径（下面 compDataKnown 先查索引）。文件不以 .json 结尾，
+// 不然 compList / compRecords 会把它当成一条已装记录读。
+const compEverIdsFile = () => COMP_DIR && path.join(COMP_DIR, ".installed-ids");
+let compEverIds = null;   // Set<string> | null（没读过盘）
+function compEverIdsLoad() {
+  if (compEverIds) return compEverIds;
+  compEverIds = new Set();
+  try {
+    const j = JSON.parse(fs.readFileSync(compEverIdsFile(), "utf8"));
+    if (Array.isArray(j)) for (const x of j) if (typeof x === "string") compEverIds.add(x);
+  } catch {}
+  return compEverIds;
+}
+function compEverIdsSave() {
+  if (!compEverIds || !compEverIdsFile()) return;
+  try { fs.mkdirSync(COMP_DIR, { recursive: true }); } catch {}
+  writeAtomic(compEverIdsFile(), JSON.stringify([...compEverIds].sort()));
+}
+/** 记下“本机装过这个组件”：安装写记录时调一次（compSwitch），列表页看到已装记录时也补记一次
+ *  （1.0 时装好的组件，升级后第一次打开扩展页就补进清单，之后卸载也能清运行数据） */
+function compNoteInstalled(id) {
+  if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id) || !COMP_DIR) return;
+  const s = compEverIdsLoad();
+  if (s.has(id)) return;
+  s.add(id);
+  compEverIdsSave();
+}
+function compEverInstalled(id) {
+  if (typeof id !== "string" || !COMP_DIR) return false;
+  return compEverIdsLoad().has(id);
+}
 /** 只有组件索引里有的 id 才算组件：清理接口只按 id 删目录，别让它删到不相干的东西 */
 function compDataKnown(id) {
   if (COMP_DATA_RESERVED.has(id)) return false;
   compLoadDiskCache();
-  return !!(compIndexCache.data && compIndexCache.data.components && Object.prototype.hasOwnProperty.call(compIndexCache.data.components, id));
+  if (compIndexCache.data && compIndexCache.data.components && Object.prototype.hasOwnProperty.call(compIndexCache.data.components, id)) return true;
+  // 索引里没有（拉不到、或已下架）：本机以前装过这个组件的，也认 —— 不然卸掉的组件运行数据永远清不掉（components M4）
+  return compEverInstalled(id);
 }
 function compDataShared(id) {
   try { return fs.readdirSync(COMP_DIR).some((f) => f.endsWith(".json") && f.startsWith(id + "-")); } catch { return false; }
