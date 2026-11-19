@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { CFG, PATHS } from "../gw/config.mjs";
 
 // 小文件也走流式分支，才能在同一次导入里同时覆盖「建索引」和「流式扫」两条路
-process.env.CCAPP_SEARCH_STREAM_SIZE = String(8 << 10);
+process.env.AGAPP_SEARCH_STREAM_SIZE = String(8 << 10);
 const { readSessionPage } = await import("../gw/transcript.mjs");
 const { searchSessions, listSessions } = await import("../gw/sessions.mjs");
 

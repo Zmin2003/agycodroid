@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const STATE = path.join(CFG.home, ".cache", "cccodroid", "reconcile.json");
+const STATE = path.join(CFG.home, ".cache", "agycodroid", "reconcile.json");
 fs.mkdirSync(path.dirname(STATE), { recursive: true });
 fs.writeFileSync(STATE, JSON.stringify({ at: 1, ms: 1, findings: [
   { key: "comp-files:a", level: "error", k: "坏了", v: null, fix: "", act: { t: "comp", id: "a" } },

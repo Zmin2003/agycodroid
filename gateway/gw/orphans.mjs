@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PREFIX, log } from "./config.mjs";
-import { ledger } from "./claude.mjs";
+import { ledger } from "./agy.mjs";
 import { compNeeds, compRecords } from "./components.mjs";
 import { NEXT, sendJson } from "./http.mjs";
 

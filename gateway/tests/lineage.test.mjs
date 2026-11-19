@@ -1,5 +1,6 @@
 // 脉络（gw/lineage-core.mjs + lineage.mjs）：读会话、推断亲缘、增量缓存、分叉时的显式记录
-import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
+import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -7,7 +8,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { scanSession, inferParents, direction } from "../gw/lineage-core.mjs";
 
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "lineage-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "lineage-"));
 const T0 = Date.parse("2026-10-20T00:00:00Z");
 const iso = (min) => new Date(T0 + min * 60000).toISOString();
 
@@ -134,15 +135,15 @@ test("显式记录优先于推断；互指成环的记录会被断开", async ()
 });
 
 test("网关：分叉时写显式记录，/api/lineage 的图里能看到（含回收站里的父会话）", async () => {
-  const home = process.env.CCAPP_HOME;
-  const proj = path.join(home, ".claude", "projects", "-work");
+  const home = process.env.AGAPP_HOME;
+  const proj = path.join(PATHS.projects, "-work");
   fs.mkdirSync(proj, { recursive: true });
   const P = id();
   fs.writeFileSync(path.join(proj, P + ".jsonl"), chain(P, 3).map((l) => JSON.stringify(l)).join("\n") + "\n");
   const { forkSession, trashSession } = await import("../gw/sessionops.mjs");
   const r = forkSession(P, "问题 1", 1);
   assert.ok(r.ok, JSON.stringify(r));
-  const db = JSON.parse(fs.readFileSync(path.join(home, "ccapp-lineage.json"), "utf8"));
+  const db = JSON.parse(fs.readFileSync(path.join(home, "agyapp-lineage.json"), "utf8"));
   assert.equal(db.edges[r.id].primary.id, P);
   assert.equal(db.edges[r.id].primary.kind, "fork");
   assert.ok(db.edges[r.id].primary.at);
@@ -154,7 +155,7 @@ test("网关：分叉时写显式记录，/api/lineage 的图里能看到（含�
   assert.equal(e.source, "explicit");
   assert.equal(e.missing, false);
   assert.equal(g.nodes.find((n) => n.id === P).trashed, true);
-  assert.ok(fs.existsSync(path.join(home, ".cache", "ccapp-lineage-index.json")), "缓存落盘");
+  assert.ok(fs.existsSync(path.join(home, ".cache", "agyapp-lineage-index.json")), "缓存落盘");
 });
 
 test("旧会话兼容：每章记下章首第一句提问；工具调用读过别的会话记录记成引用（每个来源只记第一次）", async () => {
@@ -183,8 +184,8 @@ test("旧会话兼容：每章记下章首第一句提问；工具调用读过�
 });
 
 test("网关：图 v2 —— 章节题名（建档的 / 未建档用章首提问）、分叉后缀去掉、读记录的边、项目带", async () => {
-  const home = process.env.CCAPP_HOME;
-  const proj = path.join(home, ".claude", "projects", "-v2");
+  const home = process.env.AGAPP_HOME;
+  const proj = path.join(PATHS.projects, "-v2");
   fs.mkdirSync(proj, { recursive: true });
   const A = id(), B = id();
   const LA = chain(A, 2);
@@ -244,14 +245,14 @@ test("增量：末尾是完整 JSON 但没有换行，也要收下（导入的�
 });
 
 test("脉络：lineageForget 立刻落盘，重启后不会从旧缓存按旧 off 续读", async () => {
-  const home = process.env.CCAPP_HOME;
-  const proj = path.join(home, ".claude", "projects", "-work-forget");
+  const home = process.env.AGAPP_HOME;
+  const proj = path.join(PATHS.projects, "-work-forget");
   fs.mkdirSync(proj, { recursive: true });
   const S = id();
   fs.writeFileSync(path.join(proj, S + ".jsonl"), chain(S, 2).map((l) => JSON.stringify(l)).join("\n") + "\n");
   const { lineageGraph, lineageForget } = await import("../gw/lineage.mjs");
   await lineageGraph();
-  const cache = path.join(home, ".cache", "ccapp-lineage-index.json");
+  const cache = path.join(home, ".cache", "agyapp-lineage-index.json");
   const before = JSON.parse(fs.readFileSync(cache, "utf8")).recs;
   assert.ok(before.some((r) => r.id === S), "先要有缓存");
   lineageForget(S);

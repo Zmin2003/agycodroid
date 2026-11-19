@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { findLineOffset, readSessionPage, transcriptItems } from "../gw/transcript.mjs";
 import { claimTail } from "../gw/bookmarks.mjs";
 
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "bookmarks-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "bookmarks-"));
 
 function build(n) {
   const lines = [], ids = [];

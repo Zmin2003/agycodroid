@@ -1,5 +1,5 @@
 // 195-V.2 / 195-V.3：
-//  · 共享目录里的本地索引只认启动环境变量 CCAPP_COMPONENTS_USE_LOCAL_INDEX=1，私有目录里的文件开关不再算数；
+//  · 共享目录里的本地索引只认启动环境变量 AGAPP_COMPONENTS_USE_LOCAL_INDEX=1，私有目录里的文件开关不再算数；
 //  · 索引磁盘缓存存原始正文与签名，读回来按公钥复核，旧格式（没复核过）的缓存不能拿来安装组件。
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import test, { after } from "node:test";
@@ -18,12 +18,12 @@ const BODY = fs.readFileSync(new URL("components.json", FIX), "utf8");
 const SIG = fs.readFileSync(new URL("components.json.sig", FIX), "utf8").trim();
 
 // 共享目录：里面放一份本地索引（id 叫 shadow），老代码靠私有目录里的 use-local-index 文件就能换成它
-const SHARED = fs.mkdtempSync(path.join(os.tmpdir(), "ccapp-g1-shared-"));
+const SHARED = fs.mkdtempSync(path.join(os.tmpdir(), "agyapp-g1-shared-"));
 fs.mkdirSync(path.join(SHARED, "components"), { recursive: true });
 fs.writeFileSync(path.join(SHARED, "components", "components.json"),
   JSON.stringify({ components: { shadow: { name: { zh: "shadow", en: "shadow" }, builds: [] } } }));
-const ENV0 = { CCAPP_SHARED: process.env.CCAPP_SHARED };
-process.env.CCAPP_SHARED = SHARED;
+const ENV0 = { AGAPP_SHARED: process.env.AGAPP_SHARED };
+process.env.AGAPP_SHARED = SHARED;
 
 const hits = { p: 0, c: 0 };
 const S = { preset: "", presetSig: null, community: "" };
@@ -36,8 +36,8 @@ const server = http.createServer((req, res) => {
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const B = `http://127.0.0.1:${server.address().port}`;
 Object.assign(process.env, {
-  CCAPP_COMPONENTS_INDEX: B + "/p.json", CCAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
-  CCAPP_COMPONENTS_COMMUNITY_INDEX: B + "/c.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
+  AGAPP_COMPONENTS_INDEX: B + "/p.json", AGAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
+  AGAPP_COMPONENTS_COMMUNITY_INDEX: B + "/c.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
 });
 after(() => {
   server.close();
@@ -46,7 +46,7 @@ after(() => {
   fs.rmSync(path.join(PREFIX, ".devkit-ok"), { force: true });
   fs.rmSync(SHARED, { recursive: true, force: true });
   for (const [k, v] of Object.entries(ENV0)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
-  for (const k of ["CCAPP_COMPONENTS_INDEX", "CCAPP_COMPONENTS_INDEX_MIRROR", "CCAPP_COMPONENTS_COMMUNITY_INDEX", "CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR", "CCAPP_COMPONENTS_ALLOW_UNSIGNED", "CCAPP_COMPONENTS_USE_LOCAL_INDEX"]) delete process.env[k];
+  for (const k of ["AGAPP_COMPONENTS_INDEX", "AGAPP_COMPONENTS_INDEX_MIRROR", "AGAPP_COMPONENTS_COMMUNITY_INDEX", "AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR", "AGAPP_COMPONENTS_ALLOW_UNSIGNED", "AGAPP_COMPONENTS_USE_LOCAL_INDEX"]) delete process.env[k];
 });
 
 let n = 0;
@@ -54,8 +54,8 @@ const fresh = () => import("../gw/components.mjs?i=" + ++n);   // 新模块实�
 const zero = () => { hits.p = 0; hits.c = 0; };
 
 test("195-V.2 私有目录的 use-local-index 文件不再换来源；启动环境变量才认本地索引", async () => {
-  process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED = "1";      // 本地索引不签名
-  delete process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX;
+  process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED = "1";      // 本地索引不签名
+  delete process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX;
   fs.writeFileSync(path.join(COMP_DIR, "use-local-index"), "");   // 旧开关：同 uid 建个文件就能换来源
   S.preset = JSON.stringify({ components: { "server-tool": { name: { zh: "server-tool" }, builds: [] } } });
   S.community = JSON.stringify({ components: { "community-tool": { name: { zh: "community-tool" }, builds: [] } } });
@@ -67,20 +67,20 @@ test("195-V.2 私有目录的 use-local-index 文件不再换来源；启动环�
   assert.ok(hits.p > 0);
 
   // 启动时带了环境变量：这次才认共享目录里的本地索引
-  process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX = "1";
+  process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX = "1";
   fs.rmSync(CACHE, { force: true }); zero();
   m = await fresh();
   r = await m.compIndex(true);
   assert.ok(r.data.components.shadow, "开了环境变量才认本地索引");
   assert.equal(hits.p, 0, "本地索引不再请求官方源");
   assert.ok(r.data.components["community-tool"], "社区源照常");
-  delete process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX;
+  delete process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX;
   fs.rmSync(path.join(COMP_DIR, "use-local-index"), { force: true });
 });
 
 test("195-V.3 缓存存原始正文与签名：重开先复核再用，不联网", async () => {
-  delete process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED;
-  process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX = "0";     // 明确不认本地索引
+  delete process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED;
+  process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX = "0";     // 明确不认本地索引
   S.preset = BODY; S.presetSig = SIG; S.community = "";   // 社区源取不到
   fs.rmSync(CACHE, { force: true }); zero();
   let m = await fresh();
@@ -112,12 +112,12 @@ test("195-V.3 缓存正文被改：复核不过，丢弃并重新拉", async () 
 });
 
 test("195-V.3 旧格式缓存（没有可复核的签名）不能拿来安装组件", async () => {
-  delete process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED;
-  delete process.env.CCAPP_COMPONENTS_USE_LOCAL_INDEX;
+  delete process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED;
+  delete process.env.AGAPP_COMPONENTS_USE_LOCAL_INDEX;
   const dead = "file://" + path.join(SHARED, "nonexistent");
   Object.assign(process.env, {
-    CCAPP_COMPONENTS_INDEX: dead + "/components.json", CCAPP_COMPONENTS_INDEX_MIRROR: dead + "/mirror.json",
-    CCAPP_COMPONENTS_COMMUNITY_INDEX: dead + "/community.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: dead + "/community-m.json",
+    AGAPP_COMPONENTS_INDEX: dead + "/components.json", AGAPP_COMPONENTS_INDEX_MIRROR: dead + "/mirror.json",
+    AGAPP_COMPONENTS_COMMUNITY_INDEX: dead + "/community.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: dead + "/community-m.json",
   });
   fs.writeFileSync(path.join(PREFIX, ".devkit-ok"), JSON.stringify({ sha256: "dk0610" }));
   fs.rmSync(CACHE, { force: true });

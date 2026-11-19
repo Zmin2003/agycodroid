@@ -57,7 +57,7 @@ startStreamFix();
 while (!STREAMFIX.port) await new Promise((r) => setTimeout(r, 10));
 after(() => { up.close(); STREAMFIX.server?.close(); });
 
-test("BUG-R01：截断提示绑定发起的会话（请求头 X-Claude-Code-Session-Id）", async () => {
+test("BUG-R01：截断提示绑定发起的会话（请求头 X-Antigravity-Code-Session-Id）", async () => {
   const got = [];
   const h = (sid, msg, kind) => got.push([sid, msg, kind]);
   SWALLOW_HOOKS.push(h);
@@ -67,7 +67,7 @@ test("BUG-R01：截断提示绑定发起的会话（请求头 X-Claude-Code-Sess
       res.end(START + TEXT_START + TEXT + TEXT_STOP);   // 上游正常收完 HTTP，但 SSE 没有消息级收尾
     };
     const base = fixedBaseUrl(`http://127.0.0.1:${up.address().port}/t`);
-    const r = await fetch(base + "/v1/messages", { method: "POST", body: "{}", headers: { "X-Claude-Code-Session-Id": "sid-pad" } });
+    const r = await fetch(base + "/v1/messages", { method: "POST", body: "{}", headers: { "X-Antigravity-Code-Session-Id": "sid-pad" } });
     const out = await r.text();
     assert.match(out, /event: message_stop/);
     assert.deepEqual(got, [["sid-pad", "", "truncated"]]);

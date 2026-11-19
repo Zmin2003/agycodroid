@@ -1,4 +1,4 @@
-  // ── 设置 → 存储（D10）：网关 gw/storage.mjs 扫、清；这里只画和转发。六类：缓存 / 临时文件 / Claude Code 杂物 能清，
+  // ── 设置 → 存储（D10）：网关 gw/storage.mjs 扫、清；这里只画和转发。六类：缓存 / 临时文件 / Antigravity CLI 杂物 能清，
   // 会话、程序和文件只看大小，已有的清理入口汇总后跳回原处 ──
   const ST = { r: null, poll: 0, picks: null, open: false };
   const CACHE_NAMES = { webview: () => t("内置浏览器"), npm: () => "npm", pip: () => "pip", gh: () => "GitHub CLI", pkg: () => t("pkg 下载的安装包"), apt: () => "apt", lineage: () => t("脉络索引") };
@@ -59,8 +59,8 @@
     }).join("")}</div><div class="row-actions">${btn("clean-picks", t("删除勾选的"), "", "btn sm ghost danger")}</div>` : "";
     out.push(card(t("临时文件"), esc(t("共 {size}，其中 7 天没动过的 {old}。包括后台命令的输出、测试和编译留下的临时目录", { size: sz(tp.bytes), old: sz(tp.auto) })),
       list, (tp.top || []).length ? btn("tmp-list", ST.open ? t("收起") : t("最大的 {n} 项", { n: tp.top.length }), "", "btn sm ghost") + " " + btn("clean-tmp", t("清理 7 天前的"), tp.auto ? "" : "disabled") : ""));
-    // 3 Claude Code 杂物
-    out.push(card(t("Claude Code 杂物"), esc(t("调试日志、shell 快照、MCP 日志、.claude.json 的备份，共 {size}；可清的 {n} 项 {auto}（30 天前的，备份留最新 5 份）", { size: sz(s.junk.bytes), n: s.junk.autoCount, auto: sz(s.junk.auto) })), "",
+    // 3 Antigravity CLI 杂物
+    out.push(card(t("Antigravity CLI 杂物"), esc(t("调试日志、shell 快照、MCP 日志、配置文件的备份，共 {size}；可清的 {n} 项 {auto}（30 天前的，备份留最新 5 份）", { size: sz(s.junk.bytes), n: s.junk.autoCount, auto: sz(s.junk.auto) })), "",
       btn("clean-junk", t("立即清理"), s.junk.auto ? "" : "disabled")));
     // 4 会话
     const ss = s.sessions || { top: [] };
@@ -70,11 +70,11 @@
     const p = s.programs || {}, pr = [];
     if (p.toolkit != null) pr.push(row(t("工具包"), sz(p.toolkit)));
     if (p.components) pr.push(row(t("组件"), sz(p.components)));
-    if (p.compData) pr.push(row(t("组件的运行数据（~/.cccodroid）"), sz(p.compData)));
-    for (const v of p.claude || []) pr.push(row("Claude Code " + v.version + (v.current ? " · " + t("正在用") : ""), sz(v.bytes)));
+    if (p.compData) pr.push(row(t("组件的运行数据（~/.agycodroid）"), sz(p.compData)));
+    for (const v of p.claude || []) pr.push(row("Antigravity CLI " + v.version + (v.current ? " · " + t("正在用") : ""), sz(v.bytes)));
     for (const x of p.pkgs || []) pr.push(row(t("pkg 装的 {name}", { name: x.name + " " + x.version }), sz(x.bytes) + ` · <code>pkg uninstall ${esc(x.name)}</code>`));
     if (p.workspace != null) pr.push(row(t("工作区"), sz(p.workspace)));
-    if (p.shared != null) pr.push(row(t("共享目录 /sdcard/cccodroid"), sz(p.shared)));
+    if (p.shared != null) pr.push(row(t("共享目录 /sdcard/agycodroid"), sz(p.shared)));
     for (const x of p.home || []) pr.push(row(x.path, sz(x.bytes)));
     out.push(card(t("程序和你的文件"), esc(t("只显示大小，这里不删")), `<div class="list compact">${pr.join("")}</div>`));
     // 6 已有的清理入口

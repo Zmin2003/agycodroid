@@ -15,7 +15,7 @@ const srv = http.createServer(async (req, res) => { const u = new URL(req.url, "
 await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
 after(() => { srv.close(); delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER; });
 const call = async (p, body) => { const r = await fetch(`http://127.0.0.1:${srv.address().port}${p}`, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; };
-{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.CCAPP_PREFIX, "bin", "git");
+{ const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), bin = path.join(process.env.AGAPP_PREFIX, "bin", "git");
   if (!fs.existsSync(bin)) fs.symlinkSync(real, bin); }
 
 test("属主可疑的仓库：status 能开；仓库自带的过滤器照样被认出来、提交前要确认", async () => {

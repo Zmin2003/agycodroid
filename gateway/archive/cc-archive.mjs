@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// cccodroid 建档命令：会话里的 AI 用它给刚结束的一章交档。规范见同目录的 spec.<语言>.md。
+// agycodroid 建档命令：会话里的 AI 用它给刚结束的一章交档。规范见同目录的 spec.<语言>.md。
 // 用法：node cc-archive.mjs --title "题名" [--same] [--misc] [--status 进行中|已完成|搁置] [--chapter N]
-// 它把题名交给网关（POST /api/archive，带网关令牌与本轮编号 CCAPP_RUN_ID），网关按规范校验后存档。
-// 不合格时退出码 1，并打印要改的地方。只能在网关拉起的 claude 里用（要有 CCAPP_RUN_ID / CCAPP_GW_PORT）。
+// 它把题名交给网关（POST /api/archive，带网关令牌与本轮编号 AGAPP_RUN_ID），网关按规范校验后存档。
+// 不合格时退出码 1，并打印要改的地方。只能在网关拉起的 claude 里用（要有 AGAPP_RUN_ID / AGAPP_GW_PORT）。
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
@@ -17,11 +17,11 @@ for (let i = 0; i < args.length; i++) {
   else if (a.startsWith("--title=")) opt.title = a.slice(8);
   else if (a === "-h" || a === "--help") { console.log("node cc-archive.mjs --title \"题名\" [--same] [--misc] [--status 进行中|已完成|搁置] [--chapter N]"); process.exit(0); }
 }
-const run = process.env.CCAPP_RUN_ID, port = Number(process.env.CCAPP_GW_PORT);
-if (!run || !port) { console.error("cc-archive: not running inside a cccodroid session (CCAPP_RUN_ID / CCAPP_GW_PORT missing)"); process.exit(2); }
+const run = process.env.AGAPP_RUN_ID, port = Number(process.env.AGAPP_GW_PORT);
+if (!run || !port) { console.error("cc-archive: not running inside a agycodroid session (AGAPP_RUN_ID / AGAPP_GW_PORT missing)"); process.exit(2); }
 if (!opt.title) { console.error("cc-archive: --title is required"); process.exit(2); }
 let token = "";
-const home = process.env.CCAPP_HOME || process.env.HOME || "";
+const home = process.env.AGAPP_HOME || process.env.HOME || "";
 try { token = fs.readFileSync(path.join(home, ".gateway-token"), "utf8").trim(); } catch {}
 
 // 交令牌之前先确认对面是真网关（/__proof：真网关用令牌算 HMAC，别人算不出）。端口号来自环境变量，

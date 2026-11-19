@@ -1,22 +1,22 @@
 // 之前的对话留下的后台进程：一轮结束后，claude 起的东西本该跟着走（进程组 + killTree），
 // 用 nohup / setsid 脱出去的会留下来，比如一直把改掉的配置写回去的守护进程。起下一轮前查一遍，列出来让用户决定。
 //
-// 怎么认：网关起 claude 时环境变量带 CCAPP_RUN_ID、CCAPP_GW_PID（run.mjs），子孙进程都继承；
+// 怎么认：网关起 claude 时环境变量带 AGAPP_RUN_ID、AGAPP_GW_PID（run.mjs），子孙进程都继承；
 // 带着一个已经结束的轮次编号、还活着的，就是留下来的。抹掉环境（env -i）再起的认不出编号，
-// 退一步：被 init 收养（PPID=1）、属于本应用、环境里一个 CCAPP_ 变量都没有的，算「来源不明」（只在 cccodroid 里认，开发机上同 uid 的东西太杂）。
+// 退一步：被 init 收养（PPID=1）、属于本应用、环境里一个 AGAPP_ 变量都没有的，算「来源不明」（只在 agycodroid 里认，开发机上同 uid 的东西太杂）。
 // 用户点过「保留」的按 pid + 启动时刻记住，不再问；它以后新起的子孙也一并不问（顺着 PPID 往上找到保留过的就算）。
-// 记录落盘（ccapp-leftover-kept.json），网关重启后照认；只认同一次开机（boot_id）、pid + 启动时刻 + 命令行都对得上的，
-// 换了开机或者 pid 被别的进程复用就不算。记录和 ccapp-userconf.json 一样在 home 里，同 uid 改得动，防的是忘了、不是防存心。
+// 记录落盘（agyapp-leftover-kept.json），网关重启后照认；只认同一次开机（boot_id）、pid + 启动时刻 + 命令行都对得上的，
+// 换了开机或者 pid 被别的进程复用就不算。记录和 agyapp-userconf.json 一样在 home 里，同 uid 改得动，防的是忘了、不是防存心。
 // 还在跑的轮次编号别人也读得到（同 uid 能读 /proc/<claude>/environ）：带着它、但比那一轮的 claude 进程起得早的照样列
 // （真是那一轮起的都是 claude 的子孙，只会更晚；execve 换环境不改启动时刻。安卓上应用读不了 /proc/stat 的开机时刻，所以比滴答数不比墙钟）。
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { CFG, LIVE, PREFIX, log } from "./config.mjs";
-import { descendants } from "./claude.mjs";
+import { descendants } from "./agy.mjs";
 
 let KEPT = null;              // Map("pid:starttime" → 命令行)，第一次用时从盘上读
-const KEPT_FILE = () => path.join(CFG.home, "ccapp-leftover-kept.json");
+const KEPT_FILE = () => path.join(CFG.home, "agyapp-leftover-kept.json");
 const bootId = () => { try { return fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(); } catch { return ""; } };
 // 应用自己会起、会被 init 收养的（adb 服务端自己 fork 成守护进程）
 const SKIP_COMM = new Set(["adb"]);
@@ -79,18 +79,18 @@ export function leftoverProcs(active) {
   for (const [pid, p] of procs) {
     if (pid === process.pid || pid === process.ppid) continue;
     if (keptLine(p)) continue;
-    const rid = (p.env.find((e) => e.startsWith("CCAPP_RUN_ID=")) || "").slice(13);
+    const rid = (p.env.find((e) => e.startsWith("AGAPP_RUN_ID=")) || "").slice(13);
     let kind = null;
-    // cccodroid 里只有一个网关，带编号的都算（旧版网关起的不带 CCAPP_GW_PID，环境变量也改得掉，所以不核）；
+    // agycodroid 里只有一个网关，带编号的都算（旧版网关起的不带 AGAPP_GW_PID，环境变量也改得掉，所以不核）；
     // 开发机上同时跑着别的网关、几份测试（端口、home 都可能一样）：测试里只认本进程起的。
     // 开发机上的真网关（LIVE）也会把别的网关实例起的算进来——只是卡片多列几项，还要人点确认，不自动杀
     if (rid) {
-      const mine = LIVE || p.env.includes("CCAPP_GW_PID=" + process.pid);
+      const mine = LIVE || p.env.includes("AGAPP_GW_PID=" + process.pid);
       const t0 = active.get(rid);
       const live = active.has(rid) && t0 != null && +p.start >= +t0;   // 那一轮还没起 claude 就带着它的编号：冒充的
       if (mine && !live) kind = "run";
     }
-    else if (LIVE && PREFIX && p.ppid === 1 && !SKIP_COMM.has(p.comm) && !p.env.some((e) => e.startsWith("CCAPP_"))) kind = "unknown";
+    else if (LIVE && PREFIX && p.ppid === 1 && !SKIP_COMM.has(p.comm) && !p.env.some((e) => e.startsWith("AGAPP_"))) kind = "unknown";
     if (!kind) continue;
     seen.add(pid);
     out.push({ pid, start: p.start, ppid: p.ppid, kind, cmd: p.cmd.replace(/[\x00-\x1f]/g, " ").slice(0, 200) });

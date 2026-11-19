@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-// ── 设备信息：给 Claude 一份读准的硬件底子 ──
+// ── 设备信息：给 Antigravity 一份读准的硬件底子 ──
 // 不给的话模型会拿型号去猜（群友的天玑 700 被说成骁龙 888）。芯片以系统属性和内核为准：
 // ro.soc.*（安卓 12 起才有）→ ro.board.platform / ro.hardware（联发科是 mt6833 这种代号，高通是 taro 这种平台名）。
 // 只在网关启动后第一次用到时读一遍，之后复用

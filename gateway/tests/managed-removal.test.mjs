@@ -12,9 +12,9 @@ import { routeComponents } from "../gw/components.mjs";
 // 环境中只留确定的假凭据；fixture 不会接触调用者的真实令牌。
 process.env.ANTHROPIC_API_KEY = "fixture-only-do-not-forward";
 process.env.ANTHROPIC_AUTH_TOKEN = "fixture-only-do-not-forward";
-const home = process.env.CCAPP_HOME, prefix = process.env.CCAPP_PREFIX;
-const root = fs.mkdtempSync(path.join(process.env.CCAPP_WORKSPACE, "managed-removal-"));
-const reg = path.join(home, ".cccodroid/services/openai-bridge.json");
+const home = process.env.AGAPP_HOME, prefix = process.env.AGAPP_PREFIX;
+const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "managed-removal-"));
+const reg = path.join(home, ".agycodroid/services/openai-bridge.json");
 const record = path.join(path.dirname(prefix), "components/openai-bridge.json");
 const component = path.join(prefix, "lib/openai-bridge/component.cjs");
 const payload = path.join(prefix, "lib/openai-bridge/fixture-payload.txt");
@@ -37,9 +37,9 @@ if(args[0]!=='uninstall'){process.exitCode=2;}
 else if(mode==='fail'){process.stderr.write('fixture uninstall rejected');process.exitCode=19;}
 else if(mode==='leave-reg'){}
 else if(mode==='gate'){
-  const timer=setInterval(()=>{if(fs.existsSync(path.join(dir,'release'))){clearInterval(timer);fs.rmSync(path.join(process.env.HOME,'.cccodroid/services/openai-bridge.json'),{force:true});}},20);
+  const timer=setInterval(()=>{if(fs.existsSync(path.join(dir,'release'))){clearInterval(timer);fs.rmSync(path.join(process.env.HOME,'.agycodroid/services/openai-bridge.json'),{force:true});}},20);
   setTimeout(()=>{clearInterval(timer);process.exitCode=23;},5000).unref();
-}else fs.rmSync(path.join(process.env.HOME,'.cccodroid/services/openai-bridge.json'),{force:true});
+}else fs.rmSync(path.join(process.env.HOME,'.agycodroid/services/openai-bridge.json'),{force:true});
 `;
 function fixture(mode = "ok") {
   for (const p of [reg, record, component]) fs.rmSync(p, { force: true });
@@ -197,7 +197,7 @@ test("HTTP 卸载只使用假 PREFIX 的 toybox兼容 flock -n，完全不要求
     assert.equal((await post("remove")).ok, true);
     const locks = lockFixture.calls(); assert.ok(locks.length >= 2, "停用前后都必须获取注册锁");
     assert.ok(locks.every((call) => JSON.stringify(call.args) === JSON.stringify(["-n", "3"])), "受控toybox fixture不支持-w，生产必须使用-n");
-    assert.ok(locks.every((call) => call.regular && call.lock === path.join(home, ".cccodroid/services/openai-bridge.lock")));
+    assert.ok(locks.every((call) => call.regular && call.lock === path.join(home, ".agycodroid/services/openai-bridge.lock")));
     assert.ok(guard.attempts.every((call) => call.tool === lockFixture.tool));
     assert.equal(f.calls().length, 1); removed(f);
   } finally { guard.restore(); }
@@ -246,7 +246,7 @@ test("HTTP uninstall 成功后锁工具消失：不能删包留注册，恢复�
   try {
     const result = await post("remove"); retained(f); assert.equal(f.calls().length, 1); assertLockFailure(result, f);
   } finally {
-    guard.restore(); installRegistryFlock(prefix, home, process.env.CCAPP_TMP);
+    guard.restore(); installRegistryFlock(prefix, home, process.env.AGAPP_TMP);
   }
   fs.writeFileSync(path.join(f.dir, "mode"), "ok");
   assert.equal((await post("remove")).ok, true); assert.equal(f.calls().length, 2); removed(f);

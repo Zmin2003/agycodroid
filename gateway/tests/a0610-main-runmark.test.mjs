@@ -7,7 +7,7 @@ import path from "node:path";
 import { CFG } from "../gw/config.mjs";
 import * as Q from "../gw/queue.mjs";
 
-const MARK = path.join(CFG.home, "ccapp-run-mark.json"), INTR = path.join(CFG.home, "ccapp-interrupted.json");
+const MARK = path.join(CFG.home, "agyapp-run-mark.json"), INTR = path.join(CFG.home, "agyapp-interrupted.json");
 const mark = { runs: [{ id: "x1", text: "还没建会话的提问", startedAt: 1 }], queue: [{ id: "q1", message: "排着的一条", at: 1 }] };
 const reset = () => { Q.setInterrupted([]); Q.QUEUE.length = 0; fs.rmSync(INTR, { recursive: true, force: true }); fs.rmSync(MARK, { force: true }); };
 after(reset);
@@ -56,7 +56,7 @@ test("标记坏了 → 留底成 .bad-*，不当没有", () => {
   fs.writeFileSync(MARK, "{\"runs\":[");
   Q.recoverRunMark();
   assert.equal(fs.existsSync(MARK), false);
-  const bads = fs.readdirSync(CFG.home).filter((n) => n.startsWith("ccapp-run-mark.json.bad-"));
+  const bads = fs.readdirSync(CFG.home).filter((n) => n.startsWith("agyapp-run-mark.json.bad-"));
   assert.ok(bads.length >= 1);
   for (const b of bads) fs.rmSync(path.join(CFG.home, b));
 });

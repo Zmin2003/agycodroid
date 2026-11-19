@@ -17,7 +17,7 @@ const B = "bbbbbbbb-1111-2222-3333-444444444444";
 const DIR = path.join(PATHS.projects, "-stab2-g-cache");
 const FILE_A = path.join(DIR, A + ".jsonl");
 const FILE_B = path.join(DIR, B + ".jsonl");
-const CACHE = path.join(CFG.home, ".cache", "ccapp-lineage-index.json");
+const CACHE = path.join(CFG.home, ".cache", "agyapp-lineage-index.json");
 const line = (o) => JSON.stringify(o) + "\n";
 const msg = (sid, type, uuid, text, ts) => line({
   type, uuid, sessionId: sid, timestamp: new Date(ts).toISOString(),

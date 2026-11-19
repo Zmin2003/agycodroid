@@ -1,4 +1,6 @@
-// FIND-022：message.content 不是数组（坏记录 / 桥给的字符串、null、数字）时，translate 不能抛错把整条事件丢掉
+// FIND-022（agy 版）：坏形状的事件（旧 Claude 的 assistant/user 事件、content 不是数组、
+// null、数字）进 translate 不能抛错把整条事件丢掉——agy 的 translate 不认识这些事件类型，
+// 直接忽略、不抛错；agy 自己的三种事件照常走。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,17 +12,19 @@ function run(ev) {
   return out;
 }
 
-test("assistant 的 content 不是数组时不抛错，正常块照常转出", () => {
+test("旧 Claude 的 assistant/user 事件（content 不是数组）不抛错，直接忽略", () => {
   assert.deepEqual(run({ type: "assistant", message: { role: "assistant", content: 42 } }), []);
-  assert.deepEqual(run({ type: "assistant", message: { role: "assistant", content: "纯文本" } }).map((e) => e.text), ["纯文本"]);
-  assert.deepEqual(run({ type: "assistant", message: { role: "assistant", content: [null, { type: "text", text: "还活着" }] } }).map((e) => e.text), ["还活着"]);
+  assert.deepEqual(run({ type: "assistant", message: { role: "assistant", content: "纯文本" } }), []);
+  assert.deepEqual(run({ type: "assistant", message: { role: "assistant", content: [null, { type: "text", text: "还活着" }] } }), []);
   assert.deepEqual(run({ type: "assistant", parent_tool_use_id: "t1", message: { role: "assistant", content: 42 } }), []);
+  assert.deepEqual(run({ type: "user", message: { role: "user", content: 42 } }), []);
+  assert.deepEqual(run({ type: "user", message: { role: "user", content: [null, { type: "tool_result", tool_use_id: "t1", content: [null, { type: "text", text: "结果" }] }] } }), []);
 });
 
-test("user 的 content 不是数组时不抛错，坏元素只丢自己", () => {
-  assert.deepEqual(run({ type: "user", message: { role: "user", content: 42 } }), []);
-  const out = run({ type: "user", message: { role: "user", content: [null, { type: "tool_result", tool_use_id: "t1", content: [null, { type: "text", text: "结果" }] }] } });
-  assert.equal(out.length, 1);
-  assert.equal(out[0].type, "tool_result");
-  assert.equal(out[0].text, "[?]\n结果");
+test("坏形状的 agy 事件不抛错，好事件照常走", () => {
+  assert.deepEqual(run(null), []);
+  assert.deepEqual(run({ event: "step_update" }), []);
+  assert.deepEqual(run({ event: "step_update", step_update: { step_index: 0, step_type: "agent_response", text_delta: 42 } }), []);
+  const out = run({ event: "step_update", step_update: { step_index: 0, step_type: "agent_response", text_delta: "还活着" } });
+  assert.deepEqual(out.map((e) => e.text), ["还活着"]);
 });

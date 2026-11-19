@@ -1,17 +1,14 @@
 // D10 第 1 步（11-09）：会话保留期。claude 缺省 30 天就删会话（连同附属数据，不进回收站），项目设置写个小数字还会压过用户级的。
 // 网关启动时给用户级设置补上永久保留（写过的不动、写坏的文件不碰、不弹配置改动卡片）；每轮 --settings 带上核过的值；
-// 发行版回填不再照搬用户写的原值；终端包装脚本同口径
+// 发行版回填不再照搬用户写的原值。agy 没有 --settings，终端包装脚本也不再传保留期。
 import { CFG } from "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { _setSealed } from "../gw/edition.mjs";
 import { RETENTION_DAYS, sessionRetention } from "../gw/retention.mjs";
-import { settingsArgs } from "../gw/claude.mjs";
 import { ensureSessionRetention } from "../gw/extensions.mjs";
 import { sealPrepare, sealCleanup } from "../gw/seal.mjs";
 import { ucPending } from "../gw/userconf.mjs";
@@ -20,7 +17,6 @@ const F = path.join(CFG.home, ".claude", "settings.json");
 const had = fs.existsSync(F) ? fs.readFileSync(F) : null;
 const put = (s) => { fs.mkdirSync(path.dirname(F), { recursive: true }); fs.writeFileSync(F, s); };
 const read = () => JSON.parse(fs.readFileSync(F, "utf8"));
-const flagSettings = () => { const a = settingsArgs(); return JSON.parse(a[a.indexOf("--settings") + 1]); };
 const pendingSettings = () => (ucPending()?.rels || []).includes(".claude/settings.json");
 after(() => {
   _setSealed(true);
@@ -68,16 +64,9 @@ test("启动补写：没有文件就新建；有别的键照留并留 .bak；用
   assert.equal(fs.readFileSync(F, "utf8"), "{oops");
 });
 
-test("每轮 --settings 带核过的保留期（项目设置压不过它）", () => {
-  fs.rmSync(F, { force: true });
-  assert.equal(flagSettings().cleanupPeriodDays, RETENTION_DAYS);
-  put('{"cleanupPeriodDays":120}');
-  assert.equal(flagSettings().cleanupPeriodDays, 120);
-  put('{"cleanupPeriodDays":0}');
-  assert.equal(flagSettings().cleanupPeriodDays, RETENTION_DAYS, "写坏的值不往下传");
-});
+// 「每轮 --settings 带核过的保留期」已删：agy 没有 --settings，网关不再每轮给 CLI 传保留期。
 
-test("发行版回填不再照搬用户写的 cleanupPeriodDays（由 settingsArgs 统一给）", () => {
+test("发行版回填不再照搬用户写的 cleanupPeriodDays", () => {
   put('{"cleanupPeriodDays":0,"includeCoAuthoredBy":false}');
   _setSealed(true);
   fs.mkdirSync(path.join(CFG.home, "sealproj-d10"), { recursive: true });
@@ -88,27 +77,4 @@ test("发行版回填不再照搬用户写的 cleanupPeriodDays（由 settingsAr
   sealCleanup(1010);
 });
 
-test("终端包装脚本：照用户级的合法值带上，没写或不合法就按 36500", () => {
-  const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "android", "assets", "bin", "claude");
-  const dir = fs.mkdtempSync(path.join(process.env.CCAPP_TMP || CFG.home, "d10w-"));
-  fs.mkdirSync(path.join(dir, "bin"));
-  const w = path.join(dir, "bin", "claude"), fake = path.join(dir, "ld.sh");
-  fs.writeFileSync(w, fs.readFileSync(src, "utf8").replace(/^SEALED=1$/m, "SEALED=0"), { mode: 0o700 });
-  const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
-  fs.writeFileSync(fake, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done\n`, { mode: 0o700 });
-  const days = () => {
-    const r = spawnSync(sh, [w, "-p", "hi"], { encoding: "utf8", env: { ...process.env, CCAPP_LD: fake, CCAPP_KEY_FILE: "", HOME: CFG.home } });
-    const a = r.stdout.split("\n");
-    return JSON.parse(a[a.indexOf("--settings") + 1]).cleanupPeriodDays;
-  };
-  try {
-    fs.rmSync(F, { force: true });
-    assert.equal(days(), RETENTION_DAYS);
-    put(JSON.stringify({ model: "x", cleanupPeriodDays: 45 }, null, 2));
-    assert.equal(days(), 45);
-    put('{"cleanupPeriodDays": 0}');
-    assert.equal(days(), RETENTION_DAYS);
-    put('{"cleanupPeriodDays":"7"}');
-    assert.equal(days(), RETENTION_DAYS);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
+// 「终端包装脚本」已删：android/assets/bin/claude 已改名 agy，且不再传 --settings/cleanupPeriodDays。

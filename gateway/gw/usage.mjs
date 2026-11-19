@@ -3,10 +3,11 @@ import net from "node:net";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { CFG, LIVE, HERE, PATHS, PREFIX, log, tz } from "./config.mjs";
-import { claudeEnv, readLedger } from "./claude.mjs";
+import { agyEnv, readLedger } from "./agy.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 import { devPrivStatus } from "./devside.mjs";
 import { isInjected } from "./integrity.mjs";
+import { normUsage } from "./stream.mjs";
 import { isObj, loadState, saveState, writeAtomic } from "./statefile.mjs";
 import { onShutdown } from "./crashguard.mjs";
 
@@ -20,7 +21,7 @@ import { onShutdown } from "./crashguard.mjs";
 // since：开始实时记录的时刻；它之前的小时可以从历史会话补算（imported 记补算时间，null = 还没补过）。
 // 桶：m 消息数、t 回复轮数、tl 工具调用、i 输入 token（含缓存）、o 输出 token、s 当时用过的会话、md 各模型的轮数；x = 补算来的
 //     （0.3.13 起）c 读缓存的输入 token（i 的一部分，算缓存命中）、mt 各模型的 token（i+o）、st 各会话的 token（i+o，用量页「最费的对话」）
-const USAGE_FILE = path.join(CFG.home, "ccapp-usage.json");
+const USAGE_FILE = path.join(CFG.home, "agyapp-usage.json");
 const QUARTER_MS = 15 * 60_000;
 const usageQuarter = (ts) => Math.floor(ts / QUARTER_MS);
 const usageDefault = () => ({ v: 1, since: Date.now(), imported: null, off: false, hours: {}, quarters: {} });
@@ -113,75 +114,46 @@ export function usageAdd(d, sid, model, ts) {
   if (tok && sid) (b.st || (b.st = {}))[sid] = (b.st[sid] || 0) + tok;
   usageSave();
 }
-// 一个 claude 进程的 token 计量：边跑边记进当前小时。以前等 result 才整轮一次性记，三处漏算（10-30 实测）：
+// 一个 agy 进程的 token 计量：边跑边记进当前刻钟。以前等 result 才整轮一次性记，三处漏算（10-30 实测）：
 //   跑几个小时的一轮要到结束才显示、全记在结束那个小时；中断 / 被杀的那一轮没有 result，整轮丢掉；
-//   result.usage 只算主会话，子代理花的 token 一个都没记（modelUsage 里有，但 --resume 起的进程会把以前几轮也算进去，没法当本轮的用）。
-// 主会话：流式事件按 message.id 记见过的最大值，涨多少记多少（message_start 给输入、message_delta 给累计输出，兼容桥常在 delta 才补输入）；
-//   result 时和这一轮的 usage 对一次账，流里没看到的（压缩这类不出流事件的请求）补上差额。
-// 子代理：流里不带用量，读它自己的记录（<会话>/subagents/agent-*.jsonl，每条 assistant 带 usage），运行中每 30 秒、每轮 result、进程退出时各扫一次。
+//   result.usage 只算主会话，子代理花的 token 一个都没记。
+// agy 的 step_update 带 usage：按 step_index 记见过的最大值，涨多少记多少（官方文档的例子里
+// duration_seconds 是单步的耗时，所以按「单步用量」理解；如果某天发现它是会话累计的，
+// result() 的对账会把多记的差额扣回来——见下面 result）。
+//   result 时和这一轮的 usage 对一次账，流里没看到的补上差额。
+// 子代理：子代理步骤（带 subagent_info）的 usage 单独记，不进 tot——result.usage 是主会话的会话累计，
+// 拿它对账时不能把子代理的也算进去，否则会把主会话的差额抵掉（和以前 message lane 的做法一样）。
 export function usageMeter(ctx) {
   const add = ctx.add || usageAdd;   // 测试换成收集器
-  const seen = new Map(), cur = {}, tot = { i: 0, o: 0, c: 0 };   // tot：主会话上次对账以来流里记了多少
-  const subPos = new Map();          // 子代理记录读到哪个字节了
-  const t0 = ctx.start || Date.now();
+  const seen = new Map(), tot = { i: 0, o: 0, c: 0 };   // tot：主会话上次对账以来流里记了多少
   const num = (x) => Number.isFinite(x) && x > 0 ? x : 0;
   const bump = (key, u, model, main) => {
     if (!key || !u) return;
     const v = { i: num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens), o: num(u.output_tokens), c: num(u.cache_read_input_tokens) };
-    const p = seen.get(key) || { i: 0, o: 0, c: 0, m: model }, d = {};   // 型号跟着请求记：delta 不带型号
+    const p = seen.get(key) || { i: 0, o: 0, c: 0, m: model }, d = {};   // 型号跟着请求记：step_update 不带型号
     for (const k of ["i", "o", "c"]) if (v[k] > p[k]) { d[k] = v[k] - p[k]; p[k] = v[k]; if (main) tot[k] += d[k]; }
     seen.delete(key); seen.set(key, p);
     if (seen.size > 5000) seen.delete(seen.keys().next().value);
     if (d.i || d.o || d.c) add(d, ctx.sid(), p.m || ctx.model());
   };
-  function scanSubs() {
-    const dir = ctx.subDir && ctx.subDir();
-    if (!dir) return;
-    let names = [];
-    try { names = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { return; }
-    for (const n of names) {
-      const file = path.join(dir, n);
-      let st; try { st = fs.statSync(file); } catch { continue; }
-      if (st.mtimeMs < t0 - 5000) continue;        // 以前几轮的子代理
-      const from = subPos.get(n) || 0;
-      if (st.size <= from) continue;
-      let text = "";
-      let fd = null;
-      try { fd = fs.openSync(file, "r"); const b = Buffer.alloc(st.size - from); fs.readSync(fd, b, 0, b.length, from); text = b.toString("utf8"); }
-      catch { continue; }
-      finally { if (fd != null) try { fs.closeSync(fd); } catch {} }   // 读一半抛错也要关 fd（200-6-02）
-      const end = text.lastIndexOf("\n");
-      if (end < 0) continue;                         // 半行：等写完
-      subPos.set(n, from + Buffer.byteLength(text.slice(0, end + 1)));
-      for (const line of text.slice(0, end).split("\n")) {
-        if (!line.includes('"usage"') || !line.includes('"assistant"')) continue;
-        let e; try { e = JSON.parse(line); } catch { continue; }
-        // 消息按时间归轮：本轮开始之后写的才算（以前放宽 5 秒，上一轮收尾慢的子代理会被下一轮再算一遍）
-        if (e.type !== "assistant" || !e.message?.id || !(Date.parse(e.timestamp) >= t0)) continue;
-        bump(e.message.id, e.message.usage, e.message.model, false);
-      }
-    }
-  }
-  const timer = setInterval(scanSubs, 30000);
-  timer.unref?.();
   return {
     feed(ev) {
-      const lane = ev.parent_tool_use_id || "";
-      if (ev.type === "stream_event") {
-        const e = ev.event;
-        if (e?.type === "message_start") { cur[lane] = e.message?.id || lane + ":" + Date.now(); bump(cur[lane], e.message?.usage, lane && e.message?.model, !lane); }
-        else if (e?.type === "message_delta" && e.usage) bump(cur[lane], e.usage, undefined, !lane);
-      } else if (ev.type === "assistant" && ev.message?.id) bump(ev.message.id, ev.message.usage, lane && ev.message.model, !lane);   // 主会话记在 init 报的型号名下（兼容桥回的名字可能不一样）
+      if (!ev || ev.event !== "step_update") return;
+      const st = ev.step_update || {};
+      if (!st.usage) return;
+      const sub = !!(st.subagent_info && Array.isArray(st.subagent_info.subagents) && st.subagent_info.subagents.length);
+      // agy 的 usage 用 cache_read_tokens，bump 按 Claude 形状（cache_read_input_tokens）读：
+      // 这里先归一化，否则缓存命中 token 在流里永远记不上，只在 result() 对账时补回。
+      bump("step:" + (Number.isInteger(st.step_index) ? st.step_index : "?"), normUsage(st.usage), undefined, !sub);
     },
     result(r, turn) {
-      scanSubs();
       const u = r.usage || {};
       const all = { i: num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens), o: num(u.output_tokens), c: num(u.cache_read_input_tokens) };
       const d = turn ? { t: 1 } : {};
       for (const k of ["i", "o", "c"]) { if (all[k] > tot[k]) d[k] = all[k] - tot[k]; tot[k] = 0; }   // 后台任务回报会在同一进程再出一轮 result，各对各的
       if (Object.keys(d).length) add(d, ctx.sid(), ctx.model());
     },
-    close() { clearInterval(timer); scanSubs(); },
+    close() {},
   };
 }
 // 用户自己打的字才算一次对话：斜杠命令、命令回显、系统注入的不算
@@ -192,7 +164,7 @@ export const usageIsPrompt = (text) => {
 const usageText = (content) => typeof content === "string" ? content
   : Array.isArray(content) && !content.some((c) => c && c.type === "tool_result") ? content.filter((c) => c && c.type === "text").map((c) => c.text).join("\n") : "";
 
-/** 从 ~/.claude/projects 下的会话记录补算 since 之前的部分。分叉出来的会话会重复带上原会话的消息，按 uuid / message.id 去重 */
+/** 从网关自己写的会话记录（~/agyapp-sessions，Claude-jsonl 形状）补算 since 之前的部分。分叉出来的会话会重复带上原会话的消息，按 uuid / message.id 去重 */
 let usageImporting = null;
 let usageGen = 0;   // 清空统计时 +1：还在跑的补算按旧世代号丢弃结果，别把清掉的数据写回来（#119-5）
 function usageImport(extraOnly) {
@@ -288,7 +260,7 @@ function usageImport(extraOnly) {
   })().finally(() => { usageImporting = null; }));
 }
 
-const ENERGY_FILE = path.join(CFG.home, ".cache", "ccapp-energy.json");
+const ENERGY_FILE = path.join(CFG.home, ".cache", "agyapp-energy.json");
 const ENERGY_STEP = 5 * 60e3, ENERGY_HOUR = 3600e3;
 const energyDefault = () => ({ v: 1, last: null, hours: {}, days: {}, levels: [], sys: null });
 const energy = energyDefault();
@@ -445,7 +417,7 @@ function energySystem() {
     // 两路输出并成一路：开发端的 priv（rish）在没有终端时会把一部分 stdout 吐到 stderr，分开收就是两半残缺的行
     // priv 用随包那份的绝对路径：PATH 里排在前面的目录（~/bin 之类）可能被放了同名程序（复核 11-03，L-9 余项）
     const priv = [path.join(HERE, "bin", "priv")].find((f) => fs.existsSync(f)) || "priv";
-    execFile("sh", ["-c", (priv.startsWith("/") ? "sh " : "") + "\"$0\" \"dumpsys batterystats --checkin\" 2>&1 </dev/null", priv], { env: { ...process.env, PATH: claudeEnv().PATH }, timeout: 60000, maxBuffer: 32 << 20 }, (err, out, errOut) => {
+    execFile("sh", ["-c", (priv.startsWith("/") ? "sh " : "") + "\"$0\" \"dumpsys batterystats --checkin\" 2>&1 </dev/null", priv], { env: { ...process.env, PATH: agyEnv().PATH }, timeout: 60000, maxBuffer: 32 << 20 }, (err, out, errOut) => {
       if (!out || !out.includes(",l,pwi,")) return resolve({ ok: false, message: (errOut || (err && err.message) || tz("没拿到数据")).trim().slice(0, 300) });
       const apps = {}, names = {};
       let cap = 0, used = 0, since = 0, me = null;
@@ -474,14 +446,14 @@ function energySystem() {
   });
 }
 
-/** 问应用进程里的提权中转（Priv.java）。只在 cccodroid 布局下存在 */
-/** 内存管家：跑 cc-mem 拿 JSON。cccodroid 里它和网关同在 app/bin；开发端在 files/opt/ccmem */
+/** 问应用进程里的提权中转（Priv.java）。只在 agycodroid 布局下存在 */
+/** 内存管家：跑 cc-mem 拿 JSON。agycodroid 里它和网关同在 app/bin；开发端在 files/opt/ccmem */
 export function ccMem(args, timeoutMs = 90000) {
   const bin = [path.join(HERE, "bin", "cc-mem.mjs"), path.join(CFG.home, "..", "opt", "ccmem", "cc-mem.mjs")].find((f) => fs.existsSync(f));
   if (!bin) return Promise.resolve({ ok: false, message: tz("找不到 cc-mem") });
-  const env = claudeEnv();
+  const env = agyEnv();
   for (const k of Object.keys(env)) if (/^(ANTHROPIC|CLAUDE)_/.test(k)) delete env[k];
-  env.CCAPP_HOME = CFG.home;
+  env.AGAPP_HOME = CFG.home;
   return new Promise((resolve) => {
     execFile(process.execPath, [bin, ...args], { env, timeout: timeoutMs, maxBuffer: 16 << 20 }, (err, out, errOut) => {
       try { return resolve({ ok: true, ...JSON.parse(out) }); } catch {}
@@ -490,11 +462,10 @@ export function ccMem(args, timeoutMs = 90000) {
   });
 }
 
-/** 设备工具 MCP 的配置（JSON 串）。不是 cccodroid 布局、或脚本不在就返回 null */
+/** 设备工具 MCP 没有 agy 的接法：以前这里返回 device-mcp.mjs 的 MCP 配置，agycodroid 里不再提供（见 run.mjs）。
+ *  导出名留着，给还调它的地方一个明确的 null。 */
 export function deviceMcpConfig() {
-  const f = path.join(HERE, "bin", "device-mcp.mjs");
-  if (!PREFIX || !fs.existsSync(f)) return null;
-  return JSON.stringify({ mcpServers: { device: { type: "stdio", command: process.execPath, args: [f] } } });
+  return null;
 }
 
 export function privCall(req, timeoutMs = 20000) {
@@ -503,7 +474,7 @@ export function privCall(req, timeoutMs = 20000) {
       if (req.op === "status") return devPrivStatus().then(resolve);
       return resolve({ ok: false, state: "unsupported", message: tz("开发端的 Shizuku 由 Shizuku 应用自己管理（priv 走 rish）") });
     }
-    const s = net.connect({ path: process.env.CCAPP_PRIV_SOCK || "/data/data/cc.codroid/files/.priv.sock" }, () => s.write(JSON.stringify(req) + "\n"));
+    const s = net.connect({ path: process.env.AGAPP_PRIV_SOCK || "/data/data/cc.agyroid/files/.priv.sock" }, () => s.write(JSON.stringify(req) + "\n"));
     let buf = "";
     const t = setTimeout(() => { s.destroy(); resolve({ ok: false, message: tz("超时") }); }, timeoutMs);
     s.on("data", (d) => (buf += d));
@@ -518,9 +489,8 @@ export async function routeUsage(req, res, u, p) {
     try { return sendJson(res, 200, { items: readLedger(Number(u.searchParams.get("n")) || 100) }); }
     catch (e) { return sendJson(res, 500, { message: e.code || e.message }); }
   }
-  // ── 官方账户登录：就是在跑 `claude auth login`，网关只当终端用 ──
-  // OAuth 全程由 claude 自己完成，令牌由它写进它自己的 ~/.claude/.credentials.json；
-  // 我们只转交用户在授权页拿到的一次性授权码（等同于在终端里粘贴），不读、不存任何凭据。
+  // ── Google 账户登录：就是在跑交互式 agy，网关只当终端用 ──
+  // OAuth 全程由 agy 自己完成，凭据由它自己保管；网关只转交授权地址，不读、不存任何凭据（见 login.mjs）。
   // ── Shizuku（调试提权）──
   // ── 使用统计 ──
   if (req.method === "GET" && p === "/api/usage") {
@@ -555,7 +525,7 @@ export async function routeUsage(req, res, u, p) {
     }
     // 导出目录被换成软链、或里面放了同名软链：不跟着写到别处（11-03 审查 L-1，同 profile.saveExport）
     const writeExport = (name, data) => {
-      const base = process.env.CCAPP_SHARED && fs.existsSync(process.env.CCAPP_SHARED) ? process.env.CCAPP_SHARED : CFG.home;
+      const base = process.env.AGAPP_SHARED && fs.existsSync(process.env.AGAPP_SHARED) ? process.env.AGAPP_SHARED : CFG.home;
       const dir = path.join(base, "exports");
       fs.mkdirSync(dir, { recursive: true });
       if (fs.lstatSync(dir).isSymbolicLink()) return sendJson(res, 400, { error: "bad dir" });

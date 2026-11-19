@@ -1,5 +1,6 @@
 // v0.6.3 续查（#131–#136）里网关能测的几项
 import "../gw/config.mjs";
+import { PATHS } from "../gw/config.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 
@@ -76,7 +77,7 @@ test("脉络：扫描途中会话被 forget（移到项目等），旧扫描结�
   const fs = (await import("node:fs")).default, path = (await import("node:path")).default, crypto = (await import("node:crypto")).default;
   const { CFG } = await import("../gw/config.mjs");
   const { lineageRefresh, lineageForget } = await import("../gw/lineage.mjs");
-  const proj = path.join(CFG.home, ".claude", "projects", "-work-race1104");
+  const proj = path.join(PATHS.projects, "-work-race1104");
   fs.mkdirSync(proj, { recursive: true });
   const S = crypto.randomUUID(), lines = [];
   let parent = null;
@@ -93,7 +94,7 @@ test("脉络：扫描途中会话被 forget（移到项目等），旧扫描结�
   const loop = (async () => { while (!stop) { lineageForget(S); await new Promise((r) => setImmediate(r)); } })();
   await lineageRefresh();
   stop = true; await loop;
-  const readIdx = () => { try { return JSON.parse(fs.readFileSync(path.join(CFG.home, ".cache", "ccapp-lineage-index.json"), "utf8")); } catch { return {}; } };
+  const readIdx = () => { try { return JSON.parse(fs.readFileSync(path.join(CFG.home, ".cache", "agyapp-lineage-index.json"), "utf8")); } catch { return {}; } };
   const cache = readIdx();
   assert.ok(!(cache.recs || []).some((r) => r.id === S), "途中被 forget 的扫描结果不写回");
   // 不再 forget：下一次刷新正常收下
@@ -103,24 +104,9 @@ test("脉络：扫描途中会话被 forget（移到项目等），旧扫描结�
   fs.rmSync(proj, { recursive: true, force: true });
 });
 
-test("账本：同一家接口换了另一个账户的 Key，余额差不记成消费（#135）", async () => {
-  const { _billForTest: B } = await import("../gw/providers.mjs");
-  const id = "v063-bill";
-  B.noteBalance(id, "CNY", 100, "acctA");
-  B.noteBalance(id, "CNY", 98, "acctA");
-  assert.equal(B.billOf(id).spends.length, 1, "同一账户少了 2 块：记消费");
-  B.noteBalance(id, "CNY", 10, "acctB");
-  assert.equal(B.billOf(id).spends.length, 1, "换了账户：不记 88 块的消费");
-  B.noteBalance(id, "CNY", 9, "acctB");
-  assert.equal(B.billOf(id).spends.length, 2, "新账户之后照常记");
-  assert.equal(B.billOf(id).spends.at(-1)[1], 1);
-  // 升级前存的基准没有账户指纹：重新起算，不记差额
-  B.billOf(id).last = { at: Date.now(), bal: 50 };
-  B.noteBalance(id, "CNY", 5, "acctC");
-  assert.equal(B.billOf(id).spends.length, 2, "没有指纹的旧基准：不记 45 块");
-  B.noteBalance(id, "CNY", 4, "acctC");
-  assert.equal(B.billOf(id).spends.length, 3);
-});
+// #135 的余额账本（noteBalance）已随 Claude 计费一起删掉：agy 的 billKind 恒为 none，
+// providers.mjs 只剩 _billForTest 的 billOf/billShape/noteTokens 占位，不再按余额记消费。
+// 下面这条用例（同一家接口换账户、余额差不记成消费）测的主题已不存在，删掉。
 
 test("自定义组件：说明里带冒号，SKILL.md 的 description 仍是合法的带引号字符串（#135）", async () => {
   const { _customForTest: C } = await import("../gw/custom.mjs");
@@ -129,7 +115,7 @@ test("自定义组件：说明里带冒号，SKILL.md 的 description 仍是合�
   const v = line.slice("description: ".length);
   assert.ok(v.startsWith('"') && v.endsWith('"'));
   assert.match(JSON.parse(v), /用途: 转换文档 #1/);
-  assert.ok(md.includes("（cccodroid 自定义组件）"), "认领标记还在");
+  assert.ok(md.includes("（agycodroid 自定义组件）"), "认领标记还在");
   // 读回来（扩展页列表）：转义解开，不带反斜杠
   const fs = (await import("node:fs")).default, path = (await import("node:path")).default, { CFG } = await import("../gw/config.mjs");
   const { skillMeta } = await import("../gw/extensions.mjs");

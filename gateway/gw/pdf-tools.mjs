@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { CFG, PREFIX } from "./config.mjs";
 import { NEXT, readBodyBuf, sendJson } from "./http.mjs";
 import { safeFilePath, safeWritePath } from "./files.mjs";
-import { ensureShell, killTree } from "./claude.mjs";
+import { ensureShell, killTree } from "./agy.mjs";
 import { markChild, unmarkChild } from "./components.mjs";
 import { onShutdown } from "./crashguard.mjs";
 
@@ -62,11 +62,11 @@ onShutdown("PDF tools", () => { for (const j of JOBS.values()) stop(j); });
 function pdfEnv(work, src = process.env) {
   const env = {};
   for (const k of ["SHELL", "LD_LIBRARY_PATH", "LD_PRELOAD", "LANG", "TZ", "FONTCONFIG_FILE", "FONTCONFIG_PATH", "SystemRoot", "WINDIR",
-    "CCAPP_LD", "CCAPP_SELF_EXE", "CCAPP_GLIBC_LIB", "CCAPP_GLIBC_PRELOAD", "CCAPP_BIONIC_PRELOAD", "CCAPP_EXEC", "CCAPP_BIN", "CCAPP_PREFIX",
+    "AGAPP_LD", "AGAPP_SELF_EXE", "AGAPP_GLIBC_LIB", "AGAPP_GLIBC_PRELOAD", "AGAPP_BIONIC_PRELOAD", "AGAPP_EXEC", "AGAPP_BIN", "AGAPP_PREFIX",
     "TERMUX_APP__DATA_DIR", "TERMUX_APP__LEGACY_DATA_DIR", "TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE"])
     if (src[k] != null) env[k] = src[k];
-  if (src.CCAPP_BIONIC_PRELOAD) env.LD_PRELOAD = src.CCAPP_BIONIC_PRELOAD;
-  const dirs = [PREFIX && path.join(PREFIX, "bin"), src.CCAPP_BIN, "/system/bin", "/system/xbin"].filter(Boolean);
+  if (src.AGAPP_BIONIC_PRELOAD) env.LD_PRELOAD = src.AGAPP_BIONIC_PRELOAD;
+  const dirs = [PREFIX && path.join(PREFIX, "bin"), src.AGAPP_BIN, "/system/bin", "/system/xbin"].filter(Boolean);
   return { ...env, PATH: dirs.join(path.delimiter), PREFIX, HOME: work, TMPDIR: work, TMP: work, TEMP: work, XDG_CONFIG_HOME: work, XDG_CACHE_HOME: work, LC_ALL: "C" };
 }
 function run(j, name, args) {

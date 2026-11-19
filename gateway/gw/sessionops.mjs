@@ -7,7 +7,7 @@ import { Worker } from "node:worker_threads";
 import { zipReadCore } from "./zipcore.mjs";
 import { CFG, LAST_LANG, PATHS, PREFIX, log, tr, tz } from "./config.mjs";
 import { NAMES, PEEK_CACHE, PINS, findSessionFile, peekSession, saveNames, savePins } from "./sessions.mjs";
-import { claudeBlocked, claudeCmd, claudeEnv, killTree } from "./claude.mjs";
+import { agyBlocked, agyCmd, agyEnv, killTree } from "./agy.mjs";
 import { sealed } from "./edition.mjs";
 import { LAST_SESSION, TRASH_HOOKS, forgetSession, runOfSession } from "./runs.mjs";
 import { forgetChild, recordPrimary } from "./lineage-store.mjs";
@@ -22,7 +22,7 @@ import { noteManaged } from "./sessmanaged.mjs";
 // ── 会话管理：回收站 / 导出 / 导入 ─────────────────────────────────────
 // 回收站放在 claude 的 projects 目录之外（它看不见，--resume 也就找不回来），同一文件系统，挪进挪出都是 rename。
 // 每个会话一格：<id>.jsonl + 同名目录（子代理、超长工具结果）+ meta.json（原项目目录、标题、删除时间）。
-const TRASH_DIR = path.join(CFG.home, ".ccapp-trash");
+const TRASH_DIR = path.join(CFG.home, ".agyapp-trash");
 export const TRASH_KEEP_DAYS = 30;
 // 只当单个目录名用：不许全是点（「.」「..」拼进路径就跳出了所在目录，回收站清理曾因此删掉整个 home）
 //  也不许是 __proto__ 这类：会话 id 要当对象的键用（封签表、标题表），会改到原型上（11-03 审查 L-2）
@@ -146,7 +146,7 @@ export function forkSession(id, userText, after, { before = false, uuid = "", la
   return { ok: true, id: nid, title: NAMES[nid], kept: best + 1, total: users.length };
 }
 
-// ── 删一条消息：用户的一条提问，或 Claude 的一整条回复（含它的工具调用和结果） ──
+// ── 删一条消息：用户的一条提问，或 Antigravity 的一整条回复（含它的工具调用和结果） ──
 // 原地改 transcript：删掉的行从文件里拿走，后面挂在它们身上的行（parentUuid）顺着链接到最近一个没删的祖先，
 // claude 下一轮 --resume 沿 parentUuid 回溯时就看不到它们了。改前整份抄进回收站的 .edits/（留 30 天），撤销就是抄回来。
 // 文件检查点（file-history-snapshot）、摘要这些不在对话链上的行不动。
@@ -155,7 +155,7 @@ const UNDO = new Map();
 // UNDO：会话号 → 最近一次删消息的 { backup, size, mtime }：撤销前核对文件没再变过
 // ORPHAN_HEADS：会话号 → 提问被删掉的那几轮回复的第一行 uuid（见 deleteMessage 里的 B04）。
 // 以前只在内存里：网关重启后守卫失效，删那条合并气泡会把上一轮的回复一起删掉（195-A.1）。落盘保存
-const ORPHAN_FILE = path.join(CFG.home, "ccapp-session-orphans.json");
+const ORPHAN_FILE = path.join(CFG.home, "agyapp-session-orphans.json");
 const ORPHAN_HEADS = new Map();
 {
   const r = loadState(ORPHAN_FILE, {
@@ -291,40 +291,12 @@ export function undoDelete(id, backup) {
   return { ok: true };
 }
 
-/** 把 Claude 改过的文件退回到某条用户消息之前（claude 的文件检查点，只覆盖 Edit / Write / NotebookEdit，命令改的不算）。
- *  每轮一个进程也没关系：检查点记在会话记录里，--resume 起来就能用（2026-10-19 实测）。dryRun 只算会动哪些文件。 */
+/** 把 Antigravity 改过的文件退回到某条用户消息之前。
+ *  agy 没有文件检查点（Claude 的 checkpoint 机制在 agy 里不存在），所以文件回退做不了：
+ *  恒返回 canRewind:false。调用方（sessions.mjs 的 rewind 路由）按这个值走“只截对话、不动文件”的路，
+ *  界面会如实告诉用户文件改动没留底、没法撤销。 */
 export async function rewindFiles(sid, userUuid, dryRun) {
-  // 这里也 --resume 起了 claude：它要是往记录里写了什么，是我们起的，不算外部改动（见 integrity.mjs）
-  const sf = findSessionFile(sid)?.file, dirty = checkSession(sid, sf);
-  // 起 claude 就会加载用户级钩子：有没确认的改动先别起（见 userconf.mjs），发一条消息在卡片里处理
-  if (!sealed() && ucPending()) return { ok: false, error: tz("Claude Code 的用户级配置有改动还没确认。先发一条消息，在弹出的卡片里确认后再试。") };
-  const blocked = await claudeBlocked();
-  if (blocked) return { ok: false, error: blocked };
-  return new Promise((resolve) => {
-    const [cmd0, args0] = claudeCmd(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--resume", sid]);
-    const child = spawn(cmd0, args0, { cwd: fs.existsSync(CFG.workspace) ? CFG.workspace : CFG.home, env: claudeEnv(), stdio: ["pipe", "pipe", "pipe"], detached: true });
-    let buf = "", done = false, err = "", exited = false;
-    const finish = (r) => { if (done) return; done = true; clearTimeout(t); try { child.stdin.end(); } catch {} setTimeout(() => { if (!exited) killTree(child); }, 3000); resolve(r); };
-    const t = setTimeout(() => finish({ ok: false, error: tz("回退超时") }), 60000);
-    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
-    child.stdout.on("data", (d) => {
-      buf += d; let i;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const l = buf.slice(0, i); buf = buf.slice(i + 1);
-        let ev; try { ev = JSON.parse(l); } catch { continue; }
-        if (ev.type !== "control_response") continue;
-        const r = ev.response || {};
-        if (r.subtype === "error") finish({ ok: false, error: String(r.error || "rewind failed") });
-        else finish({ ok: true, ...(r.response || {}) });
-      }
-    });
-    child.stderr.on("data", (d) => { err += d; });
-    // spawn 失败（loader 缺失/EACCES/ENOMEM）只发 error：不接就是未捕获异常，整个网关退出
-    child.on("error", (e) => finish({ ok: false, error: e.code || e.message }));
-    child.stdin.on("error", () => {});
-    child.on("close", () => { exited = true; if (sf) resealAfterEdit(sid, sf, dirty); finish({ ok: false, error: err.trim().slice(-300) || "claude exited" }); });
-    child.stdin.write(JSON.stringify({ type: "control_request", request_id: "rw-" + Date.now(), request: { subtype: "rewind_files", user_message_id: userUuid, dry_run: !!dryRun } }) + "\n");
-  });
+  return { ok: false, canRewind: false, error: tz("Antigravity 没有文件检查点，改过的文件没法退回。只能把对话截到这条消息之前。") };
 }
 
 /** claude 自己的回退跨文件系统时会悄悄失败：备份在应用私有目录，工作区在 /sdcard（FUSE），
@@ -558,13 +530,14 @@ export function restoreSession(id) {
   return { ok: true };
 }
 
-/** claude 放后台命令输出的地方：它的 TMPDIR（claudeEnv 给的 $PREFIX/tmp）下的 claude-<uid> */
+/** agy 的 TMPDIR 下的后台命令输出（agyEnv 给的 $PREFIX/tmp）：agy-<uid> */
 export const claudeTmpRoot = () => path.join(PREFIX ? path.join(PREFIX, "tmp") : CFG.home, "claude-" + process.getuid());
 /** 彻底删掉一个会话时把它散在别处的数据一起清掉：删消息备份、file-history、子代理联络簿、档案、书签、会话模型、封签、脉络 */
 async function forgetSessionData(id, meta) {
   try { for (const f of fs.readdirSync(EDITS_DIR)) if (f.startsWith(id + ".")) fs.rmSync(path.join(EDITS_DIR, f), { force: true }); } catch {}
   try { fs.rmSync(path.join(CFG.home, ".claude", "file-history", id), { recursive: true, force: true }); } catch {}
-  // claude 按会话号另存的几处（2.1.311 实测）：环境快照、任务清单、调试日志，和 $TMPDIR/claude-<uid>/<项目>/<会话号> 下的后台命令输出（D10）
+  // Claude 时代按会话号另存的几处（~/.claude 下的环境快照、任务清单、调试日志）：agy 不写这些，
+  // 但从 cccodroid 迁移过来的机器上可能还留着，删会话时顺手清掉，别留着占地方。
   for (const rel of [["session-env", id], ["tasks", id], ["debug", id + ".txt"]]) { try { fs.rmSync(path.join(CFG.home, ".claude", ...rel), { recursive: true, force: true }); } catch {} }
   try {
     const t = claudeTmpRoot();
@@ -572,7 +545,7 @@ async function forgetSessionData(id, meta) {
   } catch {}
   const cwd = meta && meta.cwd;
   if (cwd) {
-    try { fs.rmSync(path.join(cwd, ".cccodroid", "agents", String(id).slice(0, 8)), { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(path.join(cwd, ".agycodroid", "agents", String(id).slice(0, 8)), { recursive: true, force: true }); } catch {}
     try { const { agentsDir } = await import("./agents.mjs"); fs.rmSync(agentsDir(cwd, id), { recursive: true, force: true }); } catch {}
   }
   forgetChild(id);
@@ -726,8 +699,8 @@ export async function exportSessions(ids) {
     list.push({ id, title: NAMES[id] || meta.title, renamed: !!NAMES[id], cwd: meta.cwd, mtime: fs.statSync(found.file).mtimeMs, ...(arch ? { archive: arch } : {}) });
   }
   if (!list.length) throw new Error(tz("没有可导出的会话"));
-  entries.unshift({ name: "manifest.json", data: JSON.stringify({ format: "cccodroid-sessions", version: 1, exportedAt: Date.now(), sessions: list }, null, 1) });
-  const base = process.env.CCAPP_SHARED && fs.existsSync(process.env.CCAPP_SHARED) ? process.env.CCAPP_SHARED : CFG.home;
+  entries.unshift({ name: "manifest.json", data: JSON.stringify({ format: "agycodroid-sessions", version: 1, exportedAt: Date.now(), sessions: list }, null, 1) });
+  const base = process.env.AGAPP_SHARED && fs.existsSync(process.env.AGAPP_SHARED) ? process.env.AGAPP_SHARED : CFG.home;
   const dir = path.join(base, "exports");
   fs.mkdirSync(dir, { recursive: true });
   if (fs.lstatSync(dir).isSymbolicLink()) throw new Error(tz("导出目录是个软链接，不往里写"));
@@ -772,7 +745,7 @@ export async function importSessions(file) {
     await zipExtract(file, man, tmp, { left: 16 << 20 });
     try { manifest = JSON.parse(fs.readFileSync(tmp, "utf8")); } finally { fs.rmSync(tmp, { force: true }); }
   } catch { throw new Error(tz("缺少 manifest.json，不是会话包")); }
-  if (manifest.format !== "cccodroid-sessions") throw new Error(tz("不是 cccodroid 会话包"));
+  if (manifest.format !== "agycodroid-sessions") throw new Error(tz("不是 agycodroid 会话包"));
   if (!Array.isArray(manifest.sessions) || manifest.sessions.length > 5000) throw new Error(tz("会话包里的会话太多了，分几次导入"));
   // 条目按名字、按会话目录先分好：以前每个会话都把全部条目扫一遍，会话多、条目多时卡住网关（11-03 审查 L-3）
   const byName = new Map(), bySide = new Map();

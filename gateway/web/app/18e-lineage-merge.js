@@ -56,7 +56,7 @@
       { label: t("从这里分叉"), icon: SM.chat, fn: () => linFork(id) },
       { label: t("补记来源…"), icon: SM.lineage, fn: () => linPickStart("extra", [], id) },
     ];
-    // 记在 ccapp-lineage.json 里的、按落款重建的都能撤（落款的那种撤掉后记一笔不再按落款连）
+    // 记在 agyapp-lineage.json 里的、按落款重建的都能撤（落款的那种撤掉后记一笔不再按落款连）
     const drops = LIN.g.edges.filter((e) => e.child === id && e.kind === "merge");
     if (drops.length) items.push("hr", ...drops.map((e) => ({ label: t("撤掉来源：{t}", { t: name(e.parent) }), icon: SM.trash, fn: async () => {
       if (!confirm(t("不再把「{a}」记成「{b}」的来源？会话本身不受影响。", { a: name(e.parent), b: (node && node.title || "").slice(0, 20) }))) return;

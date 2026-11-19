@@ -1,17 +1,17 @@
 ---
 name: local-model-mode
-description: 帮用户给 cccodroid 的「端侧小模型」配置自定义模式（~/.cccodroid/local-mode.json）：选工具、写系统提示、调 llama-server 参数，并在本机实测效果。用户说要配置/调教端侧模型、本地小模型自定义模式时使用。
+description: 帮用户给 agycodroid 的「端侧小模型」配置自定义模式（~/.agycodroid/local-mode.json）：选工具、写系统提示、调 llama-server 参数，并在本机实测效果。用户说要配置/调教端侧模型、本地小模型自定义模式时使用。
 ---
-<!-- cccodroid:managed —— 删掉这一行，应用升级时就不会覆盖你改过的版本 -->
+<!-- agycodroid:managed —— 删掉这一行，应用升级时就不会覆盖你改过的版本 -->
 
 # 端侧小模型的自定义模式
 
-cccodroid 用 llama.cpp 在手机上跑 GGUF 小模型，内置只有「聊天」模式（不给工具，提示约 70 token）。
+agycodroid 用 llama.cpp 在手机上跑 GGUF 小模型，内置只有「聊天」模式（不给工具，提示约 70 token）。
 「自定义模式」是留给用户自己折腾的插口：网关每条消息都会现读下面这个文件。
 
 ## 配置文件
 
-路径：`~/.cccodroid/local-mode.json`（`~` 是 cccodroid 的 home，即 `$HOME`）
+路径：`~/.agycodroid/local-mode.json`（`~` 是 agycodroid 的 home，即 `$HOME`）
 
 ```json
 {
@@ -52,7 +52,7 @@ GPU 驱动装了：-ngl 99（全部层放 GPU）；没装：-dev none。想强�
 
 ## 怎么测（不用开界面）
 
-模型目录：`/sdcard/cccodroid/models/`（扩展页 llama-cpp 组件下能一键下载 26 个常见模型，也能贴 .gguf 直链）。先在设置页发一条消息让网关拉起服务（或自己另起一个端口），然后：（网关起的服务要密钥，在 `~/.cache/llama-api-key`；自己另起的没加 `--api-key` 就随便填）
+模型目录：`/sdcard/agycodroid/models/`（扩展页 llama-cpp 组件下能一键下载 26 个常见模型，也能贴 .gguf 直链）。先在设置页发一条消息让网关拉起服务（或自己另起一个端口），然后：（网关起的服务要密钥，在 `~/.cache/llama-api-key`；自己另起的没加 `--api-key` 就随便填）
 
 ```sh
 cd 某个测试目录

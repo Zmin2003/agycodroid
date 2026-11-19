@@ -104,7 +104,7 @@
   (function () { try { const p = JSON.parse(localStorage.getItem("cc.navPins")); if (Array.isArray(p) && !localStorage.getItem("cc.navPinsV2")) { localStorage.setItem("cc.navPins", JSON.stringify([...new Set([...p.filter((k) => k !== "ext"), "projects", "sched"])])); } localStorage.setItem("cc.navPinsV2", "1"); } catch {} })();
   // 0.4.10 加了「脉络」：已有的固定项里补上它（只补一次，用户之后取消了不再加回来）
   (function () { try { const p = JSON.parse(localStorage.getItem("cc.navPins")); if (Array.isArray(p) && !localStorage.getItem("cc.navPinsV3") && !p.includes("lineage")) localStorage.setItem("cc.navPins", JSON.stringify([...p, "lineage"])); localStorage.setItem("cc.navPinsV3", "1"); } catch {} })();
-  // 0.4.20 起存进 ccapp-ui.json（uiGet / uiSet，见 01-core.js）；以前存在本地的 cc.navPins 照读
+  // 0.4.20 起存进 agyapp-ui.json（uiGet / uiSet，见 01-core.js）；以前存在本地的 cc.navPins 照读
   const navPins = () => { const p = uiGet("navPins", "cc.navPins"); if (Array.isArray(p)) return NAV_ITEMS.filter((k) => p.includes(k)); return ["sessions", "projects", "lineage", "sched"]; };
   document.addEventListener("cc:ui", (e) => { if (e.detail.key === "navPins") renderSideNav(); });
   var navEdit = false;
@@ -150,10 +150,10 @@
   });
   $("side-new").addEventListener("click", () => { closePage(); closeDrawer(); newConversation(); });
   $("side-acct").addEventListener("click", () => acctMenu());
-  // ── 头像与昵称：只存本机。没设昵称时用登录邮箱 @ 前面那段，再没有就叫 cccodroid ──
+  // ── 头像与昵称：只存本机。没设昵称时用登录邮箱 @ 前面那段，再没有就叫 agycodroid ──
   const PROF_KEY = "cc.profile";
   const profile = () => { try { return JSON.parse(localStorage.getItem(PROF_KEY)) || {}; } catch { return {}; } };
-  const profName = () => profile().name || (acctEmail ? acctEmail.split("@")[0] : "") || "cccodroid";
+  const profName = () => profile().name || (acctEmail ? acctEmail.split("@")[0] : "") || "agycodroid";
   function paintAv(el, p) {
     p = p || profile();
     const av = typeof p.av === "string" && /^data:image\/[a-z+.-]+;base64,[A-Za-z0-9+\/=]+$/.test(p.av) ? p.av : "";   // 只认本机存的 data: 图片
@@ -480,7 +480,7 @@
     ];
     // 官方账户：按实际登录状态给「退出登录」或「登录」（接口是官方账户 ≠ 已登录）；状态没问到时先不放
     if (st.keyMode === "login" && acctLogged) items.push("hr", { label: t("退出登录"), icon: SM.logout, danger: true, fn: async () => {
-      if (!confirm(t("退出这台设备上的 Claude 账户登录？"))) return;
+      if (!confirm(t("退出这台设备上的 Antigravity 账户登录？"))) return;
       const r = await post("/api/login/logout").catch((e) => ({ ok: false, output: e.message }));
       toast(r.ok ? t("已退出登录") : t("退出失败：{msg}", { msg: r.output || r.message || "" }), !r.ok);
       // 立刻换成「登录账户」，不用等下一次状态查询（0.6.9 审计 195-G.3）
@@ -495,7 +495,7 @@
 
   // ══ 项目与定时任务（照稿）════════════════════════════════════════
   // 项目 = 一个工作目录 + 自己的 CLAUDE.md + 默认型号/思考强度/权限；会话按 cwd 归到项目里（网关 gw/projects.mjs）
-  // 定时任务 = 到点在本机跑一次 Claude（网关 gw/sched.mjs，App 进程活着就准点；错过的下次打开按任务设置处理）
+  // 定时任务 = 到点在本机跑一次 Antigravity（网关 gw/sched.mjs，App 进程活着就准点；错过的下次打开按任务设置处理）
   // PJ / SC 在文件开头声明：启动早期 openSession → renderSessions 就会用到
   var pageTitleOv = "";
   var PI = {

@@ -1,24 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CFG, PATHS, PERM_MODES, log, tz } from "./config.mjs";
+import { CFG, PATHS, log, tz } from "./config.mjs";
 import { API_KEY, BUILTIN_PROVIDER, PROVIDER, PROVIDERS_CFG, applyProvider } from "./providers.mjs";
-import { beginBridgeSwitch, bridgeSwitching, setBridgeUpstream } from "./claude.mjs";
 import { MAX_PARALLEL_CAP, RUNS, maxParallel } from "./runs.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
-import { customRefresh } from "./custom.mjs";
 import { clearFollowingModels } from "./projects.mjs";
 import { clearFollowingTaskModels } from "./sched.mjs";
-import { idleDisarmAll, publishState, pump, setPermMode, strList } from "./queue.mjs";
+import { publishState, pump, setPermMode, strList } from "./queue.mjs";
 
 export { SETTINGS, saveSettings } from "./settings-store.mjs";
 import { SETTINGS, saveSettings, outputStyles } from "./settings-store.mjs";
-import { clampAutoCompact } from "./stream.mjs";
 
 // 设置回执只带认识的字段：设置文件能手改、能从旧版 / 分享的预置带过来，里面可能有类凭据字段。
 // 以前直接展开 SETTINGS，GET 和保存回执会把它们原样送回界面（FIND-052）。
-const VIEW_KEYS = ["model", "permissionMode", "guard", "addDirs", "outputStyle", "effort", "allowedTools", "disallowedTools",
-  "autoCompactWindow", "provider", "memGuard", "autoClean", "maxParallel", "staticCompat", "idleCompaction", "workIsland",
-  "localMode", "titleModel", "hiddenProviders", "permNotice", "permMigrated"];
+const VIEW_KEYS = ["model", "permissionMode", "agentMode", "addDirs", "outputStyle", "effort", "allowedTools", "disallowedTools",
+  "provider", "memGuard", "autoClean", "maxParallel", "workIsland",
+  "titleModel", "hiddenProviders", "permNotice", "permMigrated"];
 const settingsView = () => Object.fromEntries(VIEW_KEYS.filter((k) => k in SETTINGS).map((k) => [k, SETTINGS[k]]));
 
 // ── 路由：/api/settings ──
@@ -31,16 +28,16 @@ export async function routeSettings(req, res, u, p) {
   // 所以改完重启网关就生效。targetSdk ≥ 29 的包只能经加载器，选「直接」会被拒
   if (p === "/api/exec-mode") {
     const f = path.join(CFG.runtime, ".exec-mode");
-    const sdk = Number(process.env.CCAPP_TARGET_SDK || 0), must = sdk >= 29;
+    const sdk = Number(process.env.AGAPP_TARGET_SDK || 0), must = sdk >= 29;
     const pref = () => { try { return fs.readFileSync(f, "utf8").trim() || "auto"; } catch { return "auto"; } };
     if (req.method === "GET") {
       // 选了经加载器却没切过去，多半是 APK 里的 ld.so 和工具包里现装的不是同一份（Env.ldsoMatches）：把原因交给界面
       let ldso = "";
-      if (process.env.CCAPP_NATIVE_LIB) {
-        const a = path.join(process.env.CCAPP_NATIVE_LIB, "libldlinux.so"), b = path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1");
+      if (process.env.AGAPP_NATIVE_LIB) {
+        const a = path.join(process.env.AGAPP_NATIVE_LIB, "libldlinux.so"), b = path.join(PATHS.glibcLib, "ld-linux-aarch64.so.1");
         try { ldso = fs.readFileSync(a).equals(fs.readFileSync(b)) ? "same" : "differ"; } catch { ldso = "missing"; }
       }
-      return sendJson(res, 200, { pref: pref(), active: process.env.CCAPP_EXEC || "direct", must, targetSdk: sdk, ldso, pid: process.pid });   // pid：界面靠它认出重启后的新网关
+      return sendJson(res, 200, { pref: pref(), active: process.env.AGAPP_EXEC || "direct", must, targetSdk: sdk, ldso, pid: process.pid });   // pid：界面靠它认出重启后的新网关
     }
     if (req.method === "POST") {
       const b = JSON.parse((await readBody(req)) || "{}");
@@ -70,26 +67,32 @@ export async function routeSettings(req, res, u, p) {
         const want = b.provider ? String(b.provider) : null;
         const known = want && (want === BUILTIN_PROVIDER.id || (PROVIDERS_CFG && Object.hasOwn(PROVIDERS_CFG.providers, want)));   // constructor / __proto__ 别从原型上认出来（v0514 审查低-4）
         if (want && !known) return sendJson(res, 400, { error: "unknown provider", provider: want });
-        if (want !== PROVIDER.id && (RUNS.size || bridgeSwitching())) {
+        if (want !== PROVIDER.id && RUNS.size) {
           return sendJson(res, 409, {
             error: "busy",
-            message: tz("这一轮还在生成中，等它跑完再切厂商（切换会换掉正在用的密钥与模型）。"),
+            message: tz("这一轮还在生成中，等它跑完再切接口（切换会换掉正在用的密钥与模型）。"),
           });
         }
       }
       for (const k of ["model", "outputStyle", "effort", "titleModel"]) {
         // 只收字符串：塞个对象进来会落盘，之后每一轮都在 .trim() / spawn 那里抛错，重启也好不了（审查 10-29 低7）
-        // 长度也限：model 原样进 claude 的命令行，单个参数过 128 KB 就 E2BIG，每一轮都起不来（v0514 审查低-3）
+        // 长度也限：model 原样进 agy 的命令行，单个参数过 128 KB 就 E2BIG，每一轮都起不来（v0514 审查低-3）
         if (k in b) { if (b[k] != null && (typeof b[k] !== "string" || b[k].length > 200 || /[\x00-\x1f\x7f]/.test(b[k]))) return sendJson(res, 400, { error: `${k} must be a string (max 200)` }); }
       }
-      // 输出风格只收列出来的那些（内置两种 + 用户目录里的）：直发请求也选不了工作区里别人放的文件
+      // 输出风格只收列出来的那些（内置两种）
       if (b.outputStyle && !outputStyles().some((o) => o.id === b.outputStyle)) return sendJson(res, 400, { error: "unknown outputStyle" });
       for (const k of ["model", "outputStyle", "effort", "titleModel"]) if (k in b) SETTINGS[k] = b[k] || null;
-      // 权限模式只收 claude 认的值；正在跑的那一轮也当场切过去
+      // 权限模式只收 agy 认的值（toolPermission）；正在跑的那一轮也当场切过去
       // 落盘统一放到本路由末尾的一次 saveSettings()：以前 setPermMode 在这里就先写一次盘，后面任何校验失败都会留下半套设置（FIND-051）
-      if ("permissionMode" in b && b.permissionMode !== SETTINGS.permissionMode) setPermMode(String(b.permissionMode || "default"), { persist: false });
+      if ("permissionMode" in b && b.permissionMode !== SETTINGS.permissionMode) setPermMode(String(b.permissionMode || "request-review"), { persist: false });
+      // agentMode 只收 agy 认的值："" / accept-edits / auto / plan
+      if ("agentMode" in b) {
+        const a = String(b.agentMode || "");
+        if (!["", "accept-edits", "auto", "plan"].includes(a)) return sendJson(res, 400, { error: "bad agentMode" });
+        SETTINGS.agentMode = a;
+      }
       if (b.permNotice === false) SETTINGS.permNotice = false;
-      // 条数、长度都有上限：每一轮都要拼进 claude 的命令行，塞几万条会 E2BIG，claude 再也起不来、重启也好不了（审查 v0513b 低-3）
+      // 条数、长度都有上限：每一轮都要拼进 agy 的 settings.json，塞几万条会把文件撑爆（审查 v0513b 低-3）
       if (Array.isArray(b.addDirs)) SETTINGS.addDirs = strList(b.addDirs, 64, 4096, 16384);
       // 正在用的那家不许藏（界面已经锁了，这里再挡一道直发的请求）
       if (Array.isArray(b.hiddenProviders)) SETTINGS.hiddenProviders = strList(b.hiddenProviders, 64, 64).filter((id) => id !== PROVIDER.id);
@@ -105,9 +108,6 @@ export async function routeSettings(req, res, u, p) {
         };
       }
 
-      if ("staticCompat" in b) { SETTINGS.staticCompat = !!b.staticCompat; try { customRefresh(); } catch {} }   // 下一轮生效；自定义组件的入口立刻跟着改
-      // 敏感操作再确认没有关闭口子：设置接口不提供全局关掉这一层的能力，要放行走确认卡片逐次允许
-      if ("idleCompaction" in b) { SETTINGS.idleCompaction = !!b.idleCompaction; if (!SETTINGS.idleCompaction) idleDisarmAll(); }
       if ("workIsland" in b) SETTINGS.workIsland = !!b.workIsland;
       // 存储的自动清理（D10）：开关 + 频次（每天 / 每周 / 每月）
       if (b.autoClean && typeof b.autoClean === "object") {
@@ -124,35 +124,24 @@ export async function routeSettings(req, res, u, p) {
         setImmediate(() => { publishState(); pump(); });   // 调大了马上放行排着的
       }
 
-      // 自动压缩窗口：数字就设，空/0 就清除（交回给 claude 自己决定）
-      if ("autoCompactWindow" in b) {
-        const n = Number(b.autoCompactWindow);
-        SETTINGS.autoCompactWindow = Number.isFinite(n) && n > 0 ? clampAutoCompact(n) : null;   // 存 claude 实际会用的值（195-O.2）
-      }
-
-      // ── 换厂商 ──
-      //  正在生成时**不许切**：此刻 claude 进程肚子里还揣着上一家的密钥和模型名，
-      //  它后续每一轮工具调用都要回网关 —— 桥一换上游，它就拿着 A 家的钥匙去敲 B 家的门。
-      //  以前没这道闸，"连发消息 + 切厂商"叠在一起就是一场 401 暴雨。
+      // ── 换接口 ──
+      //  正在生成时**不许切**：此刻 agy 进程肚子里还揣着上一家的密钥和模型名。
+      //  以前没这道闸，"连发消息 + 切接口"叠在一起就是一场 401 暴雨。
+      //  没有桥了：agy 直连 Google / Gemini，换接口就是换 SETTINGS.provider + applyProvider()，下一轮起生效。
       if ("provider" in b) {
         const want = b.provider ? String(b.provider) : null;
-        // 未知厂商与「忙时不许切」在开头预校验过了，这里只剩真正要切的
+        // 未知接口与「忙时不许切」在开头预校验过了，这里只剩真正要切的
         if (want !== PROVIDER.id) {
-          const switched = beginBridgeSwitch();
-          try {
-            SETTINGS.provider = want;
-            SETTINGS.model = null;          // 别把上一家的模型名带过去
-            // 自动起名的型号同理：界面上还补进新清单显示选中，autotitle 却因为型号不在这一家的清单里静默不用
-            // （0.6.9 审计 195-E.6）。清掉后回落到本轮模型，用户要就重新选
-            SETTINGS.titleModel = null;
-            // 跟着全局接口走的项目、定时任务也一样（195-E.1：以前它们留着旧厂商的型号，在新接口上回落或 400）
-            const np = clearFollowingModels(), nt = clearFollowingTaskModels();
-            if (np || nt) log(`换接口：清掉 ${np} 个项目、${nt} 个定时任务里旧接口的模型名`);
-            applyProvider();
-            // 上游热切 —— 不重启桥，也就没有断流窗口
-            await setBridgeUpstream(CFG.upstream);
-          } finally { switched(); }
-          log(`已切换厂商 → ${PROVIDER.id}  上游 ${CFG.upstream}  ` +
+          SETTINGS.provider = want;
+          SETTINGS.model = null;          // 别把上一家的模型名带过去
+          // 自动起名的型号同理：界面上还补进新清单显示选中，autotitle 却因为型号不在这一家的清单里静默不用
+          // （0.6.9 审计 195-E.6）。清掉后回落到本轮模型，用户要就重新选
+          SETTINGS.titleModel = null;
+          // 跟着全局接口走的项目、定时任务也一样（195-E.1：以前它们留着旧接口的型号，在新接口上回落或 400）
+          const np = clearFollowingModels(), nt = clearFollowingTaskModels();
+          if (np || nt) log(`换接口：清掉 ${np} 个项目、${nt} 个定时任务里旧接口的模型名`);
+          applyProvider();
+          log(`已切换接口 → ${PROVIDER.id}  ` +
               `${API_KEY ? "有密钥" : (PROVIDER.login ? "走登录态" : "无密钥")}`);
         }
       }
@@ -167,8 +156,8 @@ export async function routeSettings(req, res, u, p) {
       }
       if (!saveSettings())
         return sendJson(res, 500, { error: tz("设置没能写入磁盘；本次运行内可能仍按新值生效，重启后恢复旧值（详情见网关日志）") });
-      log(`设置已更新 provider=${PROVIDER.id} model=${SETTINGS.model || "(默认)"} effort=${SETTINGS.effort} autoCompact=${SETTINGS.autoCompactWindow || "(默认)"} workIsland=${SETTINGS.workIsland}`);
-      return sendJson(res, 200, { ok: true, settings: settingsView(), provider: PROVIDER.id, upstream: CFG.upstream });
+      log(`设置已更新 provider=${PROVIDER.id} model=${SETTINGS.model || "(默认)"} effort=${SETTINGS.effort} workIsland=${SETTINGS.workIsland}`);
+      return sendJson(res, 200, { ok: true, settings: settingsView(), provider: PROVIDER.id });
     }
   }
   return NEXT;

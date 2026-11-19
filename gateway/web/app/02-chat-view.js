@@ -1,5 +1,5 @@
   // ── 对话视图 ──────────────────────────────────────────────────────
-  //  v3：照 Claude Desktop 的路子 —— 生成归网关管，界面只是订阅者。
+  //  v3：照 Antigravity Desktop 的路子 —— 生成归网关管，界面只是订阅者。
   //   · 一条 EventSource（/api/events）收所有进度；断线自动续传，续不上就整轮重放
   //   · 发消息只是 POST 一下拿个号，排队也在网关那边（刷新不丢、两个窗口看到同一份）
   //   · 历史从文件尾倒着按页取，往上滚再取更早的
@@ -54,7 +54,7 @@
     title: "",
     goal: null,          // 本会话的 /goal 状态（网关从会话记录里推出来的，见 goalStateOf）
     goalHide: 0,         // 点 ✕ 收起的那条达成 / 失败记录的时间戳
-    tasks: null,         // 本会话的任务清单（TaskCreate / TaskUpdate，网关读 ~/.claude/tasks 推过来）
+    tasks: null,         // 本会话的任务清单（网关推过来）
     tasksHide: "",       // 点 ✕ 收起时这份清单的编号集合；换了一份清单（增删了项）才重新露出来
   };
   // run / queue 只算当前视图的（本会话正在跑的那一轮、本会话排着的）；runs / queueAll 是网关上的全部
@@ -110,7 +110,7 @@
   function mkMsg(role, label, parent) {
     const el = document.createElement("div");
     el.className = `msg ${role}`;
-    const name = label || (role === "user" ? t("你") : role === "sys" ? t("命令") : "Claude");
+    const name = label || (role === "user" ? t("你") : role === "sys" ? t("命令") : "Antigravity");
     el.innerHTML = `<div class="who"><span class="dot"></span>${esc(name)}</div><div class="bubble" dir="auto"></div>`;
     (parent || liveEl).appendChild(el);
     return el.querySelector(".bubble");
@@ -159,7 +159,7 @@
     mark: '<path d="M7 3.5h10a1 1 0 0 1 1 1V20l-6-4.2L6 20V4.5a1 1 0 0 1 1-1z"/>',
     del: '<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/>',
   };
-  // 消息底下按钮行里藏哪几个（0.4.20，设置 → 通用 → 消息下面的按钮；存 ccapp-ui.json 的 msgActs = { user: [...], bot: [...] }）。
+  // 消息底下按钮行里藏哪几个（0.4.20，设置 → 通用 → 消息下面的按钮；存 agyapp-ui.json 的 msgActs = { user: [...], bot: [...] }）。
   // 只用一段样式藏起来，不改渲染：长对话里成百上千个按钮行不用重画
   const ACTS = { user: ["copy", "resend", "rewind", "mark", "del"], bot: ["copy", "share", "fork", "mark", "del"] };
   function msgActsHidden() {
@@ -196,10 +196,10 @@
   const uiI = (n, cls) => `<svg class="ui-i${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true">${UI_I[n]}</svg>`;
   const userTextOf = new WeakMap();   // 用户气泡 → 原文（分叉时拿它在 transcript 里认出是哪一轮）
   const actBtn = (a, label) => `<button data-a="${a}" title="${esc(label)}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24">${ICONS[a]}</svg></button>`;
-  // 发送时附件以「@路径」接在末尾（claude 靠它读文件）。气泡里不露这串前缀：末尾那段纯 @路径 拆出来，
+  // 发送时附件以「@路径」接在末尾（agy 靠它读文件）。气泡里不露这串前缀：末尾那段纯 @路径 拆出来，
   // 图片画成缩略图、别的文件画成小卡片；复制 / 重发仍用原文
   const IMG_RE = /\.(png|jpe?g|gif|webp|bmp|avif|heic)$/i;
-  // 大附件（超过 BIG_ATT）不写成 @路径（claude 会整份读进上下文），写成「[附件：路径 · 大小，…]」只给路径，
+  // 大附件（超过 BIG_ATT）不写成 @路径（agy 会整份读进上下文），写成「[附件：路径 · 大小，…]」只给路径，
   // 气泡里照样画成文件卡片（不出缩略图）
   //   认准后面那段固定文字（05-composer.js attRef），路径按最短匹配取：文件名里带「 · 」「]」也不截错
   const BIG_REF = "\\[附件：(\\/[^\\n]+?) · [^\\n·，\\]]+，文件较大没有直接读入，需要时按路径读取\\]";
@@ -708,7 +708,7 @@
         if (b) b.open();
         return !!b;
       },
-      // 新版 claude 跑得久的普通命令（Bash 等）也会发 task_progress / task_notification，
+      // agy 跑得久的普通命令也会发 task_progress / task_notification，
       // id 是那张工具卡自己的：只有子代理卡才有「过程」可放，别的卡只更新状态，不挂空的「子代理过程」
       subText(text) {
         if (disposed || !isAgent) return;

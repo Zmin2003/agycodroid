@@ -8,11 +8,11 @@ import crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { CFG, PATHS } from "../gw/config.mjs";
 
-const BM_FILE = path.join(CFG.home, "ccapp-bookmarks.json");
+const BM_FILE = path.join(CFG.home, "agyapp-bookmarks.json");
 const sid = crypto.randomUUID();
 const item = { id: "b1", sid, uuid: crypto.randomUUID(), off: 0, para: 0, role: "assistant", excerpt: "旧", at: 1 };
 fs.writeFileSync(BM_FILE, JSON.stringify([item]));
-process.env.CCAPP_TEST = "1";
+process.env.AGAPP_TEST = "1";
 
 const { routeBookmarks, forgetBookmarks } = await import("../gw/bookmarks.mjs");
 

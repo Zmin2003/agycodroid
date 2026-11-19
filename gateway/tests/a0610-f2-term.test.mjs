@@ -61,7 +61,7 @@ test("H.4 网关不认识这个终端时，输出流以 exit 收尾（前端会�
 test("200-4.04 关闭终端时能按环境标记找到 setsid 跑掉的子孙", async () => {
   const id = "zz-f2-" + Date.now().toString(36);
   // setsid 的替代：spawn 时 detached 即新进程组 / 会话
-  const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore", env: { ...process.env, CCAPP_TERM_ID: id } });
+  const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore", env: { ...process.env, AGAPP_TERM_ID: id } });
   await new Promise((r) => setTimeout(r, 150));
   assert.equal(_termForTest.killTermProcs(id) >= 1, true);
   await new Promise((r) => setTimeout(r, 150));

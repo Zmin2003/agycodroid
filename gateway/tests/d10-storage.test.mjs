@@ -23,7 +23,7 @@ const prevAuto = SETTINGS.autoClean;
 after(() => {
   SETTINGS.autoClean = prevAuto;
   for (const d of [path.join(TMP, "d10"), CT, H(".npm"), H(".cache", "gh"), H(".cache", "pip"), H(".claude", "debug"), H(".claude", "backups"),
-    H(".claude", "shell-snapshots"), H(".cache", "claude-cli-nodejs"), H("d10-out"), H("ccapp-storage.json")]) fs.rmSync(d, { recursive: true, force: true });
+    H(".claude", "shell-snapshots"), H(".cache", "claude-cli-nodejs"), H("d10-out"), H("agyapp-storage.json")]) fs.rmSync(d, { recursive: true, force: true });
   for (const f of made) fs.rmSync(f, { force: true });
 });
 
@@ -38,7 +38,7 @@ test("rmChecked：只删允许目录里面的；目录本身、外面的、软�
   assert.equal(rmChecked(path.join(root, "esc", "keep.txt"), [root]).why, "outside", "经软链进到外面的不删");
   assert.equal(rmChecked(path.join(root, "esc"), [root]).ok, true, "软链本身可以删");
   assert.ok(ex(outside), "软链指向的东西还在");
-  const key = put(path.join(root, "ccapp-key-x"));
+  const key = put(path.join(root, "agyapp-key-x"));
   assert.equal(rmChecked(key, [root]).why, "protected");
   assert.equal(rmChecked(H(".ssh"), [CFG.home]).why, "protected");
   assert.equal(rmChecked(inside, [root]).ok, true);
@@ -92,7 +92,7 @@ test("缓存：写死的目录里的文件删、目录结构留；10 分钟内�
   const npmOld = put(H(".npm", "_cacache", "content-v2", "aa", "f"), "x".repeat(50), 2);
   const npmNow = put(H(".npm", "_cacache", "tmp", "now"), "x");
   const pip = put(H(".cache", "pip", "http", "a"), "x", 1);
-  const key = put(H(".cache", "ccapp-key-d10"), "secret", 90);
+  const key = put(H(".cache", "agyapp-key-d10"), "secret", 90);
   const r = await cleanStorage(["cache"]);
   assert.ok(!ex(npmOld) && ex(path.dirname(npmOld)), "文件删了，目录留着");
   assert.ok(ex(npmNow), "刚写的不删");
@@ -109,7 +109,7 @@ test("扫描：六类都有；会话按大小列；临时文件列出哪些按�
   assert.ok(row && row.auto && row.bytes >= 4096);
   assert.ok(Array.isArray(s.sessions.top));
   assert.ok(typeof s.entries.trash.count === "number");
-  assert.ok(fs.existsSync(H("ccapp-storage.json")), "结果存盘");
+  assert.ok(fs.existsSync(H("agyapp-storage.json")), "结果存盘");
 });
 
 test("自动清理：默认开、每周；关了不跑；没到期不跑；有在跑的不跑；到期空闲时跑并记下时间", async () => {
@@ -127,6 +127,6 @@ test("自动清理：默认开、每周；关了不跑；没到期不跑；有�
   const r = await autoCleanTick(t);
   assert.ok(r && r.auto);
   assert.equal(await autoCleanTick(t + AUTO_EVERY.day - 1000), null, "刚跑过、没到期");
-  const st = JSON.parse(fs.readFileSync(H("ccapp-storage.json"), "utf8"));
+  const st = JSON.parse(fs.readFileSync(H("agyapp-storage.json"), "utf8"));
   assert.ok(st.lastAuto > 0 && st.history.some((h) => h.auto));
 });

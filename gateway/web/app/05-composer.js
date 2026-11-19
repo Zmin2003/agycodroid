@@ -1,9 +1,9 @@
   // ── 发送 ──────────────────────────────────────────────────────────
-  // 附件大小门限（与 App 壳 MainActivity.BIG_ATTACH 同值）：超过的不写成 @路径 —— claude 见到 @路径 会把整份读进上下文，
+  // 附件大小门限（与 App 壳 MainActivity.BIG_ATTACH 同值）：超过的不写成 @路径 —— agy 见到 @路径 会把整份读进上下文，
   // 几百 MB 的东西读不进还白占一轮；只写路径和大小，用到时让它自己按路径读（解压、抽样、跑脚本）。这句落款各语言都写中文，气泡按它认（02 splitRefs）
   const BIG_ATT = 20 << 20;
   const isBigAtt = (a) => !!a.big || a.size > BIG_ATT;
-  // 带空白的路径要用引号包起来：@ 提及按空白截断，不包的话 claude 只拿到前半截（0.6.9 审计 195-D.2）
+  // 带空白的路径要用引号包起来：@ 提及按空白截断，不包的话 agy 只拿到前半截（0.6.9 审计 195-D.2）
   // 引号里要转义完整：反斜杠不转义会把后面的字吃掉，换行 / 回车 / 制表符留在引号里会把这一行拆开（稳定性报告 FIND-028）
   // 转义规则与 02-chat-view.js splitRefs 的反解析一一对应
   const attAt = (p) => (/[\s"\\]/.test(p) ? '@"' + p
@@ -22,8 +22,8 @@
     // 否则这些附件不在本条消息里、下一条又悄悄带上（稳定性报告 FIND-027）
     if (fromInput && pickCopy) return void toast(t("还有 {n} 个文件正在上传，传完再发送。", { n: pickCopy }), true);
     const typed = (fromInput ? inputEl.value : forcedText).trim();
-    // 附件只在附件栏里显示，发出时才把 @路径 接到末尾（claude 靠它读文件）；手动写过的不重复
-    // 大附件只给路径（见 attRef），Claude 用到时自己按路径读
+    // 附件只在附件栏里显示，发出时才把 @路径 接到末尾（agy 靠它读文件）；手动写过的不重复
+    // 大附件只给路径（见 attRef），Antigravity 用到时自己按路径读
     const refs = fromInput ? state.attachments.map(attRef).filter((r) => !typed.includes(r)) : [];
     const text = typed && refs.length ? typed + "\n\n" + refs.join(" ") : typed || refs.join(" ");
     if (!text) return;
@@ -31,15 +31,15 @@
     hidePopup();
     backToLatest();                     // 正看着中间某一章：先回到最新，新消息才看得见
 
-    // 纯界面命令：不惊动 claude
+    // 纯界面命令：不惊动 agy
     if (typed === "/clear" || typed === "/new") {
       if (fromInput) { inputEl.value = ""; autoGrow(); clearAttachments(true); }
       newConversation(t("已清空上下文，开始新会话"));
       return;
     }
-    // 下面两个命令按用户打的字认（typed），不看接了附件引用的 text：带着附件时 /rename 会把 @路径 写进标题、
-    // /login console 会被当成网页登录（11-04 报告 三）。附件留在附件栏里，下一条照常带上
-    // 官方账户登录：OAuth 全程由 claude 自己完成，网关只转递授权页地址；授权码不经手（要贴码就在终端里贴给 claude）
+    // 下面两个命令按用户打的字认（typed），不看接了附件引用的 text：带着附件时 /rename 会把 @路径 写进标题。
+    // 附件留在附件栏里，下一条照常带上
+    // Google 账户登录：OAuth 全程由 agy 自己完成，网关只转递授权页地址；授权码不经手（要贴码就在终端里贴给 agy）
     if (typed === "/login" || typed.startsWith("/login ")) {
       if (fromInput) { inputEl.value = ""; autoGrow(); }
       const arg = typed.slice(6).trim();
@@ -48,10 +48,10 @@
       });
       try {
         addNote(t("正在启动登录…"));
-        const j = await post("/api/login/start", { method: arg === "console" ? "console" : "claudeai" });
+        const j = await post("/api/login/start", { method: arg === "apikey" ? "apikey" : "google" });
         if (!j.ok) throw new Error(j.message || t("启动登录失败"));
         const bubble = addSysMsg(t("在浏览器打开下面的地址完成授权，授权后浏览器跳回本机，登录自动完成：") + `\n\n[${j.url}](${j.url})\n\n` +
-          t("浏览器跳不回来（比如在别的设备上授权）：打开终端运行 {cmd}，把页面给出的授权码直接贴给 claude。", { cmd: "`claude auth login`" }), "/login");
+          t("浏览器跳不回来（比如在别的设备上授权）：在终端里运行 agy，按提示完成认证，把页面给出的授权码直接贴给 agy。"), "/login");
         // OAuth 在应用内 WebView 里会被 Google 等拦：和设置页登录卡一样交给系统浏览器（0.6.9 审计 195-G.1）
         openExternal(j.url);
         bubble.querySelectorAll("a.weblink").forEach((a) => a.addEventListener("click", (e) => {
@@ -136,7 +136,7 @@
       view.pendingMerge = null;
       // 斜杠命令只在空闲时插进去，送进去就画出来了（gw/run.mjs 的 run.inject），不用再提示
       if (r.duplicate) { /* 网关早就收过这条（重发）：别把「已排队」再说一遍 */ }
-      else if (r.injected) { if (!text.trim().startsWith("/")) toast(t("已插话：当前这一步做完，Claude 就会看到")); }
+      else if (r.injected) { if (!text.trim().startsWith("/")) toast(t("已插话：当前这一步做完，Antigravity 就会看到")); }
       else if (!r.started) toast(mode === "inject" ? t("这一轮正在收尾，插不进去 —— 已排到最前，马上发出")
         : srv.run && !srv.run.idle ? t("已排队，这一轮结束后发出") : srv.run?.sealed ? t("已排队：后台任务还在跑，这一轮收不进新消息了。点「立即发送」会停掉后台任务再发") : atCap() ? t("同时在跑的会话已到上限，已排队，有空位就发出") : t("已排队：这个会话的上一轮还没完全结束，结束后发出"));
     } catch (e) {
@@ -188,7 +188,7 @@
   let lastSendAt = 0;
   let renameBusy = "";   // 正在发的那条 /rename 原文：连点发送时挡掉重复请求（FIND-012）
 
-  /** 插话：不打断，把输入框里的字递进正在跑的这一轮（claude 在当前这一步结束后就会看到） */
+  /** 插话：不打断，把输入框里的字递进正在跑的这一轮（agy 在当前这一步结束后就会看到） */
   function interjectNow() {
     if (!hasDraft()) return;
     send(null, "inject");
@@ -279,7 +279,8 @@
     dropReq("filepal");   // 在途的 @ 文件请求作废：整段换成 /xx 时它迟到会把命令面板盖成文件面板（审查 #52 A-CHAT-003）
     const caps = state.caps;
     // 常用指令（自己存的 commands/*.md）排在最前；说明是用户自己写的，不过翻译。没在筛选时顶上放一个「管理常用指令…」
-    const all = (caps?.slashCommands || []).filter((c) => !filter || c.name.includes(filter));
+    const NOT_AGY_CMDS = new Set(["compact", "context", "cost", "model", "effort", "autocompact"]);
+    const all = (caps?.slashCommands || []).filter((c) => !NOT_AGY_CMDS.has(c.name) && (!filter || c.name.includes(filter)));
     const cmds = all.filter((c) => c.custom).concat(all.filter((c) => !c.custom));
     const items = cmds.map((c) => ({ label: "/" + c.name, desc: c.custom ? [c.desc, c.hint].filter(Boolean).join(" · ") : c.desc ? t(c.desc) : "", cat: c.cat && t(c.cat), raw: c.name }));
     if (!filter) items.unshift({ label: t("管理常用指令…"), desc: t("把常发的长提示存成 /指令"), cat: t("常用指令"), raw: "", manage: true });
@@ -515,7 +516,7 @@
   // 别的应用分享进来、壳拷进 uploads/ 的文件：不要了就让壳删掉那份，发出去了就让壳从清单里划掉（0.6.9 审计 199-1-05）。
   // 壳只认它自己拷的那些，别的路径（上传、@ 引用、大文件原路径）传过去也什么都不做
   function shareDone(list, drop) {
-    const A = window.CCApp;
+    const A = window.AGApp;
     if (!A || typeof A.shareDone !== "function") return;
     for (const a of list || []) if (a && typeof a.path === "string") try { A.shareDone(a.path, !!drop); } catch {}
   }
@@ -717,7 +718,7 @@
   function attachStat(ep, key, p) {
     api("/api/file/stat?path=" + encodeURIComponent(p)).then((r) => attSized(ep, key, p, Number(r.size) || 0), () => {});
   }
-  // 安卓壳递进来的东西：别的应用「分享到 Claude CLI」，或系统选择器的结果
+  // 安卓壳递进来的东西：别的应用「分享到 Antigravity CLI」，或系统选择器的结果
   function attachPath(p, from) {
     if (!p) return;
     // 壳偶尔会为同一条路径重复发事件；重复的珠子删一个会把壳拷的那份临时文件删掉，另一个就悬空了（稳定性报告 FIND-033）。
@@ -748,34 +749,34 @@
   function pickObj(v) {
     try { const o = JSON.parse(v); return o && typeof o === "object" ? o : null; } catch { return null; }
   }
-  window.addEventListener("ccapp-attach-pick-start", (e) => {
+  window.addEventListener("agyapp-attach-pick-start", (e) => {
     const id = String(e.detail?.value || "");
     if (id) pickBatch.set(id, pickFrom);
   });
-  window.addEventListener("ccapp-attach-copy-start", (e) => {
+  window.addEventListener("agyapp-attach-copy-start", (e) => {
     const o = pickObj(e.detail?.value);
     pickCopy += Math.max(1, Number(o ? o.n : e.detail?.value) || 0);
   });
-  window.addEventListener("ccapp-attach-pick-done", (e) => {
+  window.addEventListener("agyapp-attach-pick-done", (e) => {
     const o = pickObj(e.detail?.value);
     pickCopy = Math.max(0, pickCopy - Math.max(0, Number(o ? o.n : e.detail?.value) || 0));
     if (o) pickBatch.delete(String(o.id ?? ""));
     pickFrom = null;
   });
-  window.addEventListener("ccapp-attach-copy-done", (e) => {
+  window.addEventListener("agyapp-attach-copy-done", (e) => {
     // 后台收完了，把 FIND-027 的计数放掉（以前只发不收，大文件收完也一直挡着发送）
     const o = pickObj(e.detail?.value);
     pickCopy = Math.max(0, pickCopy - Math.max(0, Number(o ? o.n : e.detail?.value) || 0));
     if (o) pickBatch.delete(String(o.id ?? ""));
   });
-  window.addEventListener("ccapp-attach-pick-cancel", (e) => {
+  window.addEventListener("agyapp-attach-pick-cancel", (e) => {
     const o = pickObj(e.detail?.value);
     pickFrom = null;
     if (o) pickBatch.delete(String(o.id ?? ""));
     else pickCopy = 0;   // 旧格式没有批次号：沿用「取消即全部作废」；新格式只作废这一批，别的批次还在收
   });
-  window.addEventListener("ccapp-attach", (e) => attachPath(e.detail?.value, null));
-  window.addEventListener("ccapp-attach-pick", (e) => {
+  window.addEventListener("agyapp-attach", (e) => attachPath(e.detail?.value, null));
+  window.addEventListener("agyapp-attach-pick", (e) => {
     const o = pickObj(e.detail?.value);
     if (o) {
       if (o.path) attachPath(o.path, pickBatch.get(String(o.id ?? "")) || null);
@@ -783,7 +784,7 @@
     }
     attachPath(e.detail?.value, pickFrom);
   });
-  window.addEventListener("ccapp-insert", (e) => {
+  window.addEventListener("agyapp-insert", (e) => {
     const v = e.detail?.value;      // 别叫 t：会遮住翻译函数，下面那句提示就抛「t is not a function」
     if (!v) return;
     insertAtCursor(v);

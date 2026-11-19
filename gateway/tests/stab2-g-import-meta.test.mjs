@@ -13,7 +13,7 @@ import { NAMES, saveNames } from "../gw/sessions.mjs";
 import { archiveDb, archiveImport, saveArchive } from "../gw/archive-store.mjs";
 import * as ops from "../gw/sessionops.mjs";
 
-const ARCHIVE = path.join(CFG.home, "ccapp-archive.json");
+const ARCHIVE = path.join(CFG.home, "agyapp-archive.json");
 const dirs = [];
 after(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
 
@@ -27,7 +27,7 @@ async function packWorkshop(tag, title) {
   dirs.push(dir);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const sid = UUID(), cwd = path.join(process.env.CCAPP_TMP, "stab2-g-import-ws-" + tag);
+  const sid = UUID(), cwd = path.join(process.env.AGAPP_TMP, "stab2-g-import-ws-" + tag);
   fs.mkdirSync(cwd, { recursive: true }); dirs.push(cwd);
   fs.writeFileSync(path.join(dir, sid + ".jsonl"),
     line({ type: "user", sessionId: sid, uuid: UUID(), parentUuid: null, cwd, timestamp: new Date().toISOString(), message: { role: "user", content: "包里的提问" } }) +

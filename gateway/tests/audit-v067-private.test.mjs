@@ -45,8 +45,8 @@ test("封口的 @ 导入不展开凭据文件", () => {
   const cwd = path.join(CFG.home, "workspace", "proj");
   fs.mkdirSync(cwd, { recursive: true });
   const secret = "sk-SECRET-PRIVATE-067";
-  fs.writeFileSync(path.join(CFG.home, "ccapp-providers.json"), JSON.stringify({ providers: [{ apiKey: secret }] }));
-  fs.writeFileSync(path.join(cwd, "CLAUDE.md"), "@~/ccapp-providers.json\n");
+  fs.writeFileSync(path.join(CFG.home, "agyapp-providers.json"), JSON.stringify({ providers: [{ apiKey: secret }] }));
+  fs.writeFileSync(path.join(cwd, "CLAUDE.md"), "@~/agyapp-providers.json\n");
   try {
     const prep = sealPrepare({ cwd, runId: "test-private" });
     const i = prep.args.indexOf("--append-system-prompt-file");
@@ -55,7 +55,7 @@ test("封口的 @ 导入不展开凭据文件", () => {
     assert.equal(text.includes(secret), false, "凭据不能进系统提示");
   } finally {
     fs.rmSync(path.join(cwd, "CLAUDE.md"), { force: true });
-    fs.rmSync(path.join(CFG.home, "ccapp-providers.json"), { force: true });
+    fs.rmSync(path.join(CFG.home, "agyapp-providers.json"), { force: true });
     _setSealed(false);   // 开发版默认不封口
   }
 });
@@ -80,16 +80,12 @@ test("封口：CLAUDE.md 是软链时不读它指向的凭据", () => {
   }
 });
 
-test("终端封口：-p mcp、-- 都不能让封口旗标失效", () => {
+test("终端封口（agy）：sealArgv 不拼旗标——agy 没有 --setting-sources 这类开关，封口在 writeAgySettings 里做", () => {
   _setSealed(true);
   try {
-  const a = sealArgv(["-p", "mcp"]);
-  assert.ok(a.includes("--setting-sources"));
-  const b = sealArgv(["-p", "--", "hello"]);
-  assert.ok(b.indexOf("--setting-sources") < b.indexOf("--"));
-  const c = sealArgv(["--", "mcp"]);
-  assert.ok(c.indexOf("--setting-sources") < c.indexOf("--"));
-  // --opt=value 也要识别成管理命令
-  assert.deepEqual(sealArgv(["--settings={}", "mcp", "list"]), ["--settings={}", "mcp", "list"]);
+    assert.deepEqual(sealArgv(["-p", "mcp"]), ["-p", "mcp"]);
+    assert.deepEqual(sealArgv(["-p", "--", "hello"]), ["-p", "--", "hello"]);
+    assert.deepEqual(sealArgv(["--", "mcp"]), ["--", "mcp"]);
+    assert.deepEqual(sealArgv(["--settings={}", "mcp", "list"]), ["--settings={}", "mcp", "list"]);
   } finally { _setSealed(false); }
 });

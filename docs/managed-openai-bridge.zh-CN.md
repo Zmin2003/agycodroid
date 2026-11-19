@@ -4,7 +4,7 @@
 
 ## v1 契约
 
-组件由用户配置完成后，原子写入 `HOME/.cccodroid/services/openai-bridge.json`：
+组件由用户配置完成后，原子写入 `HOME/.agycodroid/services/openai-bridge.json`：
 
 ```json
 {

@@ -9,7 +9,7 @@ import http from "node:http";
 import { PREFIX } from "../gw/config.mjs";
 
 // 这条测试要真走到 compInstall 里（索引不签名，靠测试开关放行）
-process.env.CCAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
+process.env.AGAPP_COMPONENTS_ALLOW_UNSIGNED = "1";
 const COMP_DIR = path.join(path.dirname(PREFIX), "components");
 fs.mkdirSync(COMP_DIR, { recursive: true });
 const CACHE = path.join(COMP_DIR, "index.cache");
@@ -26,8 +26,8 @@ const server = http.createServer((req, res) => {
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const B = `http://127.0.0.1:${server.address().port}`;
 Object.assign(process.env, {
-  CCAPP_COMPONENTS_INDEX: B + "/i.json", CCAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
-  CCAPP_COMPONENTS_COMMUNITY_INDEX: B + "/missing-c.json", CCAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
+  AGAPP_COMPONENTS_INDEX: B + "/i.json", AGAPP_COMPONENTS_INDEX_MIRROR: B + "/missing-m.json",
+  AGAPP_COMPONENTS_COMMUNITY_INDEX: B + "/missing-c.json", AGAPP_COMPONENTS_COMMUNITY_INDEX_MIRROR: B + "/missing-cm.json",
 });
 after(() => {
   server.close();

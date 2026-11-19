@@ -7,7 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { findLineOffset, lineHas, readSessionForward, readSessionPage } from "../gw/transcript.mjs";
 
-const DIR = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "transcript-"));
+const DIR = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "transcript-"));
 const T0 = Date.parse("2026-10-20T00:00:00Z");
 const iso = (min) => new Date(T0 + min * 60000).toISOString();
 

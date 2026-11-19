@@ -7,14 +7,14 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 
 function locations(prefix, home, temporary) {
-  assert.ok(temporary && path.basename(temporary).startsWith("cccodroid-test-"), "registry-flock fixture requires scripts/test.mjs temporary root");
+  assert.ok(temporary && path.basename(temporary).startsWith("agycodroid-test-"), "registry-flock fixture requires scripts/test.mjs temporary root");
   assert.equal(prefix, path.join(temporary, "usr")); assert.equal(home, path.join(temporary, "home"));
   assert.equal(fs.realpathSync(prefix), prefix); assert.equal(fs.realpathSync(home), home);
   const tool = path.join(prefix, "bin/flock");
   return { tool, controlFile: tool + ".fixture.json", callsFile: tool + ".fixture.calls" };
 }
 
-export function registryFlockFixture(prefix = process.env.CCAPP_PREFIX, home = process.env.CCAPP_HOME, temporary = process.env.CCAPP_TMP) {
+export function registryFlockFixture(prefix = process.env.AGAPP_PREFIX, home = process.env.AGAPP_HOME, temporary = process.env.AGAPP_TMP) {
   const files = locations(prefix, home, temporary);
   return {
     ...files,
@@ -64,7 +64,7 @@ a=""; for x in "$@"; do a="$a\${a:+,}\\"$x\\""; done
 printf '{"args":[%s],"mode":"%s","lock":"%s","regular":%s}\\n' "$a" "$mode" "$lock" "$reg" >> "$t.fixture.calls"
 # 照 toybox 的可移植写法：只认 -n 3，故意拒 util-linux 才有的 -w
 { [ $# -eq 2 ] && [ "$1" = -n ] && [ "$2" = 3 ]; } || exit 64
-{ [ "$reg" = true ] && [ "$lock" = "$HOME/.cccodroid/services/openai-bridge.lock" ]; } || exit 65
+{ [ "$reg" = true ] && [ "$lock" = "$HOME/.agycodroid/services/openai-bridge.lock" ]; } || exit 65
 [ "$mode" = busy ] && exit 1
 [ "$mode" = missing-after-first-lock ] && rm -f "$t"
 exit 0

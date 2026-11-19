@@ -5,10 +5,11 @@ import assert from "node:assert/strict";
 import { billKind } from "../gw/providers.mjs";
 
 test("官方地址照认", () => {
-  assert.equal(billKind({ baseUrl: "https://api.deepseek.com/anthropic" }).kind, "deepseek");
-  assert.equal(billKind({ baseUrl: "https://api.moonshot.cn/anthropic" }).host, "https://api.moonshot.cn");
-  assert.equal(billKind({ baseUrl: "https://open.bigmodel.cn/api/anthropic" }).kind, "glm");
-  assert.equal(billKind({ baseUrl: "https://openrouter.ai/api" }).kind, "openrouter");
+  // 移植：billKind 恒回 { kind: "none" }（agy 不查任何厂商余额），
+  // 官方地址也不再认出 deepseek / moonshot / glm / openrouter
+  for (const u of ["https://api.deepseek.com/anthropic", "https://api.moonshot.cn/anthropic",
+    "https://open.bigmodel.cn/api/anthropic", "https://openrouter.ai/api"])
+    assert.equal(billKind({ baseUrl: u }).kind, "none", u);
 });
 
 test("前缀相同的代理、带账号、非 https、坏地址：不认，密钥不会被发去官方主机", () => {

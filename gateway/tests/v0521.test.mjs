@@ -6,11 +6,11 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CFG } from "../gw/config.mjs";
+import { CFG, PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 import { latestContextTokens } from "../gw/transcript.mjs";
 
-const proj = path.join(CFG.home, ".claude", "projects", "-v0521");
+const proj = path.join(PATHS.projects, "-v0521");
 fs.mkdirSync(proj, { recursive: true });
 const usage = (n) => ({ input_tokens: 10, cache_read_input_tokens: n - 10, output_tokens: 5 });
 function session(lines) {

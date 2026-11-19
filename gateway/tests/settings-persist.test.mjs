@@ -52,22 +52,22 @@ test("设置写盘失败：返回 500，磁盘旧值原样保留（#122-3）", a
   }
 });
 
-test("输出风格的 name / description：冒号后没空格、值以 s 开头也照原样读（PR #118 第 3 条）", async (t) => {
+test("输出风格：只列内置两档，用户目录 / 工作区里的风格文件不再列出", async (t) => {
+  // 移植：outputStyles() 只回内置的 Explanatory / Learning（见 userconf.test.mjs），
+  // 用户目录的风格文件不再被读——PR #118 的 frontmatter 解析随之失效。
   const { CFG } = await import("../gw/config.mjs");
-  // 只列用户目录里的；工作区 .claude/output-styles 是谁都能放文件的地方，不列（输出风格目录的安全报告）
   const dir = path.join(CFG.home, ".claude", "output-styles"), wdir = path.join(CFG.workspace, ".claude", "output-styles");
   fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(wdir, { recursive: true });
-  const a = path.join(dir, "fmt-a.md"), b = path.join(dir, "fmt-b.md"), w = path.join(wdir, "fmt-w.md");
+  const a = path.join(dir, "fmt-a.md"), w = path.join(wdir, "fmt-w.md");
   fs.writeFileSync(a, "---\nname:sunny\ndescription:short and sweet\n---\nbody\n");
-  fs.writeFileSync(b, "---\nname:\ndescription: x\n---\n");
   fs.writeFileSync(w, "---\nname: planted\n---\n");
-  t.after(() => { for (const x of [a, b, w]) fs.rmSync(x, { force: true }); });
+  t.after(() => { for (const x of [a, w]) fs.rmSync(x, { force: true }); });
   const { routeSettings } = await import("../gw/settings.mjs");
   const { srv, call } = await serve(routeSettings);
   t.after(() => srv.close());
   const r = await call("/api/settings");
   const st = r.body.outputStyles;
-  assert.ok(st.some((o) => o.id === "sunny" && o.desc === "short and sweet"), JSON.stringify(st));
-  assert.ok(!st.some((o) => o.id === "description: x"), "name 为空时不能把下一行当成名字");
+  assert.deepEqual(st.map((o) => o.id), ["Explanatory", "Learning"], JSON.stringify(st));
+  assert.ok(!st.some((o) => o.id === "sunny"), "用户目录的风格文件不再列出");
   assert.ok(!st.some((o) => o.id === "planted"), "工作区里的风格文件不列");
 });

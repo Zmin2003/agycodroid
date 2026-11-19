@@ -11,7 +11,8 @@ import { PATHS } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
 // guard:true、permMigrated:1：导入时别触发 loadSettings 的迁移写盘，干扰“写了几次”的计数
-const OLD = { model: "old-model", permissionMode: "default", permMigrated: 1, guard: true };
+// 移植：旧值必须用 agy 有效模式，"default" 会在加载时被迁移成 request-review
+const OLD = { model: "old-model", permissionMode: "request-review", permMigrated: 1, guard: true };
 fs.mkdirSync(path.dirname(PATHS.settings), { recursive: true });
 fs.writeFileSync(PATHS.settings, JSON.stringify(OLD, null, 2));
 

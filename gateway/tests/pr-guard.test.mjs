@@ -8,7 +8,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../scripts/pr-guard.mjs");
-const repo = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "prguard-"));
+const repo = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "prguard-"));
 const git = (...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.symlinks=true", ...a], { cwd: repo, encoding: "utf8" });
 git("init", "-q", "-b", "main");
 fs.writeFileSync(path.join(repo, "README.md"), "x\n");
@@ -89,7 +89,7 @@ test("译文里的代码：合规的 @ 行算中，塞进别的代码算高；�
 
 test("mkdict：@ 行不合规就拒绝生成；现有的复数函数照常生成", () => {
   const MK = path.resolve(path.dirname(SCRIPT), "../i18n/mkdict.mjs");
-  const d = fs.mkdtempSync(path.join(process.env.CCAPP_TMP, "mkdict-"));
+  const d = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "mkdict-"));
   fs.writeFileSync(path.join(d, "en.js"), '  "条":\n  "件":\n');
   fs.writeFileSync(path.join(d, "ok.txt"), "1\t@(v) => `${v.n} item${v.n === 1 ? \"\" : \"s\"}`\n2\tx\n");
   fs.writeFileSync(path.join(d, "bad.txt"), "1\t@(v) => (0, eval)(\"1\")\n2\tx\n");

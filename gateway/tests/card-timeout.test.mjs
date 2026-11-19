@@ -38,7 +38,7 @@ test("超时前答了：照常返回，不记中断、之后也不再触发", as
   setInterrupted([]);
   const run = fakeRun("t171-b", "sess-b"), evs = [];
   const p = ask(run, evs);
-  assert.equal(run.answerPerm("ccapp-uc-t171-b", { behavior: "allow" }), true);
+  assert.equal(run.answerPerm("agyapp-uc-t171-b", { behavior: "allow" }), true);
   assert.equal(await p, true);
   await new Promise((r) => setTimeout(r, 150));
   assert.ok(!run.aborted);
