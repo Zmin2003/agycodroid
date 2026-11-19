@@ -5,11 +5,11 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${TMPDIR:-$HOME/.cache}/agycodroid-java-tests
 rm -rf "$OUT"; mkdir -p "$OUT"
-javac -nowarn -d "$OUT" "$ROOT/android/tests/stub/android/util/Base64.java" "$ROOT/android/java/cc/codroid/Ed25519.java" "$ROOT/android/tests/cc/codroid/Ed25519Vectors.java"
+javac -nowarn -d "$OUT" "$ROOT/android/tests/stub/android/util/Base64.java" "$ROOT/android/java/cc/agyroid/Ed25519.java" "$ROOT/android/tests/cc/codroid/Ed25519Vectors.java"
 java -cp "$OUT" cc.agyroid.Ed25519Vectors
-javac -nowarn -d "$OUT" "$ROOT/android/java/cc/codroid/PrivRules.java" "$ROOT/android/tests/cc/codroid/PrivRulesTest.java"
+javac -nowarn -d "$OUT" "$ROOT/android/java/cc/agyroid/PrivRules.java" "$ROOT/android/tests/cc/codroid/PrivRulesTest.java"
 java -cp "$OUT" cc.agyroid.PrivRulesTest
-javac -nowarn -d "$OUT" "$ROOT/android/java/cc/codroid/KeyAttest.java" "$ROOT/android/tests/cc/codroid/KeyAttestTest.java"
+javac -nowarn -d "$OUT" "$ROOT/android/java/cc/agyroid/KeyAttest.java" "$ROOT/android/tests/cc/codroid/KeyAttestTest.java"
 java -cp "$OUT" cc.agyroid.KeyAttestTest
 # 更新说明挑版本：WhatsNew 引了安卓类，编译要 android.jar（平板 ~/.bldtools，或 ANDROID_JAR）；pick 本身不碰安卓接口
 AJAR=${ANDROID_JAR:-$HOME/.bldtools/android.jar}

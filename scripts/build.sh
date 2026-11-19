@@ -56,13 +56,13 @@ cp "$SRC/server.mjs" "$A/assets/app/"
 cp "$SRC/boot.mjs" "$A/assets/app/"      # 网关引导：应用从安装包里读出来经 -e 交给 node（安全 5，见 gateway/boot.mjs）
 mkdir -p "$A/assets/app/gw"; cp "$SRC/gw/"*.mjs "$A/assets/app/gw/"     # 网关的各功能模块
 mkdir -p "$A/assets/app/archive"; cp "$SRC/archive/"* "$A/assets/app/archive/"   # 建档规范与交档命令（脉络，见 gw/archive.mjs）
-mkdir -p "$A/assets/app/guard"; cp "$SRC/guard/"* "$A/assets/app/guard/"       # 敏感操作再确认的钩子（见 gw/claude.mjs guardHooks）
+mkdir -p "$A/assets/app/guard"; cp "$SRC/guard/"* "$A/assets/app/guard/"       # 敏感操作再确认的钩子（见 gateway/guard/）
 for f in "$SRC/web/"*; do case "$f" in *.bak*) ;; *) cp -R "$f" "$A/assets/app/web/";; esac; done
 cp "$A/assets/scripts/"* "$A/assets/app/scripts/"
 cp "$A/assets/bin/"* "$A/assets/app/bin/"
-cp "$ROOT/devkit/pgp.mjs" "$A/assets/app/bin/"     # OpenPGP 验签：pkg.mjs、install-claude.mjs 与 devkit 构建共用这一份
+cp "$ROOT/devkit/pgp.mjs" "$A/assets/app/bin/"     # OpenPGP 验签：pkg.mjs 与 devkit 构建共用这一份（install-agy.mjs 不用 PGP，见其文件头）
 mkdir -p "$A/assets/app/pre"; cp "$A/assets/pre/"* "$A/assets/app/pre/"     # pkg / apt：PATH 最前，压过工具包里的旧替身
-cp "$A/assets/TOOLS.md" "$A/assets/app/"     # 给 claude 的工具说明（网关读进系统提示）
+cp "$A/assets/TOOLS.md" "$A/assets/app/"     # 给 agy 的工具说明（网关读进系统提示）
 # 随包的第三方许可：Shizuku-API 编进了 classes.dex，MIT 要求随包带上版权与许可原文（#110 10-003）；网页里的库各自带着 LICENSE
 mkdir -p "$A/assets/app/licenses"; cp "$ROOT/NOTICE" "$ROOT/LICENSE" "$A/assets/app/licenses/"; cp "$ROOT/third_party/shizuku/LICENSE" "$A/assets/app/licenses/Shizuku-API-LICENSE"
 # glibc 的 ld.so 以 libldlinux.so 进了 lib/：LGPL 要求随包带上许可原文和取源码的途径
@@ -80,7 +80,7 @@ if [ -n "$DEVKIT_BASES" ]; then node "$ROOT/scripts/pin-devkit.mjs" "$DK_BASE" "
 else cp "$ROOT/devkit-pin.json" "$A/assets/devkit-pin.json"; fi
 node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(p.base!==process.argv[2]){console.error("✗ devkit-pin.json 是 "+p.base+"，devkit-sources.txt 是 "+process.argv[2]+"：跑 node scripts/pin-devkit.mjs 重新生成");process.exit(1)}' "$A/assets/devkit-pin.json" "$DK_BASE" || exit 1
 # 原生小库与小程序一律进 APK 的原生库目录（lib/arm64-v8a，名字得是 lib*.so）：安装时系统解到 /data/app/…/lib/arm64，
-# 应用自己的 uid 也改不了，起网关、起 claude 时直接从那里加载，没有「核过之后被换」的窗口（安全 4 第 1 层）。路径由 Env.java 经环境变量交出去
+# 应用自己的 uid 也改不了，起网关、起 agy 时直接从那里加载，没有「核过之后被换」的窗口（安全 4 第 1 层）。路径由 Env.java 经环境变量交出去
 NL="$A/nativelib"; rm -rf "$NL"; mkdir -p "$NL" "$A/assets/app/lib"     # build/ 下面会被 javac 那步整个清掉，先放这里、打包前拷过去
 # seccomp 拦截 → ENOSYS（不依赖 libc，见源码注释）。Android 14 上没有它 claude 起不来
 $CC_ANDROID -O2 -shared -fPIC -nostdlib -fno-stack-protector -Wl,-z,noexecstack -Wl,--hash-style=both \
@@ -91,14 +91,14 @@ $CC_ANDROID -O2 -shared -fPIC -nostdlib -fno-stack-protector -Wl,-z,noexecstack 
 $CC_ANDROID -O2 -o "$NL/libccenosysrun.so" "$A/native/seccomp-enosys-run.c"
 # 应用内终端的伪终端（node 没有 pty）：stdin/stdout 与 pty 对转，fd 3 收窗口大小
 $CC_ANDROID -O2 -o "$NL/libccptyhost.so" "$A/native/ptyhost.c"
-# 「经加载器」执行方式（targetSdk 36 只能这样）：glibc 程序拉子进程时的 exec 改写垫片，和 seccomp-enosys.so 一起 --preload 给 claude；
+# 「经加载器」执行方式（targetSdk 36 只能这样）：glibc 程序拉子进程时的 exec 改写垫片，经加载器时 --preload 给 glibc 程序（见 Env.applyLoader）；
 # execpath.cjs 给经 linker64 起的 node 纠正 process.execPath（NODE_OPTIONS --require）
 $CC_ANDROID -O2 -shared -fPIC -nostdlib -fno-stack-protector -Wl,-z,noexecstack -Wl,--hash-style=both \
   -o "$NL/libccexecshim.so" "$A/native/exec-shim.c"
 # 同一份源码的 bionic 版：排在 termux-exec 前面，把 bionic 进程里 exec glibc 程序 / glibc ld.so 改走 APK 里的 ld.so
 $CC_ANDROID -DBIONIC -O2 -shared -fPIC -fno-stack-protector -Wl,-z,noexecstack -Wl,--hash-style=both \
   -o "$NL/libccexecshimb.so" "$A/native/exec-shim.c" -ldl
-# 不可转储：网关（LD_PRELOAD）和发行版的 claude（--preload）挂它，认 AGAPP_NODUMP=1。不依赖 libc，bionic / glibc 两边都能载
+# 不可转储：网关（LD_PRELOAD）和发行版的 glibc 程序（--preload）挂它，认 AGAPP_NODUMP=1。不依赖 libc，bionic / glibc 两边都能载
 $CC_ANDROID -O2 -shared -fPIC -nostdlib -fno-stack-protector -Wl,-z,noexecstack -Wl,--hash-style=both \
   -o "$NL/libccnodump.so" "$A/native/nodump.c"
 # Termux 的 clang（没有 ~/.bldtools/cc4 时的回落）会给每个产物写死构建机的 RUNPATH（…/cc.codrdev/files/usr/lib）：
@@ -143,7 +143,7 @@ if(!p.lock||!/^[0-9a-f]{64}$/.test(p.lock.sha256||"")){console.error("✗ devkit
 const h=c.createHash("sha256").update(fs.readFileSync(process.argv[2])).digest("hex");
 if(h!==p.lock.sha256){fs.rmSync(process.argv[2],{force:true});console.error("✗ devkit.lock.json 的 sha256 是 "+h+"，钉的是 "+p.lock.sha256+"（已删缓存）");process.exit(1)}' "$A/assets/devkit-pin.json" "$LOCK" || exit 1
 cp "$NL/"libcc*.so "$A/build/lib/arm64-v8a/"
-# 网关和 claude 执行链上来自工具包的文件该有的 sha256（安全 4 第 2 层，见 devkit.mjs gwpin、GwRuntime.java）。
+# 网关和 agy 执行链上来自工具包的文件该有的 sha256（安全 4 第 2 层，见 devkit.mjs gwpin、GwRuntime.java）。
 # 算一次要下基础模块包（约 130 MB），结果按包名存在 android/prebuilt/，钉的工具包没变就直接用
 node "$ROOT/devkit/devkit.mjs" gwpin --pin "$A/assets/devkit-pin.json" --target "$PIN_TARGET" --vendored "$A/prebuilt" --out "$A/assets/gwpin.json" || exit 1
 node "$ROOT/devkit/devkit.mjs" ldso --lock "$LOCK" --target "$PIN_TARGET" --release "$PIN_BASE" --vendored "$A/prebuilt/glibc" --out "$A/build/lib/arm64-v8a/libldlinux.so"

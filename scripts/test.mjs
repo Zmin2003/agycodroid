@@ -66,14 +66,14 @@ fs.mkdirSync(base, { recursive: true });
 const tmpRoot = fs.mkdtempSync(path.join(base, "agycodroid-test-")); // 只放各池日志
 const poolTmps = []; // 每池一个平级 agycodroid-test-*（registry-flock fixture 要求 basename 以此开头）
 
-// 网关给子进程的 PATH 只有假 $PREFIX/bin、$AGAPP_BIN、/system/bin（见 gw/claude.mjs 的 claudeEnv）。
+// 网关给子进程的 PATH 只有假 $PREFIX/bin、$AGAPP_BIN、/system/bin（见 gw/agy.mjs 的 agyEnv）。
 // 真机上 sleep / mkdir / cat / gzip 这些由 /system/bin 的 toybox 兜底；CI 的 Ubuntu 没有 /system/bin，
 // 测试里的假脚本（soffice、假 CLI、自检…）就会报「命令找不到」，失败信息还看着像被测代码坏了。
 // 在假前缀里补一份基础命令，造出与真机前缀相近的环境。tar / sh / git / curl / flock 由各测试自己链接，不放这里。
 const BASIC = ["awk","basename","cat","chmod","cp","cut","date","df","dirname","du","env","find","grep","gzip","head","id","ln","ls","mkdir","mktemp","mv","readlink","realpath","rm","sed","seq","sleep","sort","stat","tail","tee","touch","tr","uname","uniq","wc","xargs","zcat"];
 
 // 在 agycodroid 里跑时环境里有二十几个 AGAPP_* 指着真数据：一个不留全删，再只设测试要的（审查 L18）。
-// 网关给 claude 注入的 CLAUDE_CODE_* / ANTHROPIC_*（上下文窗口、接口地址…）也会漏进被测的 claudeEnv，一并去掉（11-01 独立审查）
+// 网关给 agy 注入的 CLAUDE_CODE_* / ANTHROPIC_*（上下文窗口、接口地址…）也会漏进被测的 agyEnv，一并去掉（11-01 独立审查）
 const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(AGAPP_|CLAUDE_CODE_|ANTHROPIC_)/.test(k)));
 
 function setupEnv(i) {

@@ -2,7 +2,6 @@
 // Optional: node scripts/test-frontend-perf.mjs. Node built-ins + an installed Chromium only.
 // Synthetic APIs and workbooks, no gateway/user config/model traffic. GPU off; not WebView/IME acceptance.
 // PASS 只代表结构验收 + 一条宽松性能门槛（openMs < 5000ms），不是真机的流畅度/帧率/GPU/输入法结论。
-// Synthetic APIs and workbooks, no gateway/user config/model traffic. GPU off; not WebView/IME acceptance.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -98,7 +97,9 @@ try {
     try { return Number((await fs.readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]); } catch { return false; }
   }, "Chromium startup");
   const targets = await (await fetch("http://127.0.0.1:" + port + "/json/list")).json();
-  const ws = new WebSocket(targets.find(t => t.type === "page").webSocketDebuggerUrl); await once(ws, "open"); cdp = new CDP(ws);
+  const pageTarget = targets.find(t => t.type === "page");
+  assert.ok(pageTarget, "Chromium created one blank page");
+  const ws = new WebSocket(pageTarget.webSocketDebuggerUrl); await once(ws, "open"); cdp = new CDP(ws);
   cdp.on("Runtime.exceptionThrown", ({ exceptionDetails: d }) => errors.push(d.exception?.description || d.text));
   cdp.on("Page.loadEventFired", () => { loads++; });
   cdp.on("Fetch.requestPaused", ({ requestId, request }) => {

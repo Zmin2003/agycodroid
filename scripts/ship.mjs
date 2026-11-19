@@ -58,7 +58,7 @@ const run = (cmd, args, o = {}) => { const r = spawnSync(cmd, args, { stdio: "in
 const git = (...a) => sh("git", ["-c", "safe.directory=*", "-C", ROOT, ...a]);
 const gitc = (...a) => sh("git", ["-c", "safe.directory=*", "-c", "user.name=Zmin2003", "-c", "user.email=zmin2003@users.noreply.github.com", "-C", ROOT, ...a]);
 const shaFile = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
-const mani = () => { const s = fs.readFileSync(MANI, "utf8"); return { code: +s.match(/android:versionCode="(\d+)"/)[1], name: s.match(/android:versionName="([^"]*)"/)[1] }; };
+const mani = () => { const s = fs.readFileSync(MANI, "utf8"); const code = s.match(/android:versionCode="(\d+)"/), name = s.match(/android:versionName="([^"]*)"/); if (!code || !name) throw new Error("AndroidManifest 里找不到 versionCode/versionName"); return { code: +code[1], name: name[1] }; };
 // 版本比较：先比主版本号；相同时正式版 > 预发布，预发布之间按「字母 + 数字」逐段比（beta1 < beta2 < rc1）。
 // 以前整串按 . - 切开转数字，beta1 成了 NaN 当 0，同底版本的 beta→正式、beta1→beta2 都被拦下（#136）
 const cmpVer = (a, b) => {
@@ -87,6 +87,7 @@ function fuseOk(files) {
 const badging = (apk = APK) => {
   const out = OLD ? sh("env", [`LD_LIBRARY_PATH=${P}/lib`, `${P}/bin/aapt2`, "dump", "badging", apk]) : sh("aapt2", ["dump", "badging", apk]);
   const m = out.match(/versionCode='(\d+)' versionName='([^']*)'/);
+  if (!m) throw new Error(`aapt2 dump badging 没报出版本：${apk}`);
   return { code: +m[1], name: m[2], pkg: (out.match(/package: name='([^']+)'/) || [])[1], sdk: +((out.match(/targetSdkVersion:'(\d+)'/) || [])[1] || 0) };
 };
 

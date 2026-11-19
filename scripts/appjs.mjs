@@ -47,5 +47,5 @@ for (let i = 0; i < parts.length; i++) {
   console.log(`  ${String(at).padStart(5)}–${String(at + c - 1).padEnd(5)} ${parts[i]}`);
   at += c;
 }
-if (r.status) { console.error(r.stderr.replace(/\[stdin\]:(\d+)/g, (m, n) => m + "（" + n + "）")); console.error("✗ 语法错误（行号用 --line 对回分段）"); process.exit(1); }
+if (r.status !== 0) { console.error(String(r.stderr || "").replace(/\[stdin\]:(\d+)/g, (m, n) => m + "（" + n + "）")); console.error("✗ 语法错误（行号用 --line 对回分段）"); process.exit(1); }
 console.log(`✓ ${parts.length} 段，${at - 1} 行，语法通过`);

@@ -30,7 +30,7 @@ const say = (s) => console.log(s);
 const die = (s) => { console.log("✗ " + s); process.exit(1); };
 
 const { PREFIX, HOME, AGAPP_BIN } = process.env;
-if (!PREFIX || !AGAPP_BIN) die("要在 agycodroid 的终端里跑（没有 PREFIX / AGAPP_BIN）");
+if (!PREFIX || !HOME || !AGAPP_BIN) die("要在 agycodroid 的终端里跑（没有 PREFIX / HOME / AGAPP_BIN）");
 const APP = path.dirname(AGAPP_BIN);
 const MANIFEST_URL = process.env.AGAPP_AGY_MANIFEST_URL
   || "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/android_arm64.json";

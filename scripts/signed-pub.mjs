@@ -1,4 +1,4 @@
-// 签名发布的公共部分（notice.mjs、claude-verified.mjs 共用）：
+// 签名发布的公共部分（notice.mjs、agy-verified.mjs 共用）：
 // PUB_DRY=1 只签名自验、把内容打出来（演练用）；PUB_LOCAL=1 签名写文件并本地提交、不推送。正常：用组件索引那把 ed25519 钥匙签名 → 用 App 里的公钥自验 → 写文件与 .sig → 提交推送 main → 触发官网生成器 → 等 cccodroid.net 上的副本与本地逐字节一致
 import fs from "node:fs";
 import path from "node:path";

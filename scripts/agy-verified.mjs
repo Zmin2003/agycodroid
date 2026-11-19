@@ -62,6 +62,7 @@ if (cmd === "add") {
     if (r.v !== 1 || !VER.test(r.version || "")) die(`${f} 不是 verify-agy.mjs 的结果`);
     if (!r.pass) die(`${f}：${r.version} 没通过验证（${Object.entries(r.steps).filter(([, s]) => !s.pass).map(([k, s]) => `${k}: ${s.detail}`).join("；")}），不能记成已验证`);
     if (!r.app || !r.device?.targetSdk) die(`${f}：结果里没有 App 版本 / 安装包类型——不是在 agycodroid 的终端里跑的，不能当真机验证`);
+    if (!r.at) die(`${f}：结果里没有验证时间 at`);
     if (!r.sha512) die(`${f}：结果里没有 sha512`);
     const rec = { at: r.at.slice(0, 10), device: [r.device.maker, r.device.model].filter(Boolean).join(" "), android: r.device.android, sdk: r.device.sdk,
       targetSdk: r.device.targetSdk, app: r.app, devkit: r.devkit, sha512: r.sha512 };
