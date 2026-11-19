@@ -103,12 +103,39 @@ if (process.env.AGAPP_TEST_COVERAGE) args.push("--experimental-test-coverage");
 
 const summary = (log) => {
   try {
-    const m = fs.readFileSync(log, "utf8").match(/ℹ tests (\d+)\s*\nℹ suites \d+\s*\nℹ pass (\d+)\s*\nℹ fail (\d+)/);
+    const m = fs.readFileSync(log, "utf8").match(/(?:#|ℹ) tests (\d+)\s*\n(?:#|ℹ) suites \d+\s*\n(?:#|ℹ) pass (\d+)\s*\n(?:#|ℹ) fail (\d+)/);
     return m ? `tests ${m[1]} pass ${m[2]} fail ${m[3]}` : "";
   } catch { return ""; }
 };
 const tail = (log) => {
   try { return fs.readFileSync(log, "utf8").split("\n").slice(-70).join("\n"); } catch { return "(日志读不到)"; }
+};
+// 失败的测试名和断言报错在日志中段，不在尾部 70 行里（CI 上尾部看不到它们，临时目录随后又删掉，
+// 失败就成了无名失败）。把每条失败及紧跟的断言详情单独拎出来打印，修测试时才找得到。
+// 两种输出格式都要认：Node 20（CI）是 TAP 的 not ok 行；Node 22+（本地）是 ✖ 行，文件位置在上一行的 test at … 里。
+const failures = (log) => {
+  try {
+    const lines = fs.readFileSync(log, "utf8").split("\n");
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const isTapFail = /^not ok /.test(l);
+      const isSpecFail = /^✖ /.test(l) && l !== "✖ failing tests:";
+      if (!isTapFail && !isSpecFail) continue;
+      if (isSpecFail) {
+        for (let k = i - 1; k >= Math.max(0, i - 3); k--) {
+          if (/^test at /.test(lines[k])) { out.push(lines[k]); break; }
+        }
+      }
+      out.push(l);
+      for (let j = i + 1; j < Math.min(lines.length, i + 16); j++) {
+        if (/^(ok|not ok|✔|✖|#|ℹ) /.test(lines[j])) break;
+        out.push(lines[j]);
+      }
+      out.push("");
+    }
+    return out.length ? out.join("\n") : "(没找到失败的测试行)";
+  } catch { return "(日志读不到)"; }
 };
 
 const children = [];
@@ -140,7 +167,10 @@ const finishOne = (c, code) => {
   if (done.length === children.length) {
     const failed = done.filter((x) => x.code !== 0);
     if (failed.length && poolCount > 1) {
-      for (const f of failed) console.error(`\n—— 池 ${f.i} 日志尾部（${f.log}）——\n` + tail(f.log));
+      for (const f of failed) {
+        console.error(`\n—— 池 ${f.i} 失败的测试（${f.log}）——\n` + failures(f.log));
+        console.error(`\n—— 池 ${f.i} 日志尾部（${f.log}）——\n` + tail(f.log));
+      }
     }
     if (!process.env.KEEP_TEST_TMP) { fs.rmSync(tmpRoot, { recursive: true, force: true }); for (const t of poolTmps) fs.rmSync(t, { recursive: true, force: true }); }
     else console.error("临时目录留着：" + [tmpRoot, ...poolTmps].join(" "));
