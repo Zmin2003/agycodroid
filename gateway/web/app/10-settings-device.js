@@ -43,11 +43,14 @@
   });
 
   async function loadPriv() {
+    const visit = setVisit, cat = setCatOpen;
+    if ((cat !== "device" && cat !== "run") || !setVisible(cat, visit)) return;
     let st;
     try { st = await api("/api/priv/status"); } catch { return; }
+    if (!setVisible(cat, visit)) return;
+    if (cat === "run") { renderBg(st.frozen); return; }
+    $("priv-field").classList.toggle("hidden", st.state === "unsupported");
     if (st.state === "unsupported") return;          // 旧版：没有这项集成
-    renderBg(st.frozen);
-    $("priv-field").classList.remove("hidden");
     const el = $("priv-state");
     if (st.state === "ok") {
       el.className = "prov-state ok";
@@ -119,12 +122,17 @@
     const naOut = $("priv-na-result");
     if (st.noask && st.noaskUntil) { naOut.className = "prov-state warn"; naOut.textContent = t("已打开，{t} 自动关闭", { t: new Date(st.noaskUntil).toLocaleString() }); naOut.dataset.until = "1"; }
     else if (naOut.dataset.until) { naOut.textContent = ""; delete naOut.dataset.until; }
-    // 安装、配对、启动都在进行时自己刷新（设置页开着才刷）
+    // 安装、配对、启动继续在后台执行，只在设备分类里跟进状态。
     clearTimeout(privPoll);
-    if (busy && pageOn("settings")) privPoll = setTimeout(loadPriv, 1500);
+    if (busy) privLater(1500, visit);
+  }
+  function privLater(ms, visit = setVisit) {
+    if (!setVisible("device", visit)) return;
+    clearTimeout(privPoll);
+    privPoll = setTimeout(() => { if (setVisible("device", visit)) loadPriv(); }, ms);
   }
   // 经 priv 执行过的命令（谁发起、命令、退出码、用时）。再点一次收起
-  const privBy = (k) => ({ claude: "Antigravity", terminal: t("终端"), gateway: "agycodroid", "cc-mem": t("内存管家"), other: t("其他") })[k] || k;
+  const privBy = (k) => ({ agy: "Antigravity", claude: "Antigravity", terminal: t("终端"), gateway: "agycodroid", "cc-mem": t("内存管家"), other: t("其他") })[k] || k;   // claude 是旧审计记录里的 by 值（rc=137 一轮改名后新值是 agy），旧记录照样显示
   async function togglePrivAudit() {
     const box = $("priv-audit");
     if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
@@ -150,13 +158,18 @@
     if (act === "audit") return togglePrivAudit();
     // 原地换成一句确认、不重排：整段收起会让下面的开关挪到手指底下被误点。下次打开设置页才真正消失
     if (act === "bootack") { localStorage.setItem("cc.bootAck", e.target.dataset.boot); $("priv-setup").textContent = t("好的，下次开机后再检查。"); e.target.disabled = true; return; }
-    if (act === "repair") { await appPost("/api/app/shz_repair"); return setTimeout(loadPriv, 500); }
-    if (act === "activate") { await appPost("/api/app/shz_activate"); return setTimeout(loadPriv, 500); }
+    const visit = setVisit;
+    if (act === "repair") { await appPost("/api/app/shz_repair"); return privLater(500, visit); }
+    if (act === "activate") { await appPost("/api/app/shz_activate"); return privLater(500, visit); }
     if (act === "request") {
       const r = await post("/api/priv/request").catch((e2) => ({ message: e2.message }));
       toast(r.message || t("已请求"));
       // 授权对话框在 Shizuku 那边弹，回来后多刷几次
-      for (let i = 0; i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); await loadPriv(); if ($("priv-state").classList.contains("ok")) break; }
+      for (let i = 0; i < 10 && setVisible("device", visit); i++) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        if (!setVisible("device", visit)) break;
+        await loadPriv(); if ($("priv-state").classList.contains("ok")) break;
+      }
       return;
     }
     loadPriv();
@@ -168,22 +181,43 @@
     const port = $("priv-port").value.replace(/\D/g, "");
     // 端口必填：只按自动发现的端口发码，别的应用冒充配对服务就能把码骗走（审查 v0.5.4 H1-1）
     if (port.length < 4) return toast(t("把配对框里的端口也填上（冒号后面那串数字）"), true);
+    const visit = setVisit;
     $("priv-code").value = "";
     await post("/api/app/shz_pair", { code: code + " " + port }).catch((e2) => toast(e2.message, true));
-    setTimeout(loadPriv, 500);
+    privLater(500, visit);
   });
   // 打开要在原生对话框里点头（再验一次锁屏存档）：没允许时开关按实际状态弹回去
-  $("priv-auto").addEventListener("change", (e) => post("/api/app/shz_autostart", { enable: e.target.checked }).catch(() => {}).finally(() => setTimeout(loadPriv, 300)));
+  $("priv-auto").addEventListener("change", (e) => {
+    const visit = setVisit;
+    post("/api/app/shz_autostart", { enable: e.target.checked }).catch(() => {}).finally(() => privLater(300, visit));
+  });
 
   // ── 更新：应用本体 / 开发工具包 / Antigravity CLI ──
     const UPD_TEXT = { uptodate: t("已是最新"), available: t("有新版本"), downloading: t("下载中"), ready: t("已下载，待安装"), installing: t("安装中"), error: t("出错"), unknown: t("未检查"), verifying: t("校验中"), damaged: t("已损坏"), missing: t("未安装") };
   let updPoll = null;
   let updFollowUntil = 0;
   const followUpd = () => { updFollowUntil = Date.now() + 15000; };
-  let lastUpd = {};
+  let lastUpd = {}, orphanVisit = -1, updRev = 0;
+  function readUpdateStatus() {
+    const rev = updRev;
+    return viewRead("update-status", rev, () => rev === updRev, async () => {
+      const st = await api("/api/app/upd_status");
+      if (rev !== updRev) return;
+      if (st?.ok && st.items) lastUpd = st;   // 菜单 / 日志只消费状态，不启动更新页的轮询。
+      return st;
+    });
+  }
+  function updLater(ms, visit = setVisit) {
+    if (!setVisible("update", visit)) return;
+    clearTimeout(updPoll);
+    updPoll = setTimeout(() => { if (setVisible("update", visit)) loadUpd(); }, ms);
+  }
   // 升级工具包时留下的旧程序（网关启动时隔离到 files/orphans-<日期>/，14 天后自动删）：有就提一句，给个立即删
   async function loadOrphans() {
+    const visit = setVisit;
+    if (!setVisible("update", visit)) return;
     const r = await api("/api/orphans").catch(() => null);
+    if (!setVisible("update", visit)) return;
     const el = $("upd-orphans");
     const n = r && r.ok ? r.dirs.reduce((a, d) => a + d.count, 0) : 0;
     el.classList.toggle("hidden", !n);
@@ -241,15 +275,19 @@
       $("upd-items").insertAdjacentHTML("beforeend", `<div class="it-acts"><button class="btn ghost sm" id="upd-retry">${t("重试")}</button></div>`);
     }
     $("upd-last").textContent = "✗ " + msg;
-    const rt = $("upd-retry"); if (rt) rt.onclick = loadUpd;   // 反复失败也只挂一个监听
+    const rt = $("upd-retry"); if (rt) rt.onclick = () => loadUpd();   // 反复失败也只挂一个监听
   }
-  async function loadUpd() {
+  async function loadUpd(changed = false) {
+    if (changed) updRev++;
+    const visit = setVisit, rev = updRev;
+    const live = () => setVisible("update", visit) && rev === updRev;
+    if (!live()) return;
     let st;
-    try { st = await api("/api/app/upd_status"); }
-    catch (e) { return updFailed(e.message || "?"); }
-    if (st && st.ok === false && st.message) return updFailed(st.message);
-    if (!st || !st.ok || !st.items) return;          // 旧版 / 开发端：确实没有这项
-    lastUpd = st;
+    try { st = await readUpdateStatus(); }
+    catch (e) { if (live()) updFailed(e.message || "?"); return; }
+    if (!live() || !st) return;
+    if (st?.ok === false && st.message && st.state !== "unsupported") return updFailed(st.message);
+    if (!st?.ok || !st.items) { $("upd-field").classList.add("hidden"); setDiscovery("update", t("不可用")); return; }
     $("upd-field").classList.remove("hidden");
     $("upd-auto").checked = !!st.auto;
     $("upd-channel").value = st.channel === "pinned" ? "pinned" : st.channel || "stable";
@@ -271,7 +309,7 @@
       const prog = it.state === "downloading" && it.total ? `（${fmtSize(it.done) || "0 MB"} / ${fmtSize(it.total)} · ${Math.floor(it.done * 100 / it.total)}%）`
         : (it.state === "installing" || it.state === "verifying") && it.total ? `（${Math.floor(it.done * 100 / it.total)}%）` : "";
       const cls = it.state === "error" || it.state === "damaged" || it.state === "missing" ? "err" : it.state === "uptodate" ? "ok" : it.state === "unknown" ? "" : "warn";
-      const btn = it.state === "missing" ? t("安装…") : it.state === "available" ? (it.id === "claude" ? t("更新") : t("下载并安装"))
+      const btn = it.state === "missing" ? t("安装…") : it.state === "available" ? (it.id === "agy" ? t("更新") : t("下载并安装"))
         : it.state === "ready" ? t("安装") : it.state === "damaged" ? t("修复") : it.state === "error" && it.latest ? t("重试") : "";
       // 工具包：随时可以逐个核对文件；坏了就「修复」（重装同一版本）
       const act = it.state === "damaged" ? "repair" : it.state === "missing" ? "pick" : "";
@@ -281,10 +319,10 @@
       const localBtn = it.id === "devkit" && !busy && window.AGApp && AGApp.pickDevkit
         ? `<button class="btn sm ghost" data-item="devkit" data-act="local" title="${esc(t("选一个已经下好的工具包文件来安装"))}">${t("本地文件…")}</button>` : "";
       // 卸载：工具包回到首装（重选来源和模块）、Antigravity CLI 重新下载；外壳做，老外壳没有这个接口就不显示
-      const unBtn = (it.id === "devkit" || it.id === "claude") && it.current && !busy && window.AGApp && AGApp.uninstall
+      const unBtn = (it.id === "devkit" || it.id === "agy") && it.current && !busy && window.AGApp && AGApp.uninstall
         ? `<button class="btn sm ghost danger" data-item="${esc(it.id)}" data-act="uninstall">${t("卸载")}</button>` : "";
-      const verBtn = it.id === "claude" && it.current && !busy
-        ? `<button class="btn sm ghost" data-item="claude" data-act="versions">${t("版本…")}</button>` : "";
+      const verBtn = it.id === "agy" && it.current && !busy
+        ? `<button class="btn sm ghost" data-item="agy" data-act="versions">${t("版本…")}</button>` : "";
       return `<div class="row-actions" style="justify-content:space-between">
         <div><b>${esc(it.name)}</b> <span class="tiny">${ver}</span><br>
           <span class="prov-state ${cls}" style="margin:0">${UPD_TEXT[it.state] || esc(it.state)}${prog}${it.message ? " · " + esc(it.message) : ""}</span></div>
@@ -294,17 +332,18 @@
     if (v && v.manifest && (v.missing || v.changed) && (v.samples || []).length)
       $("upd-items").insertAdjacentHTML("beforeend", `<pre class="tiny mono" style="white-space:pre-wrap;margin:6px 0 0;color:var(--fg3)">${esc(v.samples.join("\n"))}${v.missing + v.changed > v.samples.length ? "\n…" : ""}</pre>`);
     loadUpdCompHint(st);
-    loadOrphans();
+    if (orphanVisit !== visit) { orphanVisit = visit; loadOrphans(); }
     $("upd-last").textContent = st.checking ? t("检查中…") : st.error ? "✗ " + st.error
       : st.lastCheck ? t("上次检查：{at}", { at: new Date(st.lastCheck).toLocaleString() }) : t("还没检查过");
     clearTimeout(updPoll);
     // 点完按钮 / 换完渠道后的一小段时间也接着刷：后台的检查、换版本要过一会儿才开始，只看「正在进行」会漏掉结果
-    if ((moving || st.checking || Date.now() < updFollowUntil) && pageOn("settings")) updPoll = setTimeout(loadUpd, 1500);
+    if (moving || st.checking || Date.now() < updFollowUntil) updLater(1500, visit);
+    return st;
   }
   /** Antigravity CLI 版本选单：跟随 stable / latest，或固定到某一版（固定后自动更新、检查更新都不动它） */
   async function openAntigravityVersions() {
     if ($("ccv-pick")) return;
-    const it = ((lastUpd && lastUpd.items) || []).find((x) => x.id === "claude") || {};
+    const it = ((lastUpd && lastUpd.items) || []).find((x) => x.id === "agy") || {};
     const mode = (lastUpd && lastUpd.channel) || "stable", pin = (lastUpd && lastUpd.pin) || "";
     const m = document.createElement("div");
     m.id = "ccv-pick";
@@ -356,10 +395,10 @@
       const r = await post("/api/app/upd_set", ch === "pinned" ? { channel: ch, version: v } : { channel: ch }).catch((e2) => ({ ok: false, message: e2.message }));
       // 卸载过（未安装）：改设置不会自动装回，要再明说装一次
       if (it.state === "missing" && r.ok !== false) {
-        const r2 = await post("/api/app/upd_apply", { item: "claude", version: ch === "pinned" ? v : ch }).catch((e2) => ({ ok: false, message: e2.message }));
+        const r2 = await post("/api/app/upd_apply", { item: "agy", version: ch === "pinned" ? v : ch }).catch((e2) => ({ ok: false, message: e2.message }));
         toast(r2.message || (r2.ok ? t("开始") : t("失败")), !r2.ok);
       } else toast(r.ok === false ? (r.message || t("失败")) : ch === "pinned" ? t("已固定到 {v}，正在切换", { v }) : t("已改为跟随 {ch}", { ch }), r.ok === false);
-      followUpd(); setTimeout(loadUpd, 500);
+      followUpd(); updRev++; updLater(500);
     });
   }
   $("upd-items").addEventListener("click", async (e) => {
@@ -384,25 +423,32 @@
       if (act === "repair" && !confirm(t("修复开发工具包？\n\n会重新下载当前这一版你装着的部分（断点续传）并重装，装的时候暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
       const r = await post(act === "verify" ? "/api/app/upd_verify" : "/api/app/upd_repair", { full: true }).catch((e2) => ({ ok: false, message: e2.message }));
       toast(r.message || (r.ok ? t("开始") : t("失败")), !r.ok);
-      followUpd(); setTimeout(loadUpd, 500);
+      followUpd(); updRev++; updLater(500);
       return;
     }
     if (item === "devkit" && !confirm(t("更新开发工具包？\n\n要下多少见这一项旁边标的大小（断点续传），装的时候会暂停服务 1–2 分钟。\n你用 pip / npm -g 装进工具包的东西会被保留。"))) return;
     const r = await post("/api/app/upd_apply", { item }).catch((e2) => ({ ok: false, message: e2.message }));
     toast(r.message || (r.ok ? t("开始") : t("失败")), !r.ok);
-    followUpd(); setTimeout(loadUpd, 500);
+    followUpd(); updRev++; updLater(500);
   });
   // ── 通知（只有 agycodroid：GatewayService 订阅事件流发通知）──
   async function loadNotify() {
+    const visit = setVisit;
+    if (!setVisible("device", visit)) return;
     let st;
-    try { st = await api("/api/app/notify_status"); }
-    catch (e) {
+    try {
+      st = await api("/api/app/notify_status");
+      if (!st?.ok && st?.message && st.state !== "unsupported") throw new Error(st.message);
+    } catch (e) {
+      if (!setVisible("device", visit)) return;
       // 网关刚起 / 断网：以前直接隐藏整块，和「这个版本没有这项」分不出来（稳定性报告 FIND-032）
       $("ntf-err").textContent = t("读取失败") + (e && e.message ? "：" + e.message : "");
       $("ntf-err-block").classList.remove("hidden");
       return;
     }
+    if (!setVisible("device", visit)) return;
     $("ntf-err-block").classList.add("hidden");
+    $("ntf-field").classList.toggle("hidden", !st.ok);
     if (!st.ok) return;                              // 开发端 / 旧版：没有这项
     $("ntf-field").classList.remove("hidden");
     $("ntf-done").checked = !!st.done;
@@ -459,29 +505,49 @@
   }
   // 网关转发失败也回 200（{ ok:false, message }，没有工具清单）：不能拿它去重画，否则清单清空、无障碍状态乱报（审查 D-R01）
   // 没存上：重读一遍，开关回到真实状态（审查 D-05）；连重读也失败（网关断了）就退回上次画过的那份，别把没存上的值留在开关上（审查 #52 D-05）
-  let lastDev = null;
-  const devBack = () => loadDev().then((ok) => { if (!ok && lastDev) devRender(lastDev); });
-  const devSet = (body) => post("/api/app/dev_set", body)
-    .then((st) => { if (!st || st.ok === false || !Array.isArray(st.tools)) { toast((st && st.message) || t("保存失败"), true); return devBack(); } lastDev = st; devRender(st);
+  let lastDev = null, devPoll = 0;
+  const devBack = (visit) => {
+    if (!setVisible("device", visit)) return;
+    return loadDev().then((ok) => { if (setVisible("device", visit) && !ok && lastDev) devRender(lastDev); });
+  };
+  function devSet(body) {
+    const visit = setVisit;
+    return post("/api/app/dev_set", body).then((st) => {
+      if (!st || st.ok === false || !Array.isArray(st.tools)) { toast((st && st.message) || t("保存失败"), true); return devBack(visit); }
+      if (!setVisible("device", visit)) return;
+      lastDev = st; devRender(st);
       // 打开设备工具、切读屏模式都要在原生对话框里点头（DeviceTools.set）：提示一下，点完把状态拉回来
       if (st.message && (body.a11y || body.on === true)) {
         toast(st.message);
         const was = JSON.stringify([st.on, st.a11y?.mode]);
-        const iv = setInterval(() => loadDev().then(() => { if (JSON.stringify([lastDev?.on, lastDev?.a11y?.mode]) !== was) clearInterval(iv); }), 1500);
-        setTimeout(() => clearInterval(iv), 60000);
+        const until = Date.now() + 60000;
+        const tick = async () => {
+          if (!setVisible("device", visit)) return;
+          await loadDev();
+          if (setVisible("device", visit) && Date.now() < until && JSON.stringify([lastDev?.on, lastDev?.a11y?.mode]) === was) devPoll = setTimeout(tick, 1500);
+        };
+        clearTimeout(devPoll); devPoll = setTimeout(tick, 1500);
       }
     })
-    .catch((e2) => { toast(e2.message, true); devBack(); });
+    .catch((e2) => { toast(e2.message, true); devBack(visit); });
+  }
   async function loadDev() {
+    const visit = setVisit;
+    if (!setVisible("device", visit)) return false;
     let st;
-    try { st = await api("/api/app/dev_status"); }
-    catch (e) {
+    try {
+      st = await api("/api/app/dev_status");
+      if (!st?.ok && st?.message && st.state !== "unsupported") throw new Error(st.message);
+    } catch (e) {
+      if (!setVisible("device", visit)) return false;
       // 同通知：首读失败要说出原因、给重试，不能和「这个版本没有设备工具」一样整块隐藏（FIND-032）
       $("dev-err").textContent = t("读取失败") + (e && e.message ? "：" + e.message : "");
       $("dev-err-block").classList.remove("hidden");
       return false;
     }
+    if (!setVisible("device", visit)) return false;
     $("dev-err-block").classList.add("hidden");
+    $("dev-field").classList.toggle("hidden", !st.ok);
     if (!st.ok) return false;
     lastDev = st;
     devRender(st);
@@ -495,18 +561,20 @@
 
   // 打开更新页时自动查一次：正在查、正在下/装，或 20 秒内刚查过就只刷新显示
   async function updOnOpen() {
-    await loadUpd();
-    const busy = (lastUpd.items || []).some((it) => ["downloading", "installing", "verifying"].includes(it.state));
-    if (lastUpd.checking || busy || Date.now() - (lastUpd.lastCheck || 0) < 20000) return;
+    const visit = setVisit, st = await loadUpd();
+    if (!st || !setVisible("update", visit)) return;
+    const busy = st.items.some((it) => ["downloading", "installing", "verifying"].includes(it.state));
+    if (st.checking || busy || Date.now() - (st.lastCheck || 0) < 20000 || Date.now() < updFollowUntil) return;
+    followUpd();
     await post("/api/app/upd_check").catch(() => {});
-    followUpd(); setTimeout(loadUpd, 300);
+    updRev++; updLater(300, visit);
   }
   $("upd-check").addEventListener("click", async () => {
     // 200 + {ok:false} 也是失败，以前只接网络错误，按钮像没反应（195-M.8）
     let r = null;
     try { r = await post("/api/app/upd_check"); } catch (e2) { return toast(e2.message, true); }
     if (r && r.ok === false) toast(r.message || t("检查更新失败"), true);
-    followUpd(); setTimeout(loadUpd, 300);
+    followUpd(); updRev++; updLater(300);
   });
   $("upd-flavor").addEventListener("change", async (e) => {
     const v = e.target.value;
@@ -517,16 +585,16 @@
     const r = await post("/api/app/upd_set", { flavor: v }).catch((e2) => ({ ok: false, message: e2.message }));
     if (r.refused) alert(r.message);
     else if (r.ok === false) toast(r.message, true);
-    followUpd(); loadUpd();
+    followUpd(); loadUpd(true);
   });
   // 存不上（网关回 ok:false 或断了）：开关先退回上次读到的值，再重读（审查 #52 D-05）
-  const updBack = (msg) => { toast(msg || t("保存失败"), true); if (lastUpd && lastUpd.items) { $("upd-auto").checked = !!lastUpd.auto; $("upd-channel").value = lastUpd.channel === "pinned" ? "pinned" : lastUpd.channel || "stable"; } loadUpd(); };
+  const updBack = (msg) => { toast(msg || t("保存失败"), true); if (lastUpd && lastUpd.items) { $("upd-auto").checked = !!lastUpd.auto; $("upd-channel").value = lastUpd.channel === "pinned" ? "pinned" : lastUpd.channel || "stable"; } loadUpd(true); };
   $("upd-auto").addEventListener("change", (e) => post("/api/app/upd_set", { auto: e.target.checked })
-    .then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd())).catch((e2) => updBack(e2.message)));
+    .then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd(true))).catch((e2) => updBack(e2.message)));
   $("upd-channel").addEventListener("change", (e) => {
     // 固定版本要先挑一版：开选单，下拉框先退回原样，挑完 loadUpd 会刷新成「固定 x.y.z」
     if (e.target.value === "pinned") { e.target.value = (lastUpd && lastUpd.channel) || "stable"; openAntigravityVersions(); return; }
-    followUpd(); post("/api/app/upd_set", { channel: e.target.value }).then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd())).catch((e2) => updBack(e2.message));
+    followUpd(); post("/api/app/upd_set", { channel: e.target.value }).then((r) => (r && r.ok === false ? updBack(r.message) : loadUpd(true))).catch((e2) => updBack(e2.message));
   });
   $("priv-ka").addEventListener("change", async (e) => {
     const on = e.target.checked;

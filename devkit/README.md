@@ -8,7 +8,7 @@
 | 部分 | 来源 | 处理方式 |
 |---|---|---|
 | 257 个包：clang/lld/cmake/ninja/make、git/ssh、gdb/strace、python、node+npm、JDK 21、aapt2/d8/apksigner、bash/coreutils/grep/sed/awk、rg/fd/bat/delta/helix/yq/jq/sqlite… | [Termux 官方仓库](https://packages.termux.dev)，构建配方开源：[termux-packages](https://github.com/termux/termux-packages) | 构建时下载，校验哈希，**原样**打进 tar，只做前缀改写（见下） |
-| `android.jar`（编译 APK 用的平台存根） | Google 官方 SDK 仓库 `platform-36_r02.zip` | **不入包**，许可协议不允许再分发。由用户在设备上自行下载并同意许可，与 Claude Code 本体同样处理 |
+| `android.jar`（编译 APK 用的平台存根） | Google 官方 SDK 仓库 `platform-36_r02.zip` | **不入包**，许可协议不允许再分发。由用户在设备上自行下载并同意许可，与 Antigravity CLI 本体同样处理 |
 
 **不再使用的：** C4droid 的 GCC 和原 `dshtc/prefix` 里的那批工具，全部被上表取代。
 

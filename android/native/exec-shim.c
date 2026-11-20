@@ -15,7 +15,7 @@
  * 配置全走环境变量（Env.java 设好）：
  *   AGAPP_LD            APK 里的 glibc ld.so（libldlinux.so）
  *   AGAPP_GLIBC_LIB     glibc 库目录（给 --library-path）
- *   AGAPP_GLIBC_PRELOAD glibc 子进程要挂的 --preload 列表（seccomp-enosys.so 和本库，冒号分隔）
+ *   AGAPP_GLIBC_PRELOAD glibc 子进程要挂的 --preload 列表（libccnodump.so 和本库，冒号分隔；seccomp 垫片 libccenosys.so 已停编）
  *   AGAPP_BIONIC_PRELOAD bionic 子进程的 LD_PRELOAD（termux-exec 的 linker 版）
  *   PREFIX              工具包前缀
  *

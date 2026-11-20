@@ -173,7 +173,9 @@ export function commandRoutes(builtinNames) {
     if (!p.startsWith("/api/commands")) return NEXT;
     if (req.method === "GET" && p === "/api/commands") {
       const dir = u.searchParams.get("dir") || CFG.workspace;
-      // sealed：发行版把这些指令经合成插件交给 Antigravity，实际名字是 /user:<名字>（见 seal.mjs）；
+      // sealed：发行版下界面插入输入框时用 /user:<名字>（195-J.6）——但这依赖 seal.mjs 的合成插件
+      // 「user」把指令交给 Antigravity，而 sealPrepare 目前没有运行时调用方（见 seal.mjs 文件头，E06）：
+      // 前缀是否还成立未经证实，行为先不动，等真机验证 agy 在发行版下认不认 /user: 再定；
       // 界面插入输入框时要用带前缀的名字（195-J.6）
       return sendJson(res, 200, { scopes: [listCmds("user"), listCmds("project", dir)], workspace: path.resolve(dir), sealed: sealed() });
     }

@@ -45,3 +45,31 @@ test("从没设过目标 → null；记录读不了 → null", () => {
   assert.equal(goalStateOf(file(big(1), J({ type: "user", message: { content: "goal 这个词出现在正文里" } }))), null);
   assert.equal(goalStateOf(path.join(dir, "nope.jsonl")), null);
 });
+
+test("任务清单：~/.claude/tasks 里即使有文件也不读，tasksOf 一律 null（E05，V6 未验证前不编造）", async () => {
+  const { CFG } = await import("../gw/config.mjs");
+  const { tasksOf } = await import("../gw/goal.mjs");
+  const sid = "11111111-2222-3333-4444-555555555555";
+  const d = path.join(CFG.home, ".claude", "tasks", sid);
+  fs.mkdirSync(d, { recursive: true });
+  fs.writeFileSync(path.join(d, "1.json"), JSON.stringify({ id: 1, subject: "假任务", status: "in_progress" }));
+  try {
+    assert.equal(tasksOf(sid), null);
+    assert.equal(tasksOf("not-a-sid"), null);
+  } finally { fs.rmSync(path.join(CFG.home, ".claude"), { recursive: true, force: true }); }
+});
+
+test("任务清单：tasksCheck 首轮结束就发出带 tasksUnsupported 的 tasks 事件（Review-A B2）", async () => {
+  const { onPublish } = await import("../gw/bus.mjs");
+  const { tasksCheck } = await import("../gw/goal.mjs");
+  const sid = "22222222-3333-4444-5555-666666666666";
+  const seen = [];
+  const off = onPublish((ev) => { if (ev && ev.type === "tasks" && ev.sessionId === sid) seen.push(ev); });
+  try {
+    tasksCheck(sid);
+    tasksCheck(sid);   // 同一会话第二轮不再重复发
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].tasks, null);
+    assert.equal(seen[0].tasksUnsupported, true);
+  } finally { off(); }
+});

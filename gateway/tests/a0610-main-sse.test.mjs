@@ -1,4 +1,4 @@
-// 流式响应的背压：事件流补发（gw/bus.mjs，#187 #192）、streamfix 代理（gw/streamfix.mjs，#193）
+// 流式响应的背压：事件流补发（gw/bus.mjs，#187 #192）
 // 真实 node:http 回环；客户端用裸 socket，好控制「先不读、过一会再读」
 import "../gw/config.mjs";
 import { test, after } from "node:test";
@@ -9,10 +9,9 @@ import net from "node:net";
 const { routeBus, publish, onPublish } = await import("../gw/bus.mjs");
 const { runEmit } = await import("../gw/queue.mjs");
 const { RUNS } = await import("../gw/runs.mjs");
-const { startStreamFix, fixedBaseUrl, STREAMFIX } = await import("../gw/streamfix.mjs");
 
 const servers = [];
-after(() => { RUNS.delete("a0610-sse"); for (const s of servers) { s.closeAllConnections?.(); s.close(); } STREAMFIX.server?.close(); });
+after(() => { RUNS.delete("a0610-sse"); for (const s of servers) { s.closeAllConnections?.(); s.close(); } });
 async function listen(handler) {
   const s = http.createServer(handler); servers.push(s);
   await new Promise((r) => s.listen(0, "127.0.0.1", r));
@@ -61,37 +60,6 @@ test("#192：补发期间排了二十几 MB → 按对端速度写完，正常�
   RUNS.delete("a0610-sse");
   assert.ok(all && tail && !closed, `连接断了或没收全：排队项 ${n}/400，closed=${closed}`);
   assert.equal(n, 400);
-});
-
-test("#193：streamfix 下游不读 → 停读上游，不把整条流吸进响应缓冲", async () => {
-  startStreamFix();
-  for (let i = 0; i < 100 && !STREAMFIX.port; i++) await new Promise((r) => setTimeout(r, 20));
-  const total = { sent: 0 };
-  const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
-  const upPort = await listen(async (req, res) => {
-    req.resume();
-    res.writeHead(200, { "content-type": "text/event-stream" });
-    const w = (s) => { total.sent += Buffer.byteLength(s); return res.write(Buffer.from(s)); };
-    w(ev({ type: "message_start", message: { id: "m", usage: { input_tokens: 1, output_tokens: 0 } } }));
-    w(ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }));
-    const piece = ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "中".repeat(2700) } });
-    for (let i = 0; i < 12000; i++) {
-      if (res.destroyed) return;
-      if (!w(piece)) await new Promise((r) => { res.once("drain", r); res.once("close", r); });
-    }
-    w(ev({ type: "content_block_stop", index: 0 })); w(ev({ type: "message_stop" })); res.end();
-  });
-  const base = fixedBaseUrl(`http://127.0.0.1:${upPort}`);
-  const u = new URL(base);
-  const sock = net.connect(+u.port, "127.0.0.1", () => sock.write(`POST ${u.pathname}/v1/messages HTTP/1.1\r\nHost: x\r\ncontent-length: 2\r\n\r\n{}`));
-  sock.pause();                                          // 一直不读
-  await new Promise((r) => setTimeout(r, 1500));
-  const sent = total.sent;
-  sock.destroy();
-  // 一条流约 99MB；修之前下游不读也整条吸完，修之后只堆到两段回环的内核缓冲那么多。
-  // 这个上限跟设备有关：开发机约 11MB，这台 Android 的回环缓冲约 28MB，所以留到 64MB，
-  // 仍明显小于整条流——整条吸完的老问题照样会在这里失败。
-  assert.ok(sent < 64 << 20, `下游不读，上游却推出去了 ${sent} 字节`);
 });
 
 test("T.3：run.log 里的工具入参截短，实时推送照旧全文", async () => {

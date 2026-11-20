@@ -1,6 +1,6 @@
 // v0.5.18（agy 版）：#82 清单外型号不借别人的窗口、#78 项目指定接口按项目那家
-// 旧版 #77（旧清单请求不回写已清的缓存）已不存在：清单是静态的（文档示例 + 用户自加的 slug），
-// fetchModels 不发请求、不写缓存，根本没有“旧请求晚回来”这回事。
+// 旧版 #77（旧清单请求不回写已清的缓存）已不存在：未登录时清单回静态兜底（文档示例 + 用户自加的 slug），
+// 已登录时走 `agy models` 拉取；窗口一律不知道，不借第一项的。
 import "../gw/config.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";

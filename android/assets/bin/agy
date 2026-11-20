@@ -4,4 +4,12 @@
 # 没装上时报错，别静默跑别的。
 BIN="$HOME/.local/share/agycodroid/agy/current/agy"
 [ -f "$BIN" ] || { echo "agycodroid: agy 还没装上（$BIN 不在），到设置 → 更新里装一次" >&2; exit 2; }
+# 终端封口（E06）：每次起 agy 前按应用设置重写 ~/.gemini/antigravity-cli/settings.json。
+# node 找不到、脚本不在、脚本失败都不要紧（fail-open）：封口脚本自己负责静默成功或报一行错，绝不拦 exec。
+# AGAPP_BIN 是这个包装所在的目录（Env.java:623）；$0 经 PATH 调用时不一定是全路径，只当回落。
+SEAL_DIR="${AGAPP_BIN:-$(dirname "$0")}"
+if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/node" ]; then NODE="$PREFIX/bin/node";
+elif command -v node >/dev/null 2>&1; then NODE="node";
+else NODE=""; fi
+[ -n "$NODE" ] && [ -f "$SEAL_DIR/agy-seal.mjs" ] && "$NODE" "$SEAL_DIR/agy-seal.mjs" >&2
 exec "$BIN" "$@"

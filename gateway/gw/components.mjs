@@ -10,7 +10,6 @@ import { SKILLS_DIR, addMcp, removeMcp, skillMeta } from "./extensions.mjs";
 import { modulesMissingFor } from "./modules.mjs";
 import { ghProxy, pget } from "./pget.mjs";
 import { retireManagedBridge } from "./managed-bridge.mjs";
-import { clearBridgeConfigMapping, handleBridgeConfig, handleBridgeModels, handleBridgeRepair } from "./bridge-config.mjs";
 import { archiveProblem, parseTarListing } from "./archive-check.mjs";
 import { baseOwnedPaths } from "./orphans.mjs";
 import { ucAppBegin, ucAppWrote } from "./userconf.mjs";
@@ -1323,7 +1322,6 @@ function compCancel(id) {
   if (!job || job.finished) return { ok: false, message: "not running" };
   if (job.phase === "installing") return { ok: false, message: tz("正在放进工具包，这一步不能中断") };
   if (job.phase === "removing") return { ok: false, message: tz("正在卸载，这一步不能取消，请等待完成") };
-  if (["configuring", "fetching-models"].includes(job.phase)) return { ok: false, message: "busy" };
   job.cancelled = true;
   if (job.child) killTree(job.child);
   return { ok: true };
@@ -1360,14 +1358,12 @@ export async function compRemove(id) {
     // 退役桥 / 清映射要等子进程；这期间别的组件可能刚把共享文件转记到这个组件名下。
     // 所以记录等退役完、进锁之后再读，不拿退役前的旧快照删文件（196-供应链.1）
     const retired = await retireManagedBridge(id);
-    stage = "clear-app-mapping";
-    const unmapped = clearBridgeConfigMapping(id);
     let mcpName = "";
     const out = await compFsExclusive(async () => {
       stage = "read-record";
       const { exists, rec } = compRemovalRecord(id);
       mcpName = rec && typeof rec.mcp === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(rec.mcp) ? rec.mcp : "";
-      if (!exists && !retired && !unmapped) return { ok: false, message: "not installed" };
+      if (!exists && !retired) return { ok: false, message: "not installed" };
       stage = "remove-files";
       // installing / damaged 的完整记录仍有原受管文件清单，照既有管理器处理共享文件和技能。
       if (rec) await compRemoveFiles(id, rec);
@@ -1598,36 +1594,6 @@ async function handleComponents(req, res, p, u) {
 
 // ── 路由：/api/components /api/gh/ ──
 export async function routeComponents(req, res, u, p) {
-  if (p === "/api/components/openai-bridge/config" || p === "/api/components/openai-bridge/models" || p === "/api/components/openai-bridge/repair") {
-    const models = p === "/api/components/openai-bridge/models", repair = p === "/api/components/openai-bridge/repair";
-    const handler = models ? handleBridgeModels : repair ? handleBridgeRepair : handleBridgeConfig;
-    let current = COMP_JOBS.get("openai-bridge");
-    // 保存优先于只读取清单：即使客户端 close 尚未到达，也先终止短命任务再接手，绝不等待活网络。
-    if (!models && req.method === "POST" && current?.phase === "fetching-models" && !current.finished) {
-      current.abort.abort();
-      await current.completion;
-      current = COMP_JOBS.get("openai-bridge");
-    }
-    if (current && !current.finished) return sendJson(res, 409, { ok: false, code: "BUSY", message: "busy" });
-    if (req.method !== "POST") return handler(req, res);
-    const job = { phase: models ? "fetching-models" : "configuring", done: 0, total: 0, finished: false };
-    let complete;
-    const disconnect = () => { if (!res.writableEnded) job.abort.abort(); };
-    if (models) {
-      job.abort = new AbortController();
-      job.completion = new Promise((resolve) => { complete = resolve; });
-      req.once("aborted", disconnect);
-      res.once?.("close", disconnect);
-      if (req.aborted || res.destroyed) disconnect();
-    }
-    COMP_JOBS.set("openai-bridge", job);
-    try { return await handler(req, res, job.abort?.signal); }
-    finally {
-      if (models) { req.removeListener("aborted", disconnect); res.removeListener?.("close", disconnect); }
-      if (COMP_JOBS.get("openai-bridge") === job) COMP_JOBS.delete("openai-bridge");
-      complete?.();
-    }
-  }
   // ── 可选组件（浏览器组件等）──
   if (p === "/api/components" || p.startsWith("/api/components/")) return handleComponents(req, res, p, u);
   if (p.startsWith("/api/gh/")) return handleGh(req, res, p);

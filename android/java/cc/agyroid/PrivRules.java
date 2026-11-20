@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 哪些特权命令可以不问就跑（见 Priv.ask，审查 v0513b 中-3）。纯逻辑，不碰安卓；测试 android/tests/cc/codroid/PrivRulesTest.java。
+ * 哪些特权命令可以不问就跑（见 Priv.ask，审查 v0513b 中-3）。纯逻辑，不碰安卓；测试 android/tests/cc/agyroid/PrivRulesTest.java。
  *
  * 发请求的可能是混进工具链的脚本，它完全控制 argv。所以不去猜「哪些命令危险」（总有没列到的写法：shebang 脚本、$0、
  * 没列的子命令…），反过来：只有能逐词认清、每条都在下面查看类白名单里的命令免问，其余一律要用户点头。

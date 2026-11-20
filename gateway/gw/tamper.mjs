@@ -33,7 +33,7 @@ export function tamperRecord(src, files) {
   const ev = { id: ++seq, at: Date.now(), src, files: list, told: false, acked: false };
   EVENTS.push(ev);
   if (EVENTS.length > MAX) EVENTS.shift();
-  log(`⚠️ [篡改留痕] ${src === "app" ? "应用起网关前" : src === "claude" ? "Antigravity CLI 程序" : "网关运行中"}发现改动并已处理：${list.join(", ")}`);
+  log(`⚠️ [篡改留痕] ${src === "app" ? "应用起网关前" : src === "agy" ? "Antigravity CLI 程序" : "网关运行中"}发现改动并已处理：${list.join(", ")}`);
   try { notify?.(tamperPending()); } catch {}
   return ev;
 }
@@ -51,7 +51,7 @@ export function tamperNote(ids = null) {
   for (const e of fresh) { e.told = true; ids?.push(e.id); }
   const notes = fresh.map((e) => {
     const files = e.files.slice(0, 12).join(", ");
-    if (e.src === "claude") return `Refused to start a modified Antigravity CLI binary (${files}).`;
+    if (e.src === "agy") return `Refused to start a modified Antigravity CLI binary (${files}).`;
     if (e.src === "app") return `App files were restored from the installed package (${files}); those changes have been undone.`;
     const config = e.files.filter((f) => /^agyapp-(settings|providers)\.json$/.test(f));
     const program = e.files.filter((f) => !config.includes(f));

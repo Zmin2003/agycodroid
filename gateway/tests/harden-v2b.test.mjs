@@ -5,12 +5,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { CFG } from "../gw/config.mjs";
 import { NEXT } from "../gw/http.mjs";
 
-// CI 的 Linux 没有 /system/bin/sh（#113 同款）
-const SH = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 import { routeGit } from "../gw/git.mjs";
 
 async function serve(...routes) {
@@ -57,38 +55,6 @@ test("厂商文件里塞自定义接口条目（explicit:false / local / login /
   const j = JSON.parse(out.trim().split("\n").pop());
   // 移植：agy 只有 google / gemini，文件里的 custom-1 整个被忽略，active 回落到 google（OAuth 登录，不带 Key）
   assert.deepEqual(j, { id: "google", explicit: false, local: false, login: true, native: false, key: null });
-});
-
-test("端侧模型：端口被别人占着、对 /health 回 200，也不当成自己的服务起来了", async () => {
-  const pre = fs.mkdtempSync(path.join(process.env.AGAPP_TMP, "hv2b-llama-"));
-  const home = path.join(pre, "home");
-  fs.mkdirSync(path.join(pre, "bin"), { recursive: true }); fs.mkdirSync(path.join(home, "models"), { recursive: true });
-  fs.truncateSync((fs.writeFileSync(path.join(home, "models", "hv2b-fake.gguf"), ""), path.join(home, "models", "hv2b-fake.gguf")), 11e6);   // 小于 10 MB 不算模型；稀疏文件不占地方
-  // 假 llama-server：有 bind 标记文件时照真的那样打 listening 行并应答；否则学「端口被占」报错退出（环境变量传不过去：termEnv 会重建）
-  fs.writeFileSync(path.join(pre, "fake.js"), `const port = process.argv[process.argv.indexOf("--port") + 1];
-    if (!require("fs").existsSync(${JSON.stringify(path.join(pre, "bind"))})) { console.error("couldn't bind HTTP server socket, hostname: 127.0.0.1, port: " + port); setTimeout(() => process.exit(1), 1500); }
-    else require("http").createServer((q, s) => s.end("{}")).listen(port, "127.0.0.1", () => console.log("main: server is listening on http://127.0.0.1:" + port + " - starting the main loop"));`);
-  fs.writeFileSync(path.join(pre, "bin", "llama-server"), `#!${SH}\nLD_LIBRARY_PATH=${JSON.stringify(process.env.LD_LIBRARY_PATH || "")} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(path.join(pre, "fake.js"))} "$@"\n`, { mode: 0o755 });
-  const port = await new Promise((ok) => { const s = http.createServer().listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => ok(p)); }); });
-  const gw = new URL("../gw/", import.meta.url).href;
-  const src = `const l = await import(${JSON.stringify(gw + "local.mjs")});
-    try { await l.ensureLlama("hv2b-fake"); console.log("READY " + l.LL.state); } catch (e) { console.log("FAIL " + e.message); }
-    try { process.kill(-l.LL.child.pid, "SIGKILL"); } catch {}
-    process.exit(0);`;
-  const run = (mode) => new Promise((ok) => {
-    const c = spawn(process.execPath, ["--input-type=module", "-e", src], {
-      env: { ...process.env, AGAPP_HOME: home, HOME: home, AGAPP_PREFIX: pre, AGAPP_LLAMA_PORT: String(port), AGAPP_TEST: "1", HV2B_MODE: mode }, encoding: "utf8" });
-    let out = ""; c.stdout.on("data", (d) => (out += d)); c.stderr.on("data", (d) => (out += d));
-    c.on("close", () => ok(out));
-  });
-  const imp = http.createServer((q, s) => s.end("{}"));
-  await new Promise((ok) => imp.listen(port, "127.0.0.1", ok));
-  const a = await run("busy");
-  await new Promise((ok) => imp.close(ok));
-  assert.match(a, /^FAIL 端侧模型没起来/m, a);
-  fs.writeFileSync(path.join(pre, "bind"), "");
-  const b = await run("bind");
-  assert.match(b, /^READY ready/m, b);
 });
 
 test("本机实况：pkg 清单里的包名、版本带换行也压成一行；篡改留痕的文件名拼不出带空格的句子", async () => {

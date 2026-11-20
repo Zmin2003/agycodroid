@@ -15,13 +15,13 @@ const { fixPlan, reconcileNow, reconcileRun, routeReconcile } = await import("..
 const f = (key, act, level = "error") => ({ key, level, k: key, v: null, fix: "", act });
 test("排步骤：先模块、再组件，Antigravity CLI 和工具包最后；同一个组件并成一步；info 和不能修的不排", () => {
   const F = [
-    f("devkit", { t: "devkit" }), f("claude", { t: "claude" }),
+    f("devkit", { t: "devkit" }), f("agy", { t: "agy" }),
     f("comp-files:a", { t: "comp", id: "a" }), f("comp-bin:a", { t: "comp", id: "a" }),
     f("mod-partial:m1", { t: "mod", id: "m1" }), f("comp-outdated:b", { t: "comp", id: "b" }, "info"),
     f("custom-files:x", null), f("comp-format:c", null),
   ];
   const s = fixPlan(F, "all");
-  assert.deepEqual(s.map((x) => x.act.t + ":" + (x.act.id || "")), ["mod:m1", "comp:a", "claude:", "devkit:"]);
+  assert.deepEqual(s.map((x) => x.act.t + ":" + (x.act.id || "")), ["mod:m1", "comp:a", "agy:", "devkit:"]);
   assert.deepEqual(s[1].keys, ["comp-files:a", "comp-bin:a"]);
   assert.deepEqual(fixPlan(F, ["comp-bin:a"]).map((x) => x.act.id), ["a"], "只修选中的那条");
   assert.deepEqual(fixPlan(F, ["custom-files:x"]), [], "不能自动修的没有步骤");

@@ -21,7 +21,6 @@ agycodroid 要从网上取的东西有八类，大多有不止一个来源。这
 | 5 | 组件包 | 只走 GitHub Release（fork 暂无镜像站） | 签名索引里的 sha256，解包后再按包内 MANIFEST 逐个核对 | `gateway/gw/components.mjs` `compRunInstall` |
 | 6 | pkg 装软件 | Termux 官方 → packages.termux.dev → grimler.se → 清华/中科大/北外/南大（main、x11） | 钉在 pkg 里的 Termux 自动构建钥，验 `Release.gpg` | `assets/bin/pkg.mjs` |
 | 7 | 自定义组件补 glibc 库 | Termux 官方 glibc 仓库（只此一个） | HTTPS + `Packages` 里的 sha256 | `gateway/gw/custom.mjs` `customFetchLibs` |
-| 8 | 端侧模型 | 魔搭（仅 Qwen 官方）→ HuggingFace → hf-mirror.com | 目录里钉的 sha256（取自 HF LFS） | `gateway/gw/local.mjs` `LOCAL_CATALOG` |
 
 **0.4.1 起的两项通用做法**（工具包、APK 更新、组件包、Antigravity CLI 都适用）：
 
@@ -129,10 +128,6 @@ bash install-agy.sh latest        # 或具体版本号（如果已经装过）
 ### 7. 自定义组件补 glibc 库
 
 只有 Termux 官方的 glibc 仓库可用，因为国内没有镜像。用户连不上时，分析结果会把这些库列为「找不到来源」，装还是能装，只是可能跑不起来。以后想补的话，可以在 fork 自己的服务器（目前还没有）上镜像 `termux-glibc`，并像 pkg 那样验 `Release.gpg`。
-
-### 8. 端侧模型
-
-模型目录里每一项都钉了 sha256。Qwen 官方仓库的模型先走魔搭，其余的依次试 HuggingFace 和 hf-mirror.com。用户自己粘贴的直链只认 https。
 
 ---
 

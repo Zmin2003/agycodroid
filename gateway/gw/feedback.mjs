@@ -39,7 +39,7 @@ async function issueDraft(lang) {
     "| | |", "|---|---|",
     row("agycodroid", ver("app") || (PREFIX ? "?" : "dev")),
     row("Toolchain", ver("devkit") || devkitVersion(dk)),
-    row("Antigravity CLI", ver("claude")),
+    row("Antigravity CLI", ver("agy")),
     row("Android", `${g("ro.build.version.release")} (SDK ${g("ro.build.version.sdk")})`),
     row("Device", `${g("ro.product.manufacturer")} ${g("ro.product.model")}${g("ro.product.brand") && g("ro.product.brand").toLowerCase() !== g("ro.product.manufacturer").toLowerCase() ? ` (${g("ro.product.brand")})` : ""}`),
     row("ROM", rom),

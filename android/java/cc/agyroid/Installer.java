@@ -689,6 +689,10 @@ final class Installer {
     static final int TIMEOUT_RC = 124;
     /** 失败记录里留的输出尾部：最后 20 行、最多 4000 字 */
     static final int TAIL_LINES = 20, TAIL_MAX_CHARS = 4000;
+    /** Antigravity CLI 安装输出的落盘文件（files/ 下）：installAgy 与 Updater.installAgy 共用；
+     *  诊断包（Share.bundleLogs）收进去。以前安装输出只在界面上闪过，rc=137 这类失败在诊断包里
+     *  完全看不到过程，和 1.0.2 修过的 first-run 静默失败是同一类问题（R1） */
+    static final String AGY_INSTALL_LOG_FILE = "install-agy.log";
 
     /** 一次 first-run 失败的全部信息（H3）：步骤名是输出里最后一条 `▸ …` 行或 `first-run-summary:` 行，
      *  tail 是输出尾部，log 是落盘的完整输出，summaryLog / compileLog 是新版 first-run.sh 在 $PREFIX/tmp/ 留的汇总与 compileall 日志 */
@@ -1824,8 +1828,15 @@ final class Installer {
     void installAgy(File script, String ver) throws IOException {
         ui.step(Tr.t("从官方渠道下载 Antigravity CLI…"));
         // 下载 CLI 可能超过 10 分钟（网慢）：这里不设单步超时，超时只掐 first-run 这类本地步骤
-        int rc = run(0, null, env.bin("bash").getPath(), script.getPath(), ver);
-        if (rc != 0 || !env.agyReady()) throw new IOException(Tr.f("Antigravity CLI 安装失败（rc={0}）", rc));
+        int rc = run(0, new File(env.files, AGY_INSTALL_LOG_FILE), env.bin("bash").getPath(), script.getPath(), ver);
+        if (rc != 0 || !env.agyReady()) {
+            android.util.Log.e("agycodroid-setup", "installAgy rc=" + rc + " step=" + lastOutcome.step + " tail=" + lastOutcome.tail);
+            // rc=137：子进程被 SIGKILL，不是超时（超时是 124）。以前是网关清理按 AGAPP_TOKEN_FILE
+            // 误杀安装子进程（R1）；现在安装子进程不再带这个变量。humanize() 再给用户翻成人话
+            if (rc == 137) throw new IOException(Tr.f("Antigravity CLI 安装失败（rc=137：安装进程被系统结束）。最后一步：{0}；安装日志：{1}",
+                lastOutcome.step.isEmpty() ? Tr.t("（未知）") : lastOutcome.step, AGY_INSTALL_LOG_FILE));
+            throw new IOException(Tr.f("Antigravity CLI 安装失败（rc={0}）", rc));
+        }
     }
 
     /** 最近一次 run() 的结果（步骤 / 尾部 / 是否超时），给 firstRuns 记结构化失败用 */
@@ -1835,10 +1846,12 @@ final class Installer {
         return run(RUN_TIMEOUT_MS, null, cmd);
     }
 
-    /** timeoutMs <= 0 = 不设超时；logFile 非空时输出全文落盘（H3）。超时杀掉进程、返回 TIMEOUT_RC（H4） */
+    /** timeoutMs <= 0 = 不设超时；logFile 非空时输出全文落盘（H3）。超时杀掉进程、返回 TIMEOUT_RC（H4）。
+     *  环境走 applyForInstaller：安装子进程不带 AGAPP_TOKEN_FILE，否则网关清理会按这个变量把它当
+     *  「网关留下的进程」杀掉（rc=137，R1）。网关自己起进程走 GatewayService.spawnGateway 的 apply() */
     int run(long timeoutMs, File logFile, String... cmd) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(env.cmd(cmd));
-        env.apply(pb.environment());
+        env.applyForInstaller(pb.environment());
         pb.directory(env.home);
         pb.redirectErrorStream(true);
         RunOutcome o = new RunOutcome();

@@ -49,8 +49,9 @@ return [
 }
 
 /** result 里带了各模型的上下文窗口，取来给前端的用量条用。
-* agy 的 result 不带窗口：只认 modelUsage（没有就没有），再回落到模型清单（agy 也没有窗口表），
-* 拿不到就返回 0——绝不写死数值。 */
+ *  agy 的 result 不带窗口——这是未经证实的假设：只认 modelUsage（没有就没有），
+ *  再回落到模型清单里学到 / 手填的窗口。拿不到就返回 0（= 无来源、不知道），
+ *  绝不写死数值、绝不把别处的默认值（比如 bridge 的 200k）挪过来。 */
 export function contextWindowOf(result, p, model) {
 try {
 const mu = result.modelUsage || {};
@@ -86,19 +87,22 @@ export const promptTokens = (u) => u
 ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_read_tokens || 0) + (u.cache_creation_input_tokens || 0)
 : 0;
 
-/** 用量事件：只在数值真的变了时推给前端（用量条）。 */
-function contextUsage(u, flags, sse, atStart = false) {
+/** 用量事件：只在数值真的变了时推给前端（用量条）。win 是当时能拿到的上下文窗口，
+ *  拿不到发 0（前端显示“已用 token / 未知窗口”，不要拿假分母画满格）。 */
+function contextUsage(u, flags, sse, atStart = false, win = 0) {
 const n = promptTokens(u);
 if (!Number.isFinite(n) || n <= 0) return;
 if (flags) {
 flags.promptUsage = {...u};
 // 开头无输出的较小值先留给本请求合并，别把用量条拉回；末尾仍允许真实下降，不取历史最大值。
 if (atStart &&!u.output_tokens && n < flags.contextTokens) return;
-const changed = flags.contextTokens!== n;
-flags.contextTokens = n; flags.mainCtx = n;
+// 窗口分母变了（result 里刚学到）也要推一次，哪怕 token 数没变——不然前端永远拿不到分母
+const winChanged = Number(win) !== Number(flags.contextWindowSent || 0);
+const changed = flags.contextTokens!== n || winChanged;
+flags.contextTokens = n; flags.mainCtx = n; flags.contextWindowSent = Number(win) || 0;
 if (!changed) return;
 }
-sse({ type: "usage", contextTokens: n, outputTokens: u.output_tokens || 0});
+sse({ type: "usage", contextTokens: n, outputTokens: u.output_tokens || 0, contextWindow: Number(win) || 0});
 }
 
 /** agy 的 usage → Claude 形状（input_tokens / output_tokens / cache_read_input_tokens / total_tokens），
@@ -123,6 +127,7 @@ if (!ev || typeof ev!== "object") return;
 const type = ev.event;
 if (type === "init") {
 const init = ev.init || {};
+if (flags && init.model) flags.model = init.model;
 onInit({
 session_id: ev.conversation_id || init.session_id || init.conversation_id,
 model: init.model || null,
@@ -140,7 +145,11 @@ const stepIdx = Number.isInteger(st.step_index)? st.step_index: -1;
 // 子代理的步骤（带 subagent_info）：正文不进主气泡，走 sub_text；工具也挂到子代理名下。
 const subs = Array.isArray(st.subagent_info?.subagents)? st.subagent_info.subagents: [];
 const subParent = subs.length? ("agy-sub-" + String(subs[0].conversation_id || subs[0].type_name || stepIdx)): null;
-if (st.usage &&!subParent) contextUsage(normUsage(st.usage), flags, sse);
+if (st.usage &&!subParent) {
+  // 窗口分母：之前轮次学到 / 手填的（init 报的模型在缓存清单里有窗口就用它），没有就是 0（未知）
+  if (flags && !flags.contextWindow && flags.model) flags.contextWindow = Number(currentModelInfo(flags.model, provider).context_window) || 0;
+  contextUsage(normUsage(st.usage), flags, sse, false, flags ? flags.contextWindow || 0 : 0);
+}
 if (st.step_type === "user_input") {
 // CLI 已接住一条用户消息（回显）：插话送达的确认，见 run.mjs onReplay
 if (onReplay) onReplay();
@@ -188,7 +197,12 @@ const status = String(r.status || "");
 // 成功判定大小写不敏感（M6）：“SUCCESS”之外的值代码/测试里没见过，不凭空认——真机抓到新取值再补。
 const ok = status.toUpperCase() === "SUCCESS";
 const usage = normUsage(r.usage);
-if (usage) contextUsage(usage, flags, sse);
+// result 到了：窗口这时才可能从 modelUsage 里读到（未经证实，见 contextWindowOf）。
+// 读到了就记下来、学进清单（learnWindow：写缓存 + 持久化到 extraModels）；读不到发 0。
+const win = contextWindowOf(r, provider, flags && flags.model);
+if (flags) flags.contextWindow = win;
+if (usage) contextUsage(usage, flags, sse, false, win);
+if (r.modelUsage) import("./models.mjs").then((m) => m.learnWindow(r, provider)).catch(() => {});
 const norm = {
 uuid: "agy-" + String(ev.conversation_id || "") + "-" + String(r.num_turns?? 0) + (r.duration_seconds ? "-" + String(r.duration_seconds) : ""),
 session_id: ev.conversation_id || null,

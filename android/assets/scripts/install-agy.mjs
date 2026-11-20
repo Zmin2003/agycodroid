@@ -129,6 +129,7 @@ if (WANT !== MVER) {
   // 不是最新版：只有本地已装过、且存下的 manifest 副本与二进制对得上时才能切回去；否则没有官方取包地址
   if (storedOk) {
     say(`${WANT} 已装过（与存下的 manifest 副本一致），直接切回去，不重新下载`);
+    say("▸ 切换 current…");
     switchCurrent(OUT);
     process.exit(0);
   }
@@ -144,6 +145,7 @@ else {
   // 上次断点续传留下来的半截包：是同一份（manifest 的 sha512 没变）才接着下，否则从头来
   try { if (fs.readFileSync(tagFile, "utf8") !== SHA) { fs.rmSync(tgz, { force: true }); fs.writeFileSync(tagFile, SHA); } }
   catch { fs.writeFileSync(tagFile, SHA); }
+  say("▸ 下载…");
   let err = await fetchTo(MURL, tgz);
   if (err) {
     // 断了就续传重试一次，还不行就报错（已下的部分留着，下次接着续传）
@@ -151,10 +153,12 @@ else {
     err = await fetchTo(MURL, tgz);
     if (err) die(`下载没成功（${err}）：检查网络后重试（已下的部分会保留，下次接着续传）`);
   }
+  say("▸ 校验 sha512…");
   const got = sha(tgz);
   if (got !== SHA) { fs.rmSync(tgz, { force: true }); die(`sha512 不符（期望 ${SHA.slice(0, 12)}…，实得 ${got.slice(0, 12)}…），没装`); }
   say("✓ sha512 与官方 manifest 一致");
   // 解包：tar.gz 里名字以 antigravity 结尾的成员就是程序本身
+  say("▸ 解包…");
   const x = path.join(OUT, "x"); fs.rmSync(x, { recursive: true, force: true }); fs.mkdirSync(x);
   const r = spawnSync(TAR, ["-xzf", tgz, "-C", x]);
   if (r.status !== 0) { fs.rmSync(x, { recursive: true, force: true }); die("解包失败：" + String(r.stderr || "").trim()); }
@@ -172,11 +176,13 @@ else {
 // ── 4. 先试跑新版，跑得起来才换上，留一版旧的 ─────────────────────
 // 先换 current 再试跑的话，试跑失败会让 current 指着一个跑不起来的版本，旧版明明还在却用不上
 // agy 是官方 bionic 构建，直接跑：不用 glibc 加载器、不用 preload
+say("▸ 试跑新版本…");
 fs.chmodSync(BIN, 0o755);
 {
   const env = { ...process.env }; delete env.LD_PRELOAD;
   const r = spawnSync(BIN, ["--version"], { stdio: "inherit", env });
   if (r.status !== 0) die("新版本试跑失败（--version 没跑通），没有换上，继续用原来的版本");
 }
+say("▸ 切换 current…");
 switchCurrent(OUT);
 process.exit(0);

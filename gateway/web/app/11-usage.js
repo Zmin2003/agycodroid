@@ -192,7 +192,8 @@
   }
 
   // 换外观时重画月报（theme.js 只改 html 的 data-theme / data-skin 和 <style id="user-accent"> 的内容，不发事件）
-  const usRepaint = () => { if (us.raw && $("us-card")) usRender(); };
+  const usReportOpen = () => pageVisible("usage") && !$("us-field").classList.contains("hidden");
+  const usRepaint = () => { if (us.raw && usReportOpen()) usRender(); };
   new MutationObserver(usRepaint)
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-skin"] });
   // 强调色只换那段 style 的文字、不碰 html 属性，得单独盯着（195-L.10）：第一次创建、之后每次改色都要重画
@@ -207,6 +208,7 @@
   usWatchAccent();
 
   function usRender() {
+    if (!usReportOpen()) return;
     // 还没读回来：月份标签说明在等/失败了，翻月和保存分享先灰掉，别看着能点、点了没反应（审查 F-009）
     const idle = !us.raw;
     for (const b of [$("us-prev"), $("us-next"), ...$("us-actions").querySelectorAll("button")]) b.disabled = idle;
@@ -243,6 +245,7 @@
   const usDash = { view: "chart", quota: null, energy: null };
   const MODEL_COLORS = ["#c96442", "#2f6aa8", "#d6a84a"];      // 按出现顺序固定分配；第 4 个起并进「其他」
   function usPaint() {
+    if (!pageVisible("usage")) return;
     const now = new Date(), d0 = usDay0(now), m0 = usMonth0(now.getFullYear(), now.getMonth());
     const today = us.raw ? usSum(d0, usAddDays(d0, 1)) : usEmpty(), month = us.raw ? usSum(m0, usAddDays(d0, 1)) : usEmpty();
     // 数字一排：本轮用量（agy usage：input / output / thinking / cache_read / total tokens）、今天、本月、缓存命中
@@ -326,7 +329,10 @@
     box.addEventListener("pointerleave", () => box.querySelector(".tip")?.classList.remove("show"));
   }
   $("us-top").addEventListener("click", (e) => { const r = e.target.closest("[data-sid]"); if (r) openSession(r.dataset.sid); });
-  $("en-more").addEventListener("click", () => { $("en-field").classList.toggle("hidden"); if (!$("en-field").classList.contains("hidden")) $("en-field").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  $("en-more").addEventListener("click", () => {
+    $("en-field").classList.toggle("hidden");
+    if (enDetailsOpen()) { loadEnergy(false); $("en-field").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  });
   $("us-report-btn").addEventListener("click", () => { $("us-field").classList.toggle("hidden"); if (!$("us-field").classList.contains("hidden")) { usRender(); $("us-field").scrollIntoView({ behavior: "smooth", block: "start" }); } });
   $("us-csv").addEventListener("click", async () => {
     if (!us.raw) return;
@@ -338,16 +344,40 @@
       if (canSaveAs()) saveAs(r.file, "text/csv"); else toast(t("已保存：{name}", { name: r.file }));
     } catch (e) { toast(e.message, true); }
   });
-  async function loadUsage() {
-    try {
-      us.raw = await api("/api/usage?detail=quarter"); us.err = "";
-      if (/^✗/.test($("us-result").textContent)) $("us-result").textContent = "";   // 恢复了：旧的失败提示别留着
-      if (!us.month) { const n = new Date(); us.month = [n.getFullYear(), n.getMonth()]; }
-      usBuild(); usPaint();
-      if (!$("us-field").classList.contains("hidden")) usRender();
-      // 第一次打开：把装这个版本之前的历史会话补算进来
-      if (!us.raw.imported && !us.raw.importing && !us.busy) usImport(true);
-    } catch (e) { us.err = e.message || "?"; $("us-result").textContent = "✗ " + e.message; usPaint(); if (!$("us-field").classList.contains("hidden")) usRender(); }
+  function resumeUsage() {
+    if (!pageVisible("usage")) return;
+    if (us.importResult) { $("us-result").textContent = us.importResult; us.importResult = ""; }
+    usRebase();
+    loadUsage();
+  }
+  // 定时刷新、手动重试和写后重读共用同一条读取链；收包后才排下一拍。
+  let usageRevision = 0;
+  function loadUsage(poll = false, changed = false) {
+    if (changed) usageRevision++;
+    const visit = pageVisit, rev = usageRevision, live = () => pageVisible("usage", visit) && rev === usageRevision;
+    return viewRead("usage", visit + ":" + rev, live, async () => {
+      clearTimeout(us.poll);
+      const refresh = () => { usBuild(); usPaint(); usRender(); };
+      try {
+        if (poll && us.busy) return;
+        const r = await api("/api/usage?detail=quarter");
+        if (!live()) return;
+        // 15 分钟桶也要比较，小时桶不变不代表本地日界线附近的数没变。
+        const sig = (x) => JSON.stringify([x.hours, x.quarters, x.imported, x.importing, x.off, x.since]);
+        if (!usDayMoved() && poll && !us.err && us.raw && sig(r) === sig(us.raw)) return;
+        us.raw = r; us.err = "";
+        if (/^✗/.test($("us-result").textContent)) $("us-result").textContent = "";
+        if (!us.month) { const n = new Date(); us.month = [n.getFullYear(), n.getMonth()]; }
+        refresh();
+        if (!poll && !r.imported && !r.importing && !us.busy) usImport(true);
+      } catch (e) {
+        if (!live()) return;
+        if (!poll || !us.raw) { us.err = e.message || "?"; $("us-result").textContent = "✗ " + e.message; usPaint(); usRender(); }
+        else if (usDayMoved()) refresh();
+      } finally {
+        if (live() && us.raw) us.poll = setTimeout(() => { if (live()) loadUsage(true); }, 20000);
+      }
+    });
   }
   // 开着用量页时跟着刷新：token 现在是边跑边记的（gw/usage.mjs usageMeter），不用等这一轮结束、也不用退出重进。数没变就不重画
   // 本地日期 / 时区变了（跨午夜、换时区、夏令时）：日、周、月的分组全得按新的算（195-O.5–O.7、197-5.12）
@@ -359,34 +389,24 @@
     usSeen = s;
     return true;
   }
-  setInterval(async () => {
-    if (curPage !== "usage" || document.hidden || us.busy || !us.raw) return;
-    let r = null; try { r = await api("/api/usage?detail=quarter"); } catch {}
-    if (curPage !== "usage") return;
-    const moved = usDayMoved();
-    // 只比 hours 会漏掉补算进度 / 开关 / 起始时间的变化（195-O.7）
-    const sig = (x) => JSON.stringify([x.hours, x.quarters, x.imported, x.importing, x.off, x.since]);
-    if (!moved && (!r || sig(r) === sig(us.raw))) return;
-    if (r) us.raw = r;
-    usBuild(); usPaint();
-    if (!$("us-field").classList.contains("hidden")) usRender();
-  }, 20000);
-  // 从后台回来：挂后台期间可能跨了午夜 / 换了时区，按现在的本地日期重算一遍
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden || curPage !== "usage" || !us.raw) return;
-    usDayMoved(); usBuild(); usPaint();
-    if (!$("us-field").classList.contains("hidden")) usRender();
-  });
+  // 回来可能跨了午夜或换了时区，先按新的本地时间分组，不等请求回来。
+  function usRebase() { if (pageVisible("usage") && us.raw && usDayMoved()) { usBuild(); usPaint(); usRepaint(); } }
+  document.addEventListener("visibilitychange", usRebase);
   async function usImport(auto) {
+    if (us.busy) return;
     us.busy = true;
     $("us-result").textContent = t("正在从历史会话补算…");
+    let result, changed = false;
     try {
       const r = await post("/api/usage/import", {});
-      $("us-result").textContent = r.aborted ? t("补算期间使用统计被清空了，这次补算的结果已丢弃。")
+      result = r.aborted ? t("补算期间使用统计被清空了，这次补算的结果已丢弃。")
         : t("补算完成：{f} 个会话记录、{n} 条消息。", { f: r.files, n: usNum(r.prompts) });
-      us.busy = false;
-      if (!auto || r.prompts) loadUsage();
-    } catch (e) { us.busy = false; $("us-result").textContent = "✗ " + e.message; }
+      changed = !auto || !!r.prompts;
+    } catch (e) { result = "✗ " + e.message; }
+    us.busy = false;
+    if (pageVisible("usage")) $("us-result").textContent = result;
+    else us.importResult = result;
+    if (changed) loadUsage(false, true);
   }
   $("us-year").addEventListener("click", (e) => {
     const b = e.target.closest(".us-mb");
@@ -401,7 +421,7 @@
   $("us-off").addEventListener("change", async (e) => {
     const box = e.target, want = box.checked;
     box.disabled = true;
-    try { await post("/api/usage/set", { off: !want }); loadUsage(); }
+    try { await post("/api/usage/set", { off: !want }); loadUsage(false, true); }
     catch (err) { box.checked = !want; toast(err.message, true); }
     finally { box.disabled = !us.raw; }
   });
@@ -443,28 +463,38 @@
         const clearFrom = usMonth0(y, m).getTime();
         const clearTo = usMonth0(y, m + 1).getTime();
         await post("/api/usage/clear", { from: clearFrom, to: clearTo });
-        loadUsage();
+        loadUsage(false, true);
       } else if (act === "clear-all") {
         if (!confirm(t("清空全部使用统计？之后从现在重新开始记。"))) return;
         await post("/api/usage/clear", { all: true });
-        loadUsage();
+        loadUsage(false, true);
       }
     } catch (err) { toast(err.message, true); }
   });
 
-  async function loadEnergy() {
-    api("/api/energy?view=day").then((d) => { usDash.energy = d; usPaint(); }).catch(() => {});
-    // 快速切 小时 / 日 / 周：慢的那次迟到不许盖掉现在这一档（数据形状也不一样，会报类型错误）（审查 F-005）
+  const enDetailsOpen = () => pageVisible("usage") && !$("en-field").classList.contains("hidden");
+  async function loadEnergy(summary = true) {
+    const visit = pageVisit, live = () => pageVisible("usage", visit);
+    if (!live()) return;
+    const dayUrl = "/api/energy?view=day";
+    const day = summary ? sameGet(dayUrl) : null;
+    day?.then((d) => { if (live()) { usDash.energy = d; usPaint(); } }).catch(() => {});
+    if (!enDetailsOpen()) return;
+    // 快速切小时 / 日 / 周或离页后，旧回包不能写进新视图。
     const ok = latest("energy"), v = en.view;
-    try { const d = await api("/api/energy?view=" + v); if (!ok() || en.view !== v) return; d.view = v; en.data = d; en.sel = -1; enRender(); if (d.sys) enSys(d.sys); }
-    catch (e) { if (ok()) $("en-cap").textContent = "✗ " + e.message; }
+    const current = () => live() && enDetailsOpen() && ok() && en.view === v;
+    try {
+      const d = await (v === "day" && day ? day : sameGet("/api/energy?view=" + v));
+      if (!current()) return;
+      en.data = { ...d, view: v }; en.sel = -1; enRender(); if (d.sys) enSys(d.sys);
+    } catch (e) { if (current()) $("en-cap").textContent = "✗ " + e.message; }
   }
   $("en-seg").addEventListener("click", (e) => {
     const v = e.target.dataset && e.target.dataset.v;
     if (!v || v === en.view) return;
     en.view = v;
     $("en-seg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.v === v));
-    loadEnergy();
+    loadEnergy(false);
   });
   // 点柱子看那一格的明细，再点一下（或点同一格）回到合计
   $("en-charts").addEventListener("click", (e) => {
@@ -489,113 +519,3 @@
     if (r.ok) enSys(r.sys);
     else $("en-sys").innerHTML = `<div class="prov-state err">${esc(t("查不到：{msg}（要先在上面开好 Shizuku）", { msg: r.message || t("失败") }))}</div>`;
   });
-
-  // ── 自定义接口卡（任何讲 Anthropic Messages 协议的端点）──
-  function renderCustomCard(box, p) {
-    const v = p || { label: "", baseUrl: "", authStyle: "bearer", modelsUrl: "", defaultModel: "", fastModel: "" };
-    box.innerHTML = `<div class="sub">${p ? esc(pLabel(p)) : t("新增自定义接口")}</div>
-      <input id="cc-label" placeholder="${t("名字（比如：公司网关）")}" value="${esc(v.label)}">
-      <input id="cc-base" placeholder="${t("端点地址，如")} https://example.com/anthropic" value="${esc(v.baseUrl)}">
-      <select id="cc-auth">
-        <option value="bearer" ${v.authStyle !== "x-api-key" ? "selected" : ""}>${t("认证：Authorization: Bearer（多数第三方）")}</option>
-        <option value="x-api-key" ${v.authStyle === "x-api-key" ? "selected" : ""}>${t("认证：x-api-key（Anthropic 风格）")}</option>
-      </select>
-      <input id="cc-model" placeholder="${t("默认模型名（必填）")}" value="${esc(v.defaultModel || "")}">
-      <input id="cc-fast" placeholder="${t("快模型名（选填，子代理用；留空同上）")}" value="${esc(v.fastModel || "")}">
-      <input id="cc-models" placeholder="${t("模型清单地址（选填；不填会按接口地址自动查找 /models）")}" value="${esc(v.modelsUrl || "")}">
-      <input id="cc-ctx" inputmode="numeric" placeholder="${t("上下文窗口（选填，token 数，1k=1024；不填按 200k 算）")}" value="${v.contextWindow ? esc(String(v.contextWindow)) : ""}">
-      <textarea id="cc-more" rows="3" placeholder="${t("更多模型（选填，每行一个；名字后面可空一格写窗口，如 gpt-6.1-sol 1m）")}">${esc((v.extraModels || []).map((m) => m.id + (m.contextWindow ? " " + m.contextWindow : "")).join("\n"))}</textarea>
-      <input id="pc-key" type="password" autocomplete="off"
-        placeholder="${p && p.hasKey ? t("已保存（…{tail}），留空则不改", { tail: esc(p.keyTail) }) : t("粘贴 API Key")}">
-      <label class="tiny" style="display:flex;gap:6px;align-items:flex-start"><input id="cc-inline" type="checkbox" style="width:auto;margin:2px 0 0"${v.inlineImages ? " checked" : ""}>
-        <span>${t("图片随消息一起发（兼容）：模型看不懂附图、照着乱编时再勾。有的第三方调用方式认不出 Read 读回来的图，勾上后附图会另带一份直接放进消息里。")}</span></label>
-      <div class="row-actions">
-        <button class="btn sm" data-act="save">${p ? t("保存") : t("添加")}</button>
-        ${p ? `<button class="btn sm ghost" data-act="test">${t("测试")}</button>
-               ${p.hasKey ? `<button class="btn sm ghost danger" data-act="clear">${t("清除 Key")}</button>` : ""}
-               <button class="btn sm ghost danger" data-act="del">${t("删除")}</button>${useBtn(p)}` : ""}
-      </div>
-${p && p.plainHttp ? `<div class="tiny warn">${esc(t("这个地址是明文 http，密钥和对话内容会不加密地发到对方机器上；能用 https 就换成 https。"))}</div>` : ""}
-      <div class="prov-state" id="pc-result"></div>
-            <div class="tiny">${t("要求对端讲 <b>Anthropic Messages</b> 协议（各家文档里写“Antigravity CLI 接入”的那个地址）。")}
-        ${t("地址末尾不要带 <code>/v1</code>，agy 会自己补 <code>/v1/messages</code>。")}
-        <br>${t("建议到厂商控制台设个单日消费上限和余额提醒；怀疑 Key 泄漏了，就在那里作废、换个新的。")}</div>
-      <details class="cc-tpl"><summary>${t("示例模板（不是真实服务，换成服务商给你的）")}</summary>
-        <pre style="white-space:pre-wrap;word-break:break-all;margin:6px 0;font-size:12px;line-height:1.5">Base URL: https://api.example.com/anthropic
-Auth: Authorization: Bearer
-Default model: your-model-id
-Fast model: your-fast-model-id (optional)
-Models URL: https://api.example.com/v1/models (optional)
-Extra models (one per line):
-your-model-id 200k
-your-cheap-model 128k
-Context window: 200k (optional; only if the provider doesn't report one)</pre>
-        <div class="tiny">${t("第三方端口由你自己选择，应用不审核、不背书。对方能看到你的 Key、代码和对话，请只用你信任的服务；不要使用共享或转售的账户。")}</div>
-      </details>`;
-    box.onclick = async (e) => {
-      const act = e.target.dataset && e.target.dataset.act;
-      if (!act) return;
-      if (act === "use") return useProvider(p);
-      if (act === "test") return testAndShow(p.id);
-      // 这张卡属于哪一家、还是不是刚才那一份 DOM：await 回来的旧回执只许动仍在原卡上的视图（BUG-UIFS-004）
-      const cardId = p ? p.id : "__new__";
-      const keyEl = $("pc-key"), labelEl = $("cc-label");
-      const live = () => state.provView === cardId && $("cc-label") === labelEl && $("pc-key") === keyEl;
-      if (act === "clear") {
-        if (!confirm(t("清除 {name} 的 Key？", { name: p.label }))) return;
-        // 留空保存会继续用旧 Key，以前只能把整个接口删掉（195-E.9）；后端支持 clearKey
-        let r;
-        try { r = await post("/api/providers/save", { id: p.id, clearKey: true }); } catch (e2) { return toast(e2.message, true); }
-        if (r && r.ok === false) return toast(t("清除失败：{msg}", { msg: r.message || "?" }), true);
-        if (!live()) return toast(t("已清除"));
-        return reloadProv(t("已清除"));
-      }
-      if (act === "del") {
-        if (!confirm(t("删除接口「{name}」？", { name: p.label }))) return;
-        let r;
-        try { r = await post("/api/providers/delete", { id: p.id }); } catch (e2) { return toast(e2.message, true); }
-        if (r && r.ok === false) return toast(t("删除失败：{msg}", { msg: r.message || "?" }), true);
-        const wasActive = state.providerActive === p.id;
-        state.provView = wasActive ? null : state.providerActive;
-        await reloadProv(t("已删除"));
-        // 删的就是正在用的接口：reloadProv 里 provView 已经清空，型号 / 思考强度下拉会停在已删清单上；
-        // 这里强制按新接口重拉一次，免得再保存时把旧型号写成新接口的型号（195-E.3）
-        if (wasActive) await loadModels(true);
-        return;   // 删除动作到此结束：以前缺这一句，会落进下面的公共保存分支，用已删的 id 再把当前卡保存一遍（BUG-UIFS-005）
-      }
-      const body = {
-        id: p ? p.id : "", label: $("cc-label").value.trim(), baseUrl: $("cc-base").value.trim(),
-        authStyle: $("cc-auth").value, defaultModel: $("cc-model").value.trim(), fastModel: $("cc-fast").value.trim(),
-        modelsUrl: $("cc-models").value.trim(), apiKey: $("pc-key").value.trim(), inlineImages: $("cc-inline").checked,
-      };
-      if (!body.defaultModel) return toast(t("默认模型名必填"), true);
-      // 上下文窗口：k / m 按二进制（1k=1024、1m=1048576），与型号面板的显示口径一致（#222）；清单不报窗口时默认/快模型按它算（#67）
-      const cw = $("cc-ctx").value.trim().replace(/[,_]/g, "").replace(/^0+(?:\.0+)?$/, ""), cm = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(cw);
-      body.contextWindow = cw ? (cm ? Math.round(Number(cm[1]) * ({ k: 1024, m: 1048576 }[cm[2].toLowerCase()] || 1)) : -1) : 0;
-      if (cw && !(body.contextWindow >= 1024 && body.contextWindow <= 16777216)) return toast(t("上下文窗口填 1024 到 16777216 之间的整数，也可以写 256k、1m"), true);
-      // 更多模型：每行「模型名」或「模型名 窗口」；第三方端口清单拉不到、或清单里没有的型号从这里加
-      body.extraModels = [];
-      const lines = $("cc-more").value.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const ln = lines[i].trim();
-        if (!ln) continue;
-        const lm = /^(\S+)(?:\s+(\d+(?:\.\d+)?)\s*([km]?))?$/i.exec(ln.replace(/[,_](?=\d)/g, ""));
-        if (!lm) return toast(t("更多模型第 {n} 行看不懂：写成「模型名」或「模型名 窗口」，窗口如 256k、1m", { n: i + 1 }), true);
-        const w = lm[2] ? Math.round(Number(lm[2]) * ({ k: 1024, m: 1048576 }[lm[3].toLowerCase()] || 1)) : 0;
-        if (lm[2] && !(w >= 1024 && w <= 16777216)) return toast(t("上下文窗口填 1024 到 16777216 之间的整数，也可以写 256k、1m"), true);
-        if (!body.extraModels.some((m) => m.id === lm[1])) body.extraModels.push({ id: lm[1], contextWindow: w });
-      }
-      let r;
-      try { r = await post("/api/providers/save", body); } catch (e2) { return toast(e2.message, true); }
-      // 换了主机又没给新 Key：网关把旧 Key 清掉了，得说清楚、让用户重新填（0.6.9 审计 P1-2）
-      const done = p ? t("已保存") : t("已添加");
-      // 远程明文 http：只警告不拦，保存回执带 warning 就跟在「已保存」后面说（199-9-02）
-      const msg = r.keyCleared ? t("换了主机，旧 Key 已清掉，请重新填") : r.warning ? done + " · " + r.warning : done;
-      // 卡已切走：迟到的回执只报保存结果，别把视图切回来重画当前卡（BUG-UIFS-004）
-      if (!live()) return toast(msg);
-      if (keyEl.value.trim() !== body.apiKey) return toast(msg);   // 同卡提交后又敲了新 Key：留着，别重画掉
-      state.provView = r.id;
-      await reloadProv(msg, true);
-    };
-  }
-

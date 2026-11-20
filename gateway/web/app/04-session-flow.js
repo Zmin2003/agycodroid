@@ -4,6 +4,29 @@
   let statLast = {}, statIv = 0, statRun = null;
   let cmpGen = 0;   // 第几次压缩：「正在压缩」和「已压缩」共用一行的键
   try { statLast = JSON.parse(localStorage.getItem(STAT_KEY) || "{}") || {}; } catch {}
+  const statButton = $("stat-chip"), statShort = statButton && statButton.querySelector(".stat-short");
+  // 保持存盘/实时统计的原格式；只在底栏显示层派生窄栏摘要（上游 277651c）：窄屏只显示 ↓8.4k tok，完整串放 title 与点开的菜单里
+  if (statButton && statShort) {
+    new MutationObserver(() => {
+      const text = statEl.textContent;
+      if (statButton.title === text) return;
+      const bits = text.split(" · "), tokens = bits.find(s => /^↓.+ tok$/.test(s));
+      const short = tokens ? tokens.slice(0, -4) : bits[0].replace(/^(\d+[mh]) \d+[sm]$/, "$1");
+      if (statShort.textContent !== short) statShort.textContent = short;
+      statButton.hidden = !text;
+      statButton.title = text;
+      statButton.setAttribute("aria-label", t("用量") + " · " + text);
+      const detail = OV.at(statButton);
+      if (detail && !text) OV.close(detail);
+      else if (detail) detail.lastElementChild.textContent = text;
+      checkHintWrap();
+    }).observe(statEl, { childList: true });
+    statButton.addEventListener("click", () => {
+      if (!statEl.textContent) return;
+      const detail = popMenu(statButton, [{ head: t("用量") }, { head: statEl.textContent }], "up", "hint-stat");
+      if (detail) detail.lastElementChild.dir = "ltr";
+    });
+  }
   function statPaint() {
     const rv = runViews.get(statRun);
     if (!rv) return statStop();
@@ -52,6 +75,7 @@
    *  实时区先遮着，到 sync 一次揭开（#88）。sync 迟迟不来：2.5 秒先揭开（重放特别长时边放边看，同以前）；
    *  15 秒还没来（连接断在重放中途、再没续上）就按到头收尾，别让用量一直攒着不上屏、新回复不吐字 */
   function beginReplay() {
+    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = 0; } // 不让旧轮次排的工具跟底挡住新一轮重放的跟底
     busReplay = true;
     // 新一轮重放开始：上一代没等到 sync 的用量缓冲作废。留着的话下一次 sync 会把旧值当成
     // 「刚更新的实时用量」写进视图，还把随后正确的历史用量挡在外面（0.6.9 #191-3）
@@ -154,6 +178,7 @@
     const hid = stripHidden()[view.sessionId] || {};
     view.goalHide = hid.g || 0;
     view.tasks = null;
+    view.tasksUnsupported = false;
     view.tasksHide = hid.t || "";
     renderRunStrip();
     // 新会话的首屏留着：点「新对话」时已经画过一次，重连回来（hello）又会走到这里——清掉重画就是空一帧再整块冒出来，
@@ -162,7 +187,7 @@
     welKeep = wel || null;
     dropCards(histEl); dropCards(liveEl);
     histEl.innerHTML = "";
-    // typeof 守卫：bridge-config-ui 的测试单独切 resetView 出来跑，那里没有 histLoading
+    // typeof 守卫：有的测试单独切 resetView 出来跑，那里没有 histLoading
     if (view.sessionId && typeof histLoading === "function") histLoading();
     liveEl.innerHTML = "";
     if (view.sessionId !== prevSid) view.firstSend = null;   // 换会话了：上一页的「首条已发出」不跟过来（0.6.9 审计 196-聊天.7）
@@ -384,7 +409,7 @@
     // 请求在途时事件流已经送来更新的目标 / 清单：历史里的是旧快照，不许盖回去（审查 #50 S2-07）
     const fresh = view.liveAt < sent;
     if (initial && fresh && "goal" in r) { view.goal = r.goal || null; renderRunStrip(); }
-    if (initial && fresh && "tasks" in r) { view.tasks = r.tasks || null; renderRunStrip(); }
+    if (initial && fresh && "tasks" in r) { view.tasks = r.tasks || null; if ("tasksUnsupported" in r) view.tasksUnsupported = !!r.tasksUnsupported; renderRunStrip(); }
     const page = renderItems(r.items || []);
     page.dataset.from = r.cursor;
     page.dataset.to = fwd ? r.next : initial ? r.size : before;
@@ -777,7 +802,7 @@
     switch (ev.type) {
       case "hello": return onHello(ev);
       case "tasks":
-        if (view.sessionId && ev.sessionId === view.sessionId) { view.tasks = ev.tasks || null; view.liveAt = Date.now(); renderRunStrip(); }
+        if (view.sessionId && ev.sessionId === view.sessionId) { view.tasks = ev.tasks || null; view.tasksUnsupported = !!ev.tasksUnsupported; view.liveAt = Date.now(); renderRunStrip(); }
         break;
       case "goal":
         if (view.sessionId && ev.sessionId === view.sessionId) { view.goal = ev.goal || null; view.liveAt = Date.now(); renderRunStrip(); }
@@ -885,7 +910,7 @@
     const av = rv.av;
     if (!av) return;   // 收尾后只留了 startedAt 的空壳（FIND-042）：晚到的增量不再画
     switch (ev.type) {
-      case "usage":          if (ev.contextTokens) liveCtx(ev.contextTokens, state.ctxTotal); break;
+      case "usage":          if (ev.contextTokens) liveCtx(ev.contextTokens, ev.contextWindow || state.ctxTotal); break;
       case "run_tokens":     rv.out = +ev.out || 0; if (statRun === ev.runId) statPaint(); break;
       case "delta":          av.delta(ev.text); break;
       case "assistant_text": av.text(ev.text); break;
@@ -906,7 +931,7 @@
       case "sub_done":       TOOL_CARDS.get(ev.parent)?.subDone?.(ev.status); break;
       case "tool_result":
         if (ev.parent && !TOOL_CARDS.get(ev.parent)) break;   // 同上：父卡不在，结果也不攒进待贴表
-        toolResult(ev.id, ev.ok, ev.text); av.toolDone(ev.id); scrollDown(); break;
+        toolResult(ev.id, ev.ok, ev.text); av.toolDone(ev.id); queueToolFollow(); break;
       case "phase":          av.phase(ev); break;
       // 压缩中的状态会连来好几条：同一次压缩只留一行，压完原地换成结果（#67）
       case "compacting":     av.phase(null); av.noteK("cmp" + cmpGen, t("正在压缩上下文…")); scrollDown(); break;
@@ -1269,15 +1294,17 @@
   }
 
   function renderQueue() {
-    const q = srv.queue;
+    const q = srv.queue, held = q.filter((it) => it.held);
     queueStrip.classList.toggle("hidden", !q.length);
     const busy = isBusy();
     queueStrip.innerHTML = q.length ? `
       <div class="q-head">
-        <span>${q.some((it) => it.held)
-          ? q.some((it) => it.intr)
-            ? t("上一轮被系统中断，{n} 条排队的消息已挂起，不会自动发出 · 点 ⚡ 发出", { n: q.filter((it) => it.held).length })
-            : t("点了停止，{n} 条已挂起，不会自动发出 · 点 ⚡ 发出", { n: q.filter((it) => it.held).length })
+        <span>${held.length
+          ? held.some((it) => it.storageHold)
+            ? `${t("已暂停")} · ${t("读取历史失败：{msg}", { msg: "I/O" })}`
+            : held.some((it) => it.intr)
+              ? t("上一轮被系统中断，{n} 条排队的消息已挂起，不会自动发出 · 点 ⚡ 发出", { n: held.length })
+              : t("点了停止，{n} 条已挂起，不会自动发出 · 点 ⚡ 发出", { n: held.length })
           : busy ? t("待发 {n} 条 · 当前这一轮结束后依次发出", { n: q.length })
           // 真到并行上限才这么说；否则是这个会话上一轮还挂着（等后台任务 / 收尾），别让人以为开了好几个会话
           : atCap() ? t("同时在跑的会话已到上限（{max} 个），有空位就依次发出 · 待发 {n} 条", { max: srv.max, n: q.length })

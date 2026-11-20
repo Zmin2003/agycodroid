@@ -28,7 +28,7 @@
 - **版本控制与网络**：git（https / ssh）、curl、openssl、ssh、ssh-keygen。
 - **音视频**：ffmpeg / ffprobe 9（x264、x265、vpx、aom、opus、mp3 等编解码器）。**硬件编码**用 `-c:v h264_mediacodec`（或 `hevc_mediacodec`），配 `-pix_fmt nv12`，比 libx264 快约 3 倍；个别机型没有硬件编码器，就退回 libx264。
 - **命令行工具**：rg、fd、bat、delta、hx（+ `hx-grammar` 装语法）、jq、yq、sqlite3、typst、duckdb、magick（ImageMagick）、man、file、tar、xz、zstd、zip / unzip、`7z`（7-Zip，随应用自带，读写 7z / zip / tar.*，能解 rar / iso / cab 等几十种）。交互式 bash 里 tab 补全可用。
-- **Antigravity CLI** 本身：终端里 `claude` 命令可用，用的是打开终端时应用里选的那家接口、型号和密钥（密钥经 apiKeyHelper 从私有文件读，不在环境变量里）。换了接口要新开一个终端。
+- **Antigravity CLI** 本身：终端里 `agy` 命令可用，用的是打开终端时应用里选的那家接口、型号和密钥（Gemini API Key 方式时密钥经 `GEMINI_API_KEY` 环境变量进 agy 进程，不在文件里；Google 登录方式时 agy 用它自己的登录态）。换了接口要新开一个终端。
 
 ## 接口配置：通过应用或网关 API 保存
 
@@ -36,8 +36,7 @@
 
 - API 地址使用当前网关端口的回环地址；请求体为 JSON，`Content-Type: application/json`。浏览器内同源请求沿用应用会话 Cookie；本机工具使用已授权的 `X-CC-Token` 请求头（不是 `Authorization: Bearer`）。Host 必须是网关允许的本机地址，带 Origin 时也要通过来源检查。
 - 沿用应用/工具已有的鉴权与网关身份核验，不把令牌放进 URL、日志或回复，也不为配置接口关闭校验。没有现成的授权调用入口时，用应用接口设置页。
-- `GET /api/providers` 可查接口 id 和非完整密钥的状态；不要把返回里的密钥尾号写进回复。保存某家时传它的 `id`，只传需要更新的字段，例如 `{"id":"custom-1","defaultModel":"example-model"}`；新建自定义接口时省略 `id`，至少传 `baseUrl`，可传 `label`、`defaultModel`、`fastModel`、`apiKey`、`authStyle`（`bearer` 或 `x-api-key`）。示例中的 id 和型号只是占位，先查实际列表。
-- `baseUrl` 是兼容 Anthropic Messages 的接口根地址，网关会移除末尾 `/v1`，客户端再补 `/v1/messages`；OpenAI 协议接口应使用应用的桥接配置入口。
+- `GET /api/providers` 可查接口 id 和非完整密钥的状态；不要把返回里的密钥尾号写进回复。保存某家时传它的 `id`，只传需要更新的字段，例如 `{"id":"gemini","defaultModel":"example-model"}`。agycodroid 只有 Google 登录和 Gemini API Key 两家接口，不支持自定义接口：不要教用户新建自定义端点（`baseUrl` / Anthropic Messages 兼容地址），网关会拒绝保存。
 - 不传 `apiKey` 或传空串通常保留已有密钥；`clearKey: true` 才是显式清除。更换主机或预置线路且未提供新密钥时可能清除旧密钥，检查返回的 `keyCleared`。预置厂商的地址由线路目录管理，选线路传 `endpoint`。
 - 检查 JSON 的 `ok` / `error`，不能只看 HTTP 状态；成功返回 `id` 和 `provider`。正在使用该接口时修改连接信息可能返回 HTTP 409 / `busy`，等当前轮结束再保存。保存不会自动把会话切换到新接口。
 
@@ -93,14 +92,16 @@ priv 'sh /sdcard/agycodroid/脚本.sh'      # 再执行
 
 **关于 `SIGSYS: bad system call`**：安卓的 seccomp 会拦一批比 targetSdk 新的系统调用
 （`clone3`、`faccessat2`、`openat2`、`epoll_pwait2`，以及 `mount` / `umount2` / `reboot` / `kcmp` 这类），
-程序一碰就被 SIGSYS 杀掉。agycodroid 已经处理好了，**一般不用你管**：
+程序一碰就被 SIGSYS 杀掉（退出码 159）。**没有自动处理**，别以为应用已经替你挡下了：
 
-- 设置里的「静态程序兼容」默认开着：claude 外面套了 `seccomp-enosys-run -f`，**你拉起的整棵进程树**
-  （bash、静态 Go 程序、它们的子进程）碰到这类调用都会拿到 `-ENOSYS`，程序自己退回老接口接着跑。
+- agy 是官方 bionic 构建，直接跑，不用 seccomp 垫片，也不受这事影响。
+- 工具包里的静态程序（Go 等）撞上被拦的调用就是直接被 SIGSYS 杀掉：应用**不再**在拉起时套 seccomp 监督器
+  （以前的「静态程序兼容」开关已经删掉，自定义组件入口也不再套 `enosys-run`），想让它拿到 `-ENOSYS`
+  自己退回老接口接着跑，要手动套一层（见下）。
   所以在这里看到 `faccessat2 -> -38` 之类的结果，是**被监督器改写过的**，不代表系统本来就返回 ENOSYS ——
-  不开监督器时同一个程序会直接被 SIGSYS 杀掉（退出码 159）。
-- gdb、strace、ltrace、lldb、valgrind、proot 这些自己要 ptrace 的工具，exec 时会被自动放开，照常能用。
-- 只有用户把开关关了（或者程序不是你拉起的，比如用户自己在终端里跑），撞上 SIGSYS 才需要手动套一层：
+  不套监督器时同一个程序会直接被 SIGSYS 杀掉（退出码 159）。
+- gdb、strace、ltrace、lldb、valgrind、proot 这些自己要 ptrace 的工具别套 `enosys-run`（被跟踪的进程不能再被别人跟踪），直接跑，照常能用。
+- 撞上 SIGSYS 时手动套一层：
 
 ```sh
 enosys-run <程序> [参数...]

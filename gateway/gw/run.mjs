@@ -15,11 +15,11 @@ import { INTERRUPTED, QUEUE, RUN_LANE, RUN_SESSIONS, abortRun, clearInterrupted,
 import { LOCAL_CMD_RE, handleLocalCommand } from "./modelcmd.mjs";
 import { usageAdd, usageIsPrompt, usageMeter } from "./usage.mjs";
 import { TASKS_HINT, contextWindowOf, toolsHint, translate } from "./stream.mjs";
-import { SWALLOW_HOOKS } from "./streamfix.mjs";
 import { archiveHint } from "./archive.mjs";
 import { autoTitle } from "./autotitle.mjs";
 import { SUBAGENT_HINT, agentBook, takeAgentNote, putAgentNote } from "./agents.mjs";
 import { appendSessionRecord, findSessionFile, peekSession } from "./sessions.mjs";
+import { applyTaskToolCall, noteTaskTools } from "./goal.mjs";
 import { projectById, projectDefaults, projectOfDir } from "./projects.mjs";
 import { sessLostProvider, sessModel, sessProvider, setSessModel } from "./sessmodel.mjs";
 import { noteManaged } from "./sessmanaged.mjs";
@@ -30,7 +30,6 @@ import { SPOOF_NOTE, checkSession, integrityHint, integrityNote, neutralizeMarke
 import { ruleblockHint } from "./ruleblock.mjs";
 import { recordExtra } from "./lineage-store.mjs";
 import { refNote, refNoteSync } from "./merge.mjs";
-import { ensureManagedBridge } from "./managed-bridge.mjs";
 import { checkAppFiles } from "./appfiles.mjs";
 import { pathBlocked } from "./files.mjs";
 import { holdsPrivate } from "./pathguard.mjs";
@@ -197,18 +196,6 @@ export function lostProvider(item, sid0, pdef0) {
   return "";
 }
 
-// streamfix 人工补尾时按请求头里的会话号找到那一轮，留一句提示：回答真被截断时用户看得见、能让它继续。
-// kind = "error"：说完之后才来的报错被吞掉（195-U.4）；"truncated"：上游没给消息级收尾就断了，尾巴是我们补的（BUG-R01）
-// （移植时这段注册丢了，stab2-h-run-pad 的用例随之失败；按基线原样恢复。）
-SWALLOW_HOOKS.push((sid, msg, kind) => {
-  const run = sid && runList().find((r) => r.sessionId === sid && !r.ended);
-  if (!run) return;
-  if (kind === "truncated")
-    runEmit(run, { type: "note", key: "sfx-pad", text: tz("上游没发结束标记就断开了，回答已按说完处理；这条是否完整无法确认，如果没说完，发一句「继续」") });
-  else
-    runEmit(run, { type: "note", key: "sfx-swallow", text: tz("上游在回答结尾报了错（{msg}），已按说完处理；如果回答不完整，发一句「继续」", { msg }) });
-});
-
 export async function startRun(item) {
   const { sid0, pdef0, P } = pickProvider(item);
   const KEY = keyOf(P);
@@ -285,14 +272,6 @@ export async function startRun(item) {
     return endRun(run, { failed: true });
   }
   if (run.aborted) return endRun(run, {});
-  run.readyAbort = new AbortController();
-  try {
-    await ensureManagedBridge(P, { signal: run.readyAbort.signal });
-  } catch (e) {
-    if (!run.aborted) emit({ type: "error", message: tr(LAST_LANG, e.message) });
-    return endRun(run, { failed: !run.aborted });
-  } finally { run.readyAbort = null; }
-  if (run.aborted) return endRun(run, {});
 
   const cwd0 = cwdOf(item, run.sessionId);
   if (typeof cwd0 !== "string") {
@@ -323,7 +302,7 @@ export async function startRun(item) {
 
   // agy 的启动参数：长驻单进程 + stream-json 双向流。
   //   --input-format stream-json --output-format stream-json：stdin 一直开着，跑到一半还能再递消息进去（插话）。
-  //   --conversation <id>：续接（Claude 的 --resume）；-c 是“续最近一次”。
+  //   --conversation <id>：续接对话（agy 的续接旗标；-c 是“续最近一次”）。
   //   --model / --effort：模型 slug 与思考强度（agy 不认识的模型名会直接报错退出，不会静默换一个）。
   // 没有的旗标（不要补）：-p（那是单次模式，跑完即退）；--replay-user-messages（agy 不回显）；
   //   --permission-mode / --permission-prompt-tool / --allow-dangerously-skip-permissions
@@ -435,7 +414,7 @@ export async function startRun(item) {
   // 核过之后、真正执行之前程序被换掉了（来回替换卡时间窗）：这一轮停掉（DeepSeek 复核建议 2）
   if (!sealStillValid()) {
     log(`${runTag(run)} ⚠️ [Antigravity CLI 核验] 核过之后程序文件又变了，停掉这一轮`);
-    tamperRecord("claude", ["claude: changed right after it was verified"]);
+    tamperRecord("agy", ["agy: changed right after it was verified"]);
     emit({ type: "error", message: tr(LAST_LANG, "Antigravity CLI 程序和安装时存下的核验记录对不上，可能被改过，这一轮没有启动。到 设置 → 更新 里重新安装后再试。") });
     abortRun(run);
   }
@@ -562,11 +541,18 @@ export async function startRun(item) {
     if (st.step_type === "tool") {
       const info = st.tool_info || {};
       const id = "agy-tool-" + (flags.turn || 0) + "-" + idx;   // 轮次号 + step_index：step_index 跨轮复用时工具 id 不撞车（M2）
-      if (st.state !== "DONE") { acc.tools.set(id, { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} }); return; }
+      // 子代理标记只在 ACTIVE 步上时也要记住：DONE 步不一定再带标记（B2），
+      // 否则子代理的清单调用会被当成主会话的累积。
+      const subagentStep = Array.isArray(st.subagent_info?.subagents) && st.subagent_info.subagents.length > 0;
+      if (st.state !== "DONE") { acc.tools.set(id, { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {}, subagent: subagentStep }); return; }
       const known = acc.tools.get(id) || { id, name: String(info.name || st.tool_name || ""), input: info.parameters || {} };
       acc.tools.delete(id);
       record({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: known.id, name: known.name, input: known.input }] },
         uuid: crypto.randomUUID(), timestamp: new Date().toISOString(), cwd, sessionId: run.sessionId || null });
+      // 任务清单（E05 方案 A）：清单类工具调用到 DONE 才确认——ACTIVE 时的入参可能随后被改写、
+      // 调用也可能失败；子代理的清单不并入主清单（它的调用仍照常记进记录，见 goal.mjs 的注）。
+      // 形状对不上由 applyTaskToolCall 直接忽略；这里再包一层 try，清单逻辑绝不能带崩记录落盘。
+      try { applyTaskToolCall(run.sessionId, known.name, known.input, { subagent: !!(known.subagent || subagentStep) }); } catch (e) { log(`${runTag(run)} ⚠️ 任务清单累积失败（已忽略）: ${(e && e.message) || e}`); }
       const err = info.error;
       const out = typeof info.output === "string" ? info.output : (info.output == null ? "" : JSON.stringify(info.output));
       record({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: known.id, content: err ? String((err && err.message) || err) : out, ...(err ? { is_error: true } : {}) }] },
@@ -578,6 +564,9 @@ export async function startRun(item) {
   // lastResult 只证明「它那一轮」答完了：插话会在同一进程里再起一轮，
   // 那一轮还没出 result 就异常退出时，不能拿旧的 result 报成功（#96 02-002）。resultStale 记「之后又动起来了」
   let buf = "", stderr = "", lastResult = null, resultStale = false, prevTurns = 0;   // prevTurns：上一个 result 报的 num_turns，核对轮数用（L7）
+  // 原始 result（带 modelUsage）：translate() 交出来的 lastResult 是归一化过的，里面没有 modelUsage，
+  // 收尾时学窗口要用这一份（见 finish 里的 learnWindow 调用点）。
+  let lastRawResult = null;
   // agy 的 step_update 就是逐字增量，没有单独的 assistant 事件需要去重。
   const flags = { isCmd };
   // 新会话的记录文件是网关在 init 之后才建的：等它在磁盘上真正出现再广播 session_created。
@@ -598,6 +587,7 @@ export async function startRun(item) {
     setLastInit(init);
     run.newSession = !run.sessionId;
     run.sessionId = init.session_id;
+    noteTaskTools(run.sessionId, init.tools);   // E05：init.tools 里有没有清单工具，决定任务面板是“暂无任务”还是“不上报”
     noteManaged(run.sessionId);              // 应用里开的会话（含 --conversation）：记一笔，列表才不会归进杂项
     markIncomplete(run.sessionId, run.id);   // 新会话：拿到会话号就记上（FIND-040）
     run.usageModel = init.model || run.usageModel;
@@ -701,7 +691,7 @@ export async function startRun(item) {
     run.agents.feed(ev);
     // 会话记录：先落盘，再翻译（翻译可能触发收尾，收尾时记录必须已经在了）
     if (ev.event === "step_update") recordStep(ev);
-    if (ev.event === "result") { flushText(); record({ type: "result", usage: ev.result?.usage || null, num_turns: ev.result?.num_turns || 0, status: ev.result?.status || "", response: typeof ev.result?.response === "string" ? ev.result.response : "", uuid: crypto.randomUUID(), timestamp: new Date().toISOString(), cwd, sessionId: run.sessionId || null }); }
+    if (ev.event === "result") { flushText(); lastRawResult = ev.result || null; record({ type: "result", usage: ev.result?.usage || null, num_turns: ev.result?.num_turns || 0, status: ev.result?.status || "", response: typeof ev.result?.response === "string" ? ev.result.response : "", uuid: crypto.randomUUID(), timestamp: new Date().toISOString(), cwd, sessionId: run.sessionId || null }); }
     translate(ev, { sse: emit, flags, onInit, onResult, onReplay, provider: P });
     // init 之后的每个事件都核一次：网关在 init 后就把记录建好了，
     // 这里一旦看到文件就广播；没看到就等下一个事件，不在前端猜延时
@@ -750,6 +740,11 @@ export async function startRun(item) {
     }
     buf = "";
     if (tailFailed) log(`${runTag(run)} ⚠️ 尾部残行解析失败，已丢弃（前 200 字）: ${tailPreview}`);
+    // 收尾时再学一次窗口（非流式/回放路径的兜底）：translate() 流式路径的 learnWindow 是
+    // fire-and-forget，进程退出瞬间可能还没跑完；这里用原始 result（带 modelUsage，
+    // translate 交出来的 lastResult 里没有）再调一次。learnWindow 幂等：已学过的窗口跳过，
+    // 读不到/校验不过返回 false 不抛错；学不到就什么都不做。
+    if (lastRawResult) import("./models.mjs").then((m) => m.learnWindow(lastRawResult, P)).catch(() => {});
     const hadPartialText = !!acc.text;   // M5：有没有攒下半截正文（下面无 result 时提示“发一句『继续』”）
     flushText();                       // 进程死在半截时，累积的正文也要落进记录
     // agy 没发 init（或 init 里没给会话号）：攒下的记录没处落盘。按“未建会话的孤儿消息”另存一份，
@@ -820,7 +815,7 @@ export async function startRun(item) {
     const hint = code !== 0 || signal ? exitHint(code, signal) : tz("生成结束但没有返回结果");
     log(`${runTag(run)} ✖ ${hint}${stderr ? " :: " + stderr.trim().slice(-300) : ""}`);
     emit({ type: "error", message: tr(LAST_LANG, hint), detail: exitDetail(stderr) });
-    // streamfix 已死（M5）：无 result 时这里直接提示。已有部分正文但没等到收尾，回答可能不完整；
+    // 无 result 时这里直接提示。已有部分正文但没等到收尾，回答可能不完整；
     // 有会话号才能“继续”（没会话号时上面孤儿分支已经报错，让用户新开一轮）。
     if (hadPartialText && run.sessionId) emit({ type: "note", key: "run-incomplete", text: tr(LAST_LANG, tz("只收到了一部分回答，可能不完整：发一句「继续」让它接着说")) });
     endRun(run, { failed: true, durationMs: ms, ...spent() });
@@ -900,7 +895,8 @@ export async function routeRun(req, res, u, p) {
     const b = JSON.parse((await readBody(req)) || "{}");
     if (b.clearQueue) QUEUE.length = 0;
     // 带 id 只停那一轮；不带 id（旧前端）停掉全部
-    const killed = b.id ? abortRun(RUNS.get(String(b.id))) : runList().map(abortRun).some(Boolean);
+    const stop = (run) => abortRun(run, { userStopped: true });
+    const killed = b.id ? stop(RUNS.get(String(b.id))) : runList().map(stop).some(Boolean);
     if (b.clearQueue) publishState();
     return sendJson(res, 200, { ok: true, killed });
   }

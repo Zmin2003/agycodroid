@@ -7,7 +7,7 @@ import { CFG, PREFIX, log, tz } from "./config.mjs";
 import { SETTINGS } from "./settings-store.mjs";
 import { SEED_FILE } from "./providers.mjs";
 import { NEXT, fileKind, mimeOf, rangeOf, readBody, readBodyBuf, sendJson } from "./http.mjs";
-import { toFront } from "./local.mjs";
+import { toFront } from "./agy.mjs";
 import { bodyToFile } from "./bigfile.mjs";
 import { fixUploadedImage } from "./imgfix.mjs";
 import { holdsPrivate, zoneOf } from "./pathguard.mjs";

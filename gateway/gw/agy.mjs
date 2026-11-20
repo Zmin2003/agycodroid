@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { CFG, PATHS, PREFIX, log, tz } from "./config.mjs";
 import { SETTINGS } from "./settings-store.mjs";
 import { PROVIDER, keyOf } from "./providers.mjs";
@@ -8,6 +8,7 @@ import { cachedModels } from "./models.mjs";
 import { sealEnv } from "./edition.mjs";
 import { agySeal } from "./agyseal.mjs";
 import { gwRuntimeBlocked } from "./gwpin.mjs";
+import { stubEnv } from "./gemini-stub.mjs";   // E13 最小验证 (c)：本机 Gemini 桩端点的接线
 import { NEXT, readBody, sendJson } from "./http.mjs";
 
 // ── 给 agy 造一个它认得的 shell ────────────────────────────────────
@@ -162,11 +163,20 @@ export function agyEnv(o = {}) {
   for (const [k, v] of Object.entries(p.extraEnv || {})) {
     if (/^[A-Z_][A-Z0-9_]*$/.test(k) && !EXTRA_ENV_DENY.test(k)) env[k] = String(v);
   }
+  // E13 最小验证 (c)：magpie 接法 —— 只在“Gemini API Key 接口 + 显式开了 geminiStub 门”的轮次里，
+  // 把 agy 的 Gemini 请求指到本机网关桩端点（GOOGLE_GEMINI_BASE_URL + 网关令牌作 GEMINI_API_KEY；
+  // 令牌只是网关自己的，用户的 OpenAI key / Gemini key 都不进 agy 的环境）。
+  // Google 登录路径（p.id === "google"）永远走不到这里。门关着时把可能从网关父进程继承来的
+  // GOOGLE_GEMINI_BASE_URL 删掉，免得一个外来变量把 agy 的请求拐到别的端点（OAuth 下该变量
+  // 是否被忽略尚未证实，见 magpie-evaluation.md V3；删掉是最稳的）。
+  const stub = stubEnv(p);
+  if (stub) Object.assign(env, stub);
+  else delete env.GOOGLE_GEMINI_BASE_URL;
   sealEnv(env);
   return env;
 }
 
-const EXTRA_ENV_DENY = /^(GEMINI_API_KEY|GOOGLE_API_KEY|GOOGLE_APPLICATION_CREDENTIALS|LD_\w*|DYLD_\w*|NODE_\w*|BUN_\w*|PYTHON\w*|PERL5?\w*|RUBY\w*|GIT_\w*|SSL_\w*|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|PATH|HOME|SHELL|BASH_ENV|ENV|PREFIX|TMPDIR|AGAPP_\w*|PROMPT_COMMAND|PS4|IFS|CDPATH|SHELLOPTS|BASHOPTS|HOSTALIASES|GLIBC_TUNABLES|RES_OPTIONS|LOCALDOMAIN|MALLOC_\w*|CLASSPATH|TERMINFO|TERMINFO_DIRS|SSH_\w*|GNUPG\w*|NPM_CONFIG_\w*|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|TERMUX_\w*|EDITOR|VISUAL|PAGER|MANPAGER)$/;
+const EXTRA_ENV_DENY = /^(GEMINI_API_KEY|GOOGLE_API_KEY|GOOGLE_GEMINI_BASE_URL|GOOGLE_APPLICATION_CREDENTIALS|LD_\w*|DYLD_\w*|NODE_\w*|BUN_\w*|PYTHON\w*|PERL5?\w*|RUBY\w*|GIT_\w*|SSL_\w*|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|PATH|HOME|SHELL|BASH_ENV|ENV|PREFIX|TMPDIR|AGAPP_\w*|PROMPT_COMMAND|PS4|IFS|CDPATH|SHELLOPTS|BASHOPTS|HOSTALIASES|GLIBC_TUNABLES|RES_OPTIONS|LOCALDOMAIN|MALLOC_\w*|CLASSPATH|TERMINFO|TERMINFO_DIRS|SSH_\w*|GNUPG\w*|NPM_CONFIG_\w*|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|TERMUX_\w*|EDITOR|VISUAL|PAGER|MANPAGER)$/;
 
 /** agy 是官方 bionic 构建，直接跑：不用 glibc 加载器、不用 --preload、不用 seccomp 监督器。
  *  返回 [程序, 参数数组]：五个调用方（run/backfill/login/extensions/runAntigravity）
@@ -203,6 +213,16 @@ export function killTree(child) {
   }
 }
 
+/** 把应用界面叫回前台（原在端侧小模型模块；E12 全删时迁来此处）。
+ *  privCall 在 usage.mjs，而 usage.mjs 又引 agy.mjs：静态 import 会成环，
+ *  这里动态 import，调用时 usage 早已加载完。agycodroid 由 App 进程做
+ *  （Shizuku 或通知）；开发端直接 priv am start */
+export async function toFront(text) {
+  if (PREFIX) { const { privCall } = await import("./usage.mjs"); return privCall({ op: "to_front", text }, 8000); }
+  return new Promise((ok) => execFile("priv", ["am start --activity-reorder-to-front -n cc.agyroid/.MainActivity"],
+    { timeout: 8000, env: process.env }, (e) => ok(e ? { message: e.message.slice(0, 120) } : { via: "priv" })));
+}
+
 /** 进程启动时刻（开机后的滴答，/proc/<pid>/stat 第 22 项）；读不到 null */
 function startTicks(pid, st) {
   try { st ??= fs.readFileSync("/proc/" + pid + "/stat", "utf8"); return +st.slice(st.lastIndexOf(")") + 2).split(" ")[19]; } catch { return null; }
@@ -212,8 +232,8 @@ function startTicks(pid, st) {
  *  killTree 顺着 /proc 的父子关系和进程组走，脱出去的被 init 收养、又另开了进程组，两头都够不着。
  *  认法：本 uid、环境里带 AGAPP_RUN_ID=<这一轮>、启动时刻不早于这一轮的 agy（编号同 uid 谁读得到 /proc 都能抄）。
  *  自己和祖先链不碰：开发端从某个 agy 会话里另起的网关，环境里也带着那轮的编号。
- *  环境里已经没有 AGAPP_RUN=1 的不碰：去掉它是「这不是 agy 运行，是要常驻的服务」的约定（终端、openai-bridge 的
- *  start-bridge.sh 都这么做，reapOrphans 也按它认）。只认编号的话，用户让 Antigravity 起的桥 / 服务器一停这一轮就被杀。
+ *  环境里已经没有 AGAPP_RUN=1 的不碰：去掉它是「这不是 agy 运行，是要常驻的服务」的约定（终端的
+ *  start-bridge.sh 这么做，reapOrphans 也按它认）。只认编号的话，用户让 Antigravity 起的服务器一停这一轮就被杀。
  *  只在显式取消这条路上调；网关重启时那一套仍是 reapOrphans（用户还没定，别动）。返回清掉的进程数。 */
 export function killRunProcs(runId, sinceTicks = null) {
   if (runId == null || runId === "") return 0;

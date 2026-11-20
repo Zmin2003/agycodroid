@@ -15,11 +15,9 @@ const prev = { claude: PATHS.claude, loader: PATHS.loader, claudeLoader: PATHS.c
 PATHS.claude = process.execPath;
 PATHS.loader = PATHS.claudeLoader = cli;
 const { SETTINGS } = await import("../gw/settings-store.mjs");
-const prevCompat = SETTINGS.staticCompat;
-SETTINGS.staticCompat = false;
 const { ask } = await import("../gw/backfill.mjs");
 const { PROVIDER } = await import("../gw/providers.mjs");
-after(() => { Object.assign(PATHS, prev); SETTINGS.staticCompat = prevCompat; fs.rmSync(root, { recursive: true, force: true }); });
+after(() => { Object.assign(PATHS, prev); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("claude 一行不读就退出：ask 报错返回，不抛出没人接的 EPIPE", async () => {
   const errs = [];

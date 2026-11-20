@@ -14,7 +14,7 @@ const startOf = (pid) => { const s = fs.readFileSync(`/proc/${pid}/stat`, "utf8"
 const waitGone = async (pid) => { for (let i = 0; i < 100; i++) { if (!alive(pid)) return true; await new Promise((r) => setTimeout(r, 20)); } return false; };
 async function escapee(runId, { service = false } = {}) {
   const env = { ...process.env, AGAPP_RUN_ID: runId, AGAPP_RUN: "1" };
-  if (service) delete env.AGAPP_RUN;                // 常驻服务的约定：去掉 AGAPP_RUN（见 terminal.mjs、openai-bridge）
+  if (service) delete env.AGAPP_RUN;                // 常驻服务的约定：去掉 AGAPP_RUN（见 terminal.mjs）
   const c = spawn(SLEEP, ["60"], { env, detached: true, stdio: "ignore" });
   c.unref();
   for (let i = 0; i < 100 && !fs.existsSync(`/proc/${c.pid}`); i++) await new Promise((r) => setTimeout(r, 10));

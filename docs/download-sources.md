@@ -21,7 +21,6 @@ Last verified: 2026-11-19 (agycodroid fork; the Antigravity CLI row was re-check
 | 5 | Component packages | GitHub Release only (fork has no mirror yet) | sha256 from the signed index, then the in-package MANIFEST after unpacking | `gateway/gw/components.mjs` `compRunInstall` |
 | 6 | pkg | Termux official → packages.termux.dev → grimler.se → TUNA/USTC/BFSU/NJU (main, x11) | Termux autobuilds key pinned in pkg, checks `Release.gpg` | `assets/bin/pkg.mjs` |
 | 7 | glibc libs for custom components | Termux official glibc repo only | HTTPS + sha256 from `Packages` | `gateway/gw/custom.mjs` `customFetchLibs` |
-| 8 | On-device models | ModelScope (official Qwen only) → HuggingFace → hf-mirror.com | sha256 pinned in the catalog (from HF LFS) | `gateway/gw/local.mjs` `LOCAL_CATALOG` |
 
 **Two shared techniques since 0.4.1** (devkit, APK updates, component packages and Antigravity CLI):
 
@@ -41,8 +40,8 @@ Two hostnames, one server (upstream only):
 
 | Host | Behind Cloudflare? | Serves |
 |---|---|---|
-| `cccodroid.net` | yes (proxied) | Website, APKs (`/dl/`), component indexes (`/components/<official\|community>/components.json(.sig)`), Antigravity CLI manifests (`/claude-code/`) |
-| `dl.cccodroid.net` | no (DNS only, direct) | Devkits (`/devkit/`), component packages (`/components/<official\|community>/<file>`), Antigravity CLI manifests (`/claude-code/`, same copy) |
+| `cccodroid.net` | yes (proxied) | Website, APKs (`/dl/`), component indexes (`/components/<official\|community>/components.json(.sig)`), Antigravity CLI manifests (`/claude-code/`, 上游沿用的旧路径名) |
+| `dl.cccodroid.net` | no (DNS only, direct) | Devkits (`/devkit/`), component packages (`/components/<official\|community>/<file>`), Antigravity CLI manifests (`/claude-code/`, 上游沿用的旧路径名, same copy) |
 
 **Why two**: files of hundreds of MB don't belong on a CDN, and some networks in China only reach one of the two, so the Antigravity CLI manifests live on both.
 
@@ -129,10 +128,6 @@ Cover at least: manifest reachable, install succeeds and `agy --version` matches
 ### 7. glibc libs for custom components
 
 Only the official Termux glibc repo is used, since no Chinese mirror exists. If the user can't reach it, the analysis lists those libraries as "no source found"; the program still installs but may not run. A future fix would be to mirror `termux-glibc` on a fork-owned server (there is none yet) and verify `Release.gpg` as pkg does.
-
-### 8. On-device models
-
-Every catalog entry has a pinned sha256. Official Qwen models try ModelScope first; everything else tries HuggingFace, then hf-mirror.com. URLs pasted by the user must be https.
 
 ---
 

@@ -33,14 +33,14 @@ test("ack does not silence model note; retell and added files re-enable delivery
   const again = []; assert.match(tamperNote(again), /agyapp-settings.json/);
   assert.deepEqual(again, [open.id]);
 });
-test("model notes describe each source without claiming package restoration for runtime or claude", () => {
+test("model notes describe each source without claiming package restoration for runtime or agy", () => {
   reset(); tamperRecord("runtime", ["agyapp-providers.json"]);
   const runtime = tamperNote(); assert.match(runtime, /current settings/); assert.doesNotMatch(runtime, /installed package/);
-  tamperRecord("claude", ["claude"]);
+  tamperRecord("agy", ["agy"]);
   const claude = tamperNote(); assert.match(claude, /Refused to start/); assert.doesNotMatch(claude, /restored|undone/);
   tamperRecord("app", ["TOOLS.md"]); assert.match(tamperNote(), /installed package/);
   tamperRecord("runtime", ["web/index.html"]); assert.match(tamperNote(), /idle restart/);
-  reset(); tamperRecord("app", ["TOOLS.md"]); tamperRecord("claude", ["claude"]); tamperRecord("runtime", ["agyapp-providers.json"]);
+  reset(); tamperRecord("app", ["TOOLS.md"]); tamperRecord("agy", ["agy"]); tamperRecord("runtime", ["agyapp-providers.json"]);
   const mixed = tamperNote(); for (const text of [/current settings/, /installed package/, /Refused to start/]) assert.match(mixed, text);
 });
 
@@ -55,12 +55,12 @@ function ui() {
 }
 const event = (src, files, id = 1, at = 1700000000000) => ({ src, files, id, at });
 test("UI separates sources and includes original time and only explicit acknowledgment sends API calls", () => {
-  const u = ui(), list = [event("runtime", ["agyapp-providers.json"]), event("app", ["TOOLS.md"], 2), event("claude", ["claude"], 3)];
+  const u = ui(), list = [event("runtime", ["agyapp-providers.json"]), event("app", ["TOOLS.md"], 2), event("agy", ["agy"], 3)];
   u.show(list);
   const msg = u.notices[0].text;
   assert.match(msg, /当前设置写回：agyapp-providers.json/);
   assert.match(msg, /安装包还原：TOOLS.md/);
-  assert.match(msg, /已触发保护处理：claude/);  // 移植：文案改了（不再是“拒绝启动；claude”）
+  assert.match(msg, /Antigravity CLI 程序被改过，已拒绝启动；agy/);  // 04 的 showTamper 早已按 src "agy" 分支（W2/W3 已改），旧 "claude" 会掉进通用分支
   assert.ok(msg.includes(new Date(list[0].at).toLocaleString()));
   assert.equal(u.requests.length, 0);
   u.notices[0].ack(); assert.equal(u.requests.length, 3);

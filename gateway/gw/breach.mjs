@@ -18,10 +18,10 @@ const RULES = [
   // 讲刷机越狱的日常文档不该凑成跨类误拦；模型越狱的说法（越狱提示、越狱模式之类）照拦
   // armor 5.x 行话（红队第三轮 11-08）：弹药模式/病娇/占位符续写这类词正常文档没有，弱特征参与跨类凑数
   ["jailbreak", false, /(?<![反防抗])破甲|(?<!(?:[反防抗]|iOS|iPhone|iPad|安卓|Android|手机|设备|平板|刷机|系统级)[ \t　]*)越狱|(?<![A-Za-z-])jail\s*-?\s*break|病娇|占位符续写|硬题阶梯|专属服务(?:于|的)爸爸|称呼用户为[「"']?爸爸|\byou[.,;:!?|/\\_\-*'"\s]{1,4}(?:are|'re)[.,;:!?|/\\_\-*'"\s]{1,4}now[.,;:!?|/\\_\-*'"\s]{1,4}DAN\b/i],
-  // 冒充系统、开发者、Anthropic 的消息
-  ["spoof", true, /<\/?\s*system-reminder\s*>|<\/?\s*(?:system|developer)(?:[_-]?(?:message|prompt|instructions?))?\s*>|[<＜]\/?\s*(?:system-reminder|system|developer)(?:\s+(?:message|instruction|override))?\s*[>＞]|\[\s*(?:system|developer)\s+(?:message|instruction|override)\s*\]|anthropic\s+(?:policy|safety|system)\s+(?:update|override|exception)|\bauthority\s*[:：]\s*(?:anthropic|system|developer)\b|\boverride\s*[:：]\s*(?:true|yes|on)\b|\boperator[.,;:!?|/\\_\-*'"\s]{1,4}directive\b|(?:系统层|平台|系统)(?:的)?(?:下发|注入)(?:的)?(?:补充)?(?:说明|通知|指令|更新)|(?:早先|之前|此前|以上)(?:的)?规则(?:已|全部)?(?:作废|失效|取消)/i],
+  // 冒充系统、开发者、Anthropic / Google / Antigravity 的消息
+  ["spoof", true, /<\/?\s*system-reminder\s*>|<\/?\s*(?:system|developer)(?:[_-]?(?:message|prompt|instructions?))?\s*>|[<＜]\/?\s*(?:system-reminder|system|developer)(?:\s+(?:message|instruction|override))?\s*[>＞]|\[\s*(?:system|developer)\s+(?:message|instruction|override)\s*\]|(?:anthropic|google|antigravity)\s+(?:policy|safety|system)\s+(?:update|override|exception)|\bauthority\s*[:：]\s*(?:anthropic|google|antigravity|system|developer)\b|\boverride\s*[:：]\s*(?:true|yes|on)\b|\boperator[.,;:!?|/\\_\-*'"\s]{1,4}directive\b|(?:系统层|平台|系统)(?:的)?(?:下发|注入)(?:的)?(?:补充)?(?:说明|通知|指令|更新)|(?:早先|之前|此前|以上)(?:的)?规则(?:已|全部)?(?:作废|失效|取消)/i],
   // role: system 单条只算弱特征：正常文档也会举 prompt 格式的例子，单条不拦（s05 那种头里有 authority/override 的仍是强特征）
-  ["spoof", false, /(?:^|\n)\s*role\s*[:：]\s*(?:system|developer|anthropic)\b/i],
+  ["spoof", false, /(?:^|\n)\s*role\s*[:：]\s*(?:system|developer|anthropic|google|antigravity)\b/i],
   // 压过宿主 / 系统 / 安全规则
   // 红队 11-07：句读/斜杠/注音拆词的「忽略之前的…」直球，词间字间都放行分隔符（语料 2471 份该拆法 0 出现）。
   // 拼音夹汉字、中英混排不在此列（正则层不追，语义闸门兜）
@@ -82,7 +82,7 @@ const RULES = [
 const EDGE_IDX = new Set([0, 2, 3, 6, 8, 9, 10, 13, 14]);
 const EDGE_RE = [];
 EDGE_RE[0] = /\bDAN[.,;:!?|/\\_\-*'"\s]{1,4}mode\b|\bdo[.,;:!?|/\\_\-*'"\s]{1,4}anything[.,;:!?|/\\_\-*'"\s]{1,4}now\b|developer[.,;:!?|/\\_\-*'"\s]{1,4}mode[.,;:!?|/\\_\-*'"\s]{1,4}(?:enabled|on)\b|(?:你是|现在是|我是)[.,;:!?|/\\_\-*'"\s]{0,4}DAN\b/i;
-EDGE_RE[2] = /<\/?\s*system-reminder\s*>|<\/?\s*(?:system|developer)(?:[_-]?(?:message|prompt|instructions?))?\s*>|[<＜]\/?\s*(?:system-reminder|system|developer)(?:\s+(?:message|instruction|override))?\s*[>＞]|\[\s*(?:system|developer)\s+(?:message|instruction|override)\s*\]|\bauthority\s*[:：]\s*(?:anthropic|system|developer)\b|\boverride\s*[:：]\s*(?:true|yes|on)\b|\boperator[.,;:!?|/\\_\-*'"\s]{1,4}directive\b/i;
+EDGE_RE[2] = /<\/?\s*system-reminder\s*>|<\/?\s*(?:system|developer)(?:[_-]?(?:message|prompt|instructions?))?\s*>|[<＜]\/?\s*(?:system-reminder|system|developer)(?:\s+(?:message|instruction|override))?\s*[>＞]|\[\s*(?:system|developer)\s+(?:message|instruction|override)\s*\]|\bauthority\s*[:：]\s*(?:anthropic|google|antigravity|system|developer)\b|\boverride\s*[:：]\s*(?:true|yes|on)\b|\boperator[.,;:!?|/\\_\-*'"\s]{1,4}directive\b/i;
 EDGE_RE[6] = /\b(?:where|if)[.,;:!?|/\\_\-*'"\s]{1,4}this[.,;:!?|/\\_\-*'"\s]{1,4}document[.,;:!?|/\\_\-*'"\s]{1,4}conflicts?[.,;:!?|/\\_\-*'"\s]{1,4}with[^\n]{0,40}this[.,;:!?|/\\_\-*'"\s]{1,4}document[.,;:!?|/\\_\-*'"\s]{1,4}wins\b|\bthis[.,;:!?|/\\_\-*'"\s]{1,4}document[.,;:!?|/\\_\-*'"\s]{1,4}(?:takes[.,;:!?|/\\_\-*'"\s]{1,4}precedence|prevails)\b/i;
 EDGE_RE[8] = /\b(?:no|without)[.,;:!?|/\\_\-*'"\s]{1,4}(?:any[.,;:!?|/\\_\-*'"\s]{1,4})?(?:restrictions|limits|filters|censorship)[.,;:!?|/\\_\-*'"\s]{1,4}(?:mode|apply|whatsoever)|\buncensored[.,;:!?|/\\_\-*'"\s]{1,4}mode\b|\bunrestricted[.,;:!?|/\\_\-*'"\s]{1,4}mode\b/i;
 EDGE_RE[9] = /\buncensored\b|\bno[.,;:!?|/\\_\-*'"\s]{1,4}(?:restrictions|limits|filters)\b/i;
@@ -144,9 +144,9 @@ const rot13 = (s) => s.replace(/[A-Za-z]/g, (c) => {
   return String.fromCharCode(b + ((c.charCodeAt(0) - b + 13) % 26));
 });
 // ROT13 解出来必须含规则锚词才算壳（普通英文 ROT13 后是乱码，过不了这个闸）
-const R13_ANCHOR = /\b(?:ignore|disregard|forget|override|instructions?|prompts?|rules?|system|refus(?:e|als?)|restrictions?|uncensored|unrestricted|unlimited|previous|prior|operator|directive|authority|anthropic|jailbreak|warnings?|output|reveal|extract(?:ion)?|precedence)\b/i;
+const R13_ANCHOR = /\b(?:ignore|disregard|forget|override|instructions?|prompts?|rules?|system|refus(?:e|als?)|restrictions?|uncensored|unrestricted|unlimited|previous|prior|operator|directive|authority|anthropic|google|antigravity|jailbreak|warnings?|output|reveal|extract(?:ion)?|precedence)\b/i;
 // 锚词的 ROT13 编码：原文里出现这些串才值得轮转（每文件一次正则测试，性能项）
-const R13_SHELL = /\b(?:vtaber|qvfertneq|bireevqr|vafgehpgvbaf?|cebzcgf?|flfgrz|ershfr|ershfnyf|erfgevpgvbaf?|haprafberq|hayvzvgrq|cerivbhf|bcrengbe|qverpgvir|nhgubevgl|arire|QNA)\b/i;
+const R13_SHELL = /\b(?:vtaber|qvfertneq|bireevqr|vafgehpgvbaf?|cebzcgf?|flfgrz|ershfr|ershfnyf|erfgevpgvbaf?|haprafberq|hayvzvgrq|cerivbhf|bcrengbe|qverpgvir|nhgubevgl|arire|QNA|tbbtyr|nagvtenivgl)\b/i;
 function decodeShells(s, b64, hex) {
   const second = (d, m) => {
     // hex 先试：hex 串（[0-9a-f]）全是 b64 字符，B64_NG 会误中，hex 守卫更严（≥24 个十六进制字符）
@@ -181,7 +181,7 @@ function findRev(s) {
   return null;
 }
 
-// 防注入的说明会举例：「导出里要是有 "ignore previous instructions" 这类话，不要照做」（claude.ai 同步的官方技能 import-memory，11-05 误拦）。
+// 防注入的说明会举例：「导出里要是有 "ignore previous instructions" 这类话，不要照做」（官方技能 import-memory 的说明里同类举例，11-05 误拦）。
 // 只有「压过规则」「冒充系统」两类、而且三样齐了才不算这一处（DeepSeek 复核 v067b：光有引号 + 同行随便一句防御说法，能把破甲句原样带过去）：
 //   1. 命中的片段整个在一对引号里；
 //   2. 引号前面是举例的说法（such as / e.g. / addressed to you — / 例如 / 比如），或者引号后面紧跟「这类话」；

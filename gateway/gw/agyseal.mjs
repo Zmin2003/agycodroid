@@ -24,7 +24,8 @@ const DEFAULT_BIN = process.env.AGAPP_AGY || path.join(CFG.home, ".local", "shar
 let cache = { fp: "", res: null };
 const sealed = new Set();          // 这个进程里核过的版本目录
 // 部署出来的那份（files/app，有 FILES 清单）才核；仓库里直接跑的开发布局不核。
-// 不 import appfiles.mjs：终端里的 bin/agy 经 guard/cc-seal.mjs 也要核，那边不该再起一份文件守护
+// 不 import appfiles.mjs：它带文件守护（平时每分钟核对 files/app），程序核验这条轻量路径不该拉起它；
+// 以前终端里的 bin/agy 经 guard/cc-seal.mjs 也走这里，那个调用方已删。
 const DEPLOYED = fs.existsSync(path.join(HERE, "FILES"));
 // 发行版布局（应用里的 files/app）：FILES 被删时不能退化成「开发布局、不核」
 const APP_LAYOUT = /[\\/]files[\\/]app$/.test(HERE);
@@ -84,7 +85,7 @@ export async function agySeal(bin0 = DEFAULT_BIN, { force = false, home = CFG.ho
   const again = cache.res && cache.res.ok === res.ok && cache.res.why === res.why;
   if (res.ok === false && !(cache.res && cache.res.ok === false && cache.fp === fp)) {
     log(`⚠️ [Antigravity CLI 核验] ${bin}：${res.why}`);
-    tamperRecord("claude", [`${path.basename(dir)}/agy: ${res.why}`]);
+    tamperRecord("agy", [`${path.basename(dir)}/agy: ${res.why}`]);
   } else if (res.ok === null && cache.res?.ok !== null) log(`[Antigravity CLI 核验] 核不了（${res.why}），照常起；重装 agy 会存下 manifest 副本`);
   if (res.why === "no manifest") try { askRecheck?.(); } catch {}
   cache = { fp, res };

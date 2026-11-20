@@ -46,7 +46,7 @@ test("envFactsKey：组件版本变了 key 就变，自检会重跑（195-M.1）
 test("对账：主动卸载 Antigravity 的标记在，就不报红（195-M.7）", async () => {
   fs.writeFileSync(path.join(FILES, ".claude-uninstalled"), "");
   const r = await reconcileNow();
-  assert.ok(!r.findings.some((f) => f.key === "claude" && f.level === "error"), JSON.stringify(r.findings));
+  assert.ok(!r.findings.some((f) => f.key === "agy" && f.level === "error"), JSON.stringify(r.findings));
   fs.rmSync(path.join(FILES, ".claude-uninstalled"), { force: true });
 });
 

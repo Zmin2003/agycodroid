@@ -86,62 +86,8 @@ function assertRemoving(html, u) {
   assert.ok(html.includes(u.t("正在卸载…")), "removing is translated instead of displayed as a raw state");
   assert.ok(html.includes(u.t(removingHint)), "wait / non-cancellable hint is visible");
   assert.match(html, /role="status"/);
-  assert.doesNotMatch(html, /data-c="(?:install|remove|cancel|configure)"/, "no component mutation or configuration button is available");
+  assert.doesNotMatch(html, /data-c="(?:install|remove|cancel)"/, "no component mutation button is available");
 }
-
-test("component UI: installed OpenAI bridge keeps its card and places configuration immediately before uninstall", async () => {
-  const u = ui();
-  await u.load();
-  assert.match(u.html, /<b>OpenAI bridge<\/b>/);
-  assert.match(u.html, /1\.0/);
-  assert.ok(u.html.includes(u.t("已装")));
-  assert.match(u.html, /data-c="configure"[^>]*>Config<\/button><button[^>]*data-c="remove"/);
-  // agy 只有 google/gemini 两家：桥不能接进聊天，点「配置」直接说明不支持，不打开面板
-  // （面板的保存必然报 provider_save_failed），也不选接口、不动会话、不调接口。
-  const click = u.click("configure");
-  await click.done;
-  assert.equal(click.button.disabled, false);
-  assert.deepEqual(u.toasts, [{ message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true }]);
-  assert.equal(u.calls.length, 0, "configuration entry never posts a component lifecycle operation");
-  assert.deepEqual(u.sessionActions, [], "unsupported configuration does not select a provider or leave the current session");
-});
-
-test("component UI: configuration button is only offered for the installed OpenAI bridge and always explains it is unsupported", async () => {
-  for (const component of [item("ok", { id: "python" }), item("absent", { installedVersion: null }), item("installing"), item("removing"), item("configuring")]) {
-    const u = ui(component);
-    await u.load();
-    assert.doesNotMatch(u.html, /data-c="configure"/);
-  }
-  const u = ui();
-  await u.load();
-  // 面板再也不会打开：不管配置表单在不在，点的结果都一样。
-  await u.click("configure").done;
-  assert.deepEqual(u.toasts, [{ message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true }]);
-  assert.equal(u.calls.length, 0);
-  u.config({ open: async () => { throw new Error("form failed"); } });
-  await u.click("configure").done;
-  assert.deepEqual(u.toasts.at(-1), { message: u.t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), error: true });
-  assert.equal(u.calls.length, 0);
-});
-
-test("component UI: backend configuring shows a translated wait status without action buttons and keeps polling", async () => {
-  const u = ui(item("configuring", { progress: null, unsupported: true, needs: { gpu: "adreno" } }));
-  await u.load();
-  assert.ok(u.html.includes(u.t("正在配置…请等待完成")));
-  assert.doesNotMatch(u.html, />configuring</, "backend state name is not shown to users");
-  assert.match(u.html, /role="status"/);
-  assert.match(u.html, /class="sdot warn"/);
-  assert.match(u.html, /data-tags="[^"]*inst/);
-  assert.doesNotMatch(u.html, /ccard dim/);
-  assert.doesNotMatch(u.html, /data-c="(?:install|remove|cancel|configure)"/);
-  assert.deepEqual([...u.timers.values()].map((v) => v.delay), [1000]);
-  assert.equal(u.calls.length, 0);
-  u.list({ supported: true, items: [item()] });
-  await u.load();
-  assert.match(u.html, /data-c="configure"/);
-  assert.match(u.html, /data-c="remove"/);
-  assert.equal(u.timers.size, 0, "polling stops when configuration finishes");
-});
 
 test("component UI: backend removing is translated, non-cancellable and polled even without progress", async () => {
   const u = ui(item("removing", { progress: null, unsupported: true, needs: { gpu: "adreno" } }));
@@ -170,7 +116,7 @@ test("component UI: pending uninstall immediately locks stale install/remove/can
   assert.deepEqual(u.removing, ["openai-bridge"]);
   await u.load();
   assertRemoving(u.html, u);
-  for (const action of ["install", "remove", "cancel", "configure"]) await u.click(action).done;
+  for (const action of ["install", "remove", "cancel"]) await u.click(action).done;
   assert.equal(u.calls.length, 1, "only the original uninstall reaches the backend");
   u.list({ supported: true, items: [item("absent", { installedVersion: null })] });
   removal.resolve({ ok: true });
@@ -214,20 +160,6 @@ test("component UI: interrupted POST keeps waiting when the backend still report
   assert.equal(u.toasts[0].error, true);
   assert.equal(u.calls.length, 1);
   assert.equal(u.timers.size, 1, "backend removal is polled until it settles");
-});
-
-test("component UI: fetching model list occupies installed card with translated non-mutating status", async () => {
-  const u = ui(item("fetching-models"));
-  await u.load();
-  assert.ok(u.html.includes(u.t("正在读取模型清单…")));
-  assert.match(u.html, /role="status"/);
-  assert.match(u.html, /data-tags="[^"]*inst/);
-  assert.doesNotMatch(u.html, /data-c="(?:install|remove|cancel|configure)"/);
-  assert.equal(u.timers.size, 1, "model fetching is polled until the operation completes");
-  u.list({ supported: true, items: [item()] });
-  await u.load();
-  assert.match(u.html, /data-c="configure"/);
-  assert.equal(u.timers.size, 0);
 });
 
 test("component UI: stale cancel rejected by backend displays failure and reloads removing, not cancelled", async () => {
@@ -278,37 +210,11 @@ test("component UI: devkit 升级后横幅提供一键重装全部过期组件�
 // 移植时 8 个非英文 i18n 文件（lang-ar/es/fr/id/ja/ko/ru/zh-Hant.js）从约第 3005 条起
 // 每个值都错位成下一条的翻译（见 tamper.test.mjs 里的说明），ar 的这条因此多了 {n} 占位符。
 // 恢复词典后本测试应恢复通过；不要把断言放宽去迁就错位的翻译。
-test("bridge form literal and conditional labels are translated in every shipped dictionary", () => {
-  const form = fs.readFileSync(new URL("app/bridge-config.js", WEB), "utf8"), keys = new Set();
-  // Include conditional t() branches: the general scanner cannot infer those keys.
-  for (const call of form.matchAll(/(?:\bt|\blabel)\(([^)\n]*)\)/g)) {
-    for (const literal of call[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
-      const key = JSON.parse(literal[0]);
-      if (/\p{Script=Han}/u.test(key) || key === "API Key") keys.add(key);
-    }
-  }
-  assert.ok(keys.size >= 40, "the form's translated labels and conditional states are covered");
-  const backend = fs.readFileSync(new URL("../gw/bridge-config.mjs", import.meta.url), "utf8");
-  for (const literal of backend.matchAll(/\btz\(\s*("(?:[^"\\]|\\.)*")/g)) keys.add(JSON.parse(literal[1]));
-  const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-  for (const code of ["en", "ar", "es", "fr", "ja", "ko", "ru", "zh-Hant", "id"]) {
-    const box = { window: {} };
-    vm.runInNewContext(fs.readFileSync(new URL(`lang-${code}.js`, WEB), "utf8"), box);
-    for (const key of keys) {
-      const value = box.window.I18N_DICT[code][key];
-      assert.equal(typeof value, "string", `${code}: ${key}`);
-      assert.ok(value.length > 0, `${code}: no empty translations`);
-      assert.deepEqual(vars(value), vars(key), `${code}: placeholders for ${key}`);
-      if (code !== "zh-Hant" && /\p{Script=Han}/u.test(key)) assert.notEqual(value, key, `${code}: no Chinese fallback`);
-    }
-  }
-});
-
 test("component lifecycle strings have real translations in every shipped dictionary", () => {
   for (const code of ["en", "ar", "es", "fr", "ja", "ko", "ru", "zh-Hant", "id"]) {
     const box = { window: {} };
     vm.runInNewContext(fs.readFileSync(new URL(`lang-${code}.js`, WEB), "utf8"), box);
-    for (const key of ["配置界面尚未就绪，请刷新后重试", "正在配置…请等待完成", "正在读取模型清单…", "正在卸载…", removingHint, retainedError]) {
+    for (const key of ["正在卸载…", removingHint, retainedError]) {
       const translated = box.window.I18N_DICT[code][key];
       assert.equal(typeof translated, "string", `${code}: ${key}`);
       assert.notEqual(translated, key, `${code} does not fall back to Simplified Chinese`);

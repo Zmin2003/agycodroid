@@ -82,7 +82,9 @@ public final class Share extends ContentProvider {
             || nm.equals(".credentials.json") || nm.matches("id_(rsa|dsa|ecdsa|ed25519)(_sk)?") || nm.matches("(?i).*\\.(pem|key|p12|pfx|jks|keystore)")
             || nm.equals(".netrc") || nm.equals(".git-credentials")
             // Antigravity 的登录与设置（.claude.json 里有 OAuth 刷新令牌，settings.json 常放 ANTHROPIC_AUTH_TOKEN）、npm / pip 的令牌（审查 v0513b 低-19）
+            // agy 自己的配置整目录不分享：~/.gemini/antigravity-cli/settings.json 是配置，目录里其余文件是否含凭据未确认（V5），宁可整目录挡住
             || nm.equals(".claude.json") || nm.matches("\\.claude\\.json\\.backup.*") || p.matches(".*/\\.claude/settings(\\.local)?\\.json")
+            || p.matches(".*/\\.gemini/antigravity-cli/.*")
             || nm.equals(".npmrc") || nm.equals(".pypirc") || nm.equals("hosts.yml") && p.contains("/gh/")
             // 其他常见的包管理 / 数据库 / 云凭据（10-31 复核）
             || nm.equals(".yarnrc.yml") || nm.equals("pip.conf") || nm.equals(".pgpass") || nm.equals(".my.cnf") || nm.equals(".s3cfg") || nm.equals(".boto")
@@ -208,6 +210,7 @@ public final class Share extends ContentProvider {
         Tr.t("· 版本与设备：agycodroid / Android 版本、机型、芯片、剩余空间\n") +
         Tr.t("· 开发工具包：装的是哪一版（校验哈希）、更新与自检状态\n") +
         Tr.t("· 首次配置失败原因与 first-run 日志尾部（有的话）\n") +
+        Tr.t("· Antigravity CLI 安装日志 install-agy.log 的尾部（有的话）\n") +
         Tr.t("· 最近的日志：本应用的系统日志、网关日志的最后一段\n") +
         Tr.t("· 修复账本：安装、校验、修复做过哪些、成没成\n") +
         Tr.t("· 网络：开没开 VPN，应用连不连得上几个下载源（只记结果）\n") +
@@ -236,6 +239,10 @@ public final class Share extends ContentProvider {
             if (gout.isFile()) parts.put("gateway.out", put(z, "gateway.out", scrub(tail(gout, 512 * 1024))));
             File led = Ledger.file(env);
             if (led.isFile()) parts.put("ledger.jsonl", put(z, "ledger.jsonl", scrub(tail(led, 512 * 1024))));
+            // Antigravity CLI 安装输出（Installer.installAgy / Updater.installAgy 落盘，R1-c）：
+            // 以前诊断包里完全没有安装过程输出，rc=137 这类失败看不到死在哪一步
+            File agyLog = new File(env.files, Installer.AGY_INSTALL_LOG_FILE);
+            if (agyLog.isFile()) parts.put("install-agy.log", put(z, "install-agy.log", scrub(tail(agyLog, 512 * 1024))));
         }
         Ledger.add(env, "logs", true, Tr.f("打包日志用于分享（压缩后 {0} KB）", out.length() / 1024), parts);
         return out;
@@ -280,6 +287,7 @@ public final class Share extends ContentProvider {
         } catch (Exception e) { sb.append("（诊断信息不全：").append(e).append("）\n"); }
         envFails(env, sb);
         firstRunSection(env, sb);
+        agyInstallSection(env, sb);
         verifySection(env, sb);
         netProbe(c, env, sb);
         return scrub(sb.toString());
@@ -307,6 +315,21 @@ public final class Share extends ContentProvider {
             for (int i = from; i < all.length; i++) sb.append(all[i]).append('\n');
             return sb.toString();
         } catch (Exception e) { return ""; }
+    }
+
+    /** Antigravity CLI 安装（install-agy）一节：安装日志尾部。以前安装输出只在界面上闪过、没落盘，
+     *  rc=137 这类失败在诊断包里完全看不到过程（和 1.0.2 修过的 first-run 静默失败同一类问题，R1） */
+    private static void agyInstallSection(Env env, StringBuilder sb) {
+        sb.append("\nAntigravity CLI 安装（install-agy）\n");
+        sb.append(agyInstallLogTail(env.files, 50));
+    }
+
+    /** files/install-agy.log 的最后 lines 行（带文件名头）；没有 / 读不了返回明说没有安装日志 */
+    static String agyInstallLogTail(File filesDir, int lines) {
+        File log = filesDir == null ? null : new File(filesDir, Installer.AGY_INSTALL_LOG_FILE);
+        String tail = log == null ? "" : tailLines(log, lines);
+        if (tail.isEmpty()) return "（没有安装日志，install-agy.log 不存在或为空）\n";
+        return "── install-agy.log 最后 " + lines + " 行 ──\n" + tail;
     }
 
     /** 首次配置（first-run）一节：标记内容 + 账本里最近的首次配置失败记录 + 最近一次 first-run 日志文件的尾部。

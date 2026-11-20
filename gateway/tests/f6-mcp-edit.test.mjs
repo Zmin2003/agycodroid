@@ -1,7 +1,9 @@
 // F6（11-15）：MCP 编辑 = remove + add-json（agy 同名 add / add-json 都直接报错，没有 update）。
-// 合并语义：留空 = 保留原值（值只存 ~/.claude.json，不回前端）、提交的同名键覆盖、点掉的键删除；
+// 合并语义：留空 = 保留原值（值只存停用名单里，不回前端）、提交的同名键覆盖、点掉的键删除；
 // 写回用 add-json：定义整体一个 JSON 参数，值里的逗号/等号/引号/换行不会被切坏；
 // add 失败把旧定义原样加回。停用中的条目只改停用名单，不碰 agy。假 agy 记录 argv。
+// E08（V3 未验证）：~/.claude.json 不再是定义来源——putDef 只用来证明“写了也认不出来”；
+// 活跃条目的编辑/停用在验证出可信来源前诚实拒绝，合并语义改由停用名单里的条目覆盖。
 import { PATHS, CFG } from "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
@@ -14,7 +16,7 @@ const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "f6-"));
 const cli = path.join(root, "fake-cli.sh"), argLog = path.join(root, "argv.log");
 const failOnce = path.join(root, "fail-once"), failAll = path.join(root, "fail-all");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
-fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done >> '${argLog}'\nprintf '\\n' >> '${argLog}'\nsub=""; prev=""\nfor a in "$@"; do if [ "$prev" = "mcp" ]; then sub="$a"; break; fi; prev="$a"; done\ncase "$sub" in\n  remove) exit 0 ;;\n  add-json) if [ -f '${failAll}' ]; then exit 1; elif [ -f '${failOnce}' ]; then rm -f '${failOnce}'; exit 1; fi ;;\nesac\nexit 0\n`, { mode: 0o700 });
+fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done >> '${argLog}'\nprintf '\n' >> '${argLog}'\nsub=""; prev=""\nfor a in "$@"; do if [ "$prev" = "mcp" ]; then sub="$a"; break; fi; prev="$a"; done\ncase "$sub" in\n  remove) exit 0 ;;\n  add-json) if [ -f '${failAll}' ]; then exit 1; elif [ -f '${failOnce}' ]; then rm -f '${failOnce}'; exit 1; fi ;;\nesac\nexit 0\n`, { mode: 0o700 });
 const prev = { agy: PATHS.agy };
 PATHS.agy = cli;
 const { editMcp, getMcp, _extForTest } = await import("../gw/extensions.mjs");
@@ -22,17 +24,16 @@ const { mcpAddArgs } = _extForTest;
 const { extOff, saveExtOff, EXT_OFF_FILE } = await import("../gw/extoff.mjs");
 const H = (r) => path.join(CFG.home, r);
 const put = (f, s) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s); };
-const putDef = (name, d) => {   // 合并不覆盖：一个测试里可以放几条
+const putDef = (name, d) => {   // 只用来证明 .claude.json 不再被当作定义来源（E08）
   const f = H(".claude.json");
   const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : {};
   cur.mcpServers = { ...(cur.mcpServers || {}), [name]: d };
   fs.writeFileSync(f, JSON.stringify(cur));
 };
+const putOff = (name, d) => saveExtOff({ mcp: { [name]: d } });   // 可验证的定义来源：停用名单
 const resetLog = () => fs.rmSync(argLog, { force: true });
 /** 假 agy 的历次调用：每组一次调用，从 "mcp" 处切 */
 const calls = () => fs.existsSync(argLog) ? fs.readFileSync(argLog, "utf8").split("\n\n").filter((b) => b.trim()).map((b) => { const a = b.split("\n"); const i = a.indexOf("mcp"); return i >= 0 ? a.slice(i) : a; }) : [];
-/** 最近一次 add-json 的 JSON 参数 */
-const lastJson = () => JSON.parse(calls().at(-1)[5]);
 after(() => {
   Object.assign(PATHS, prev); _setSealed(true);
   fs.rmSync(H(".claude.json"), { force: true }); fs.rmSync(EXT_OFF_FILE, { force: true }); fs.rmSync(root, { recursive: true, force: true });
@@ -47,22 +48,16 @@ test("mcpAddArgs：stdio 选项顺序与 -- 收尾，parts 直传不重切", () 
 });
 
 test("mcpAddArgs：远程 transport 地址是位置参数，-e 不进命令行", () => {
-  assert.deepEqual(mcpAddArgs("http", "b", "http://x/mcp", [], ["Authorization: Bearer t"]),
-    ["mcp", "add", "-s", "user", "--transport", "http", "b", "http://x/mcp", "--header", "Authorization: Bearer t"]);
+  assert.deepEqual(mcpAddArgs("http", "b", "http://x/mcp", [], ["Authorization: Bearer <redacted>"]),
+    ["mcp", "add", "-s", "user", "--transport", "http", "b", "http://x/mcp", "--header", "Authorization: Bearer <redacted>"]);
 });
 
-test("getMcp：预填命令/地址与键名，不带值；停用名单里的也能读；找不到报错", async () => {
+test("getMcp：.claude.json 里的定义不再认（E08）；停用名单里的能读；找不到报错", async () => {
   putDef("rmc", { type: "http", url: "http://h/mcp", headers: { Authorization: "x", "X-A": "1" } });
-  const g = await getMcp({ name: "rmc" });
-  assert.deepEqual({ name: g.name, transport: g.transport, target: g.target, envNames: g.envNames, headerNames: g.headerNames },
-    { name: "rmc", transport: "http", target: "http://h/mcp", envNames: [], headerNames: ["Authorization", "X-A"] });
-  assert.equal(g.ok, true);
+  assert.match((await getMcp({ name: "rmc" })).message, /找不到这条/, ".claude.json 写了也认不出来");
   putDef("smc", { type: "stdio", command: "npx", args: ["-y", "x"], env: { A: "1" } });
-  const s = await getMcp({ name: "smc" });
-  assert.equal(s.transport, "stdio");
-  assert.equal(s.target, "npx -y x");
-  assert.deepEqual(s.envNames, ["A"]);
-  saveExtOff({ mcp: { dx: { type: "http", url: "http://off/mcp", headers: { Authorization: "x" } } } });
+  assert.match((await getMcp({ name: "smc" })).message, /找不到这条/);
+  putOff("dx", { type: "http", url: "http://off/mcp", headers: { Authorization: "x" } });
   const d = await getMcp({ name: "dx" });
   assert.equal(d.ok, true);
   assert.equal(d.transport, "http");
@@ -70,64 +65,49 @@ test("getMcp：预填命令/地址与键名，不带值；停用名单里的也�
   assert.match((await getMcp({ name: "nope" })).message, /找不到这条/);
 });
 
-test("editMcp：改 URL 留空 = 保留原请求头值，点掉的键删掉", async () => {
+test("editMcp：停用条目改 URL，留空 = 保留原请求头值，点掉的键删掉；不碰 agy", async () => {
+  putOff("e1", { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok", "X-A": "1" } });
   resetLog();
-  putDef("e1", { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok", "X-A": "1" } });
   const r = await editMcp({ name: "e1", transport: "http", target: "http://new/mcp", env: [], headers: [], dropHeaders: ["X-A"] });
   assert.ok(r.ok, r.message);
-  const cs = calls();
-  assert.deepEqual(cs[0], ["mcp", "remove", "e1"], "先 remove 旧的");
-  assert.deepEqual(cs[1].slice(0, 5), ["mcp", "add-json", "-s", "user", "e1"]);
-  assert.deepEqual(lastJson(), { type: "http", url: "http://new/mcp", headers: { Authorization: "Bearer tok" } }, "留空的请求头带着原值，点掉的键不在");
+  assert.equal(calls().length, 0, "停用条目不碰 claude/agy");
+  assert.deepEqual(extOff().mcp.e1, { type: "http", url: "http://new/mcp", headers: { Authorization: "Bearer tok" } }, "留空的请求头带着原值，点掉的键不在");
 });
 
-test("editMcp：同名键覆盖、改名、删环境变量；空 env 不写进定义", async () => {
+test("editMcp：停用条目同名键覆盖、改名、删环境变量；空 env 不写进定义", async () => {
+  putOff("e2", { type: "stdio", command: "npx", args: ["-y", "x"], env: { A: "1", B: "2" } });
   resetLog();
-  putDef("e2", { type: "stdio", command: "npx", args: ["-y", "x"], env: { A: "1", B: "2" } });
   const r = await editMcp({ name: "e2", newName: "e2x", transport: "stdio", target: "npx -y y", env: ["A=9"], headers: [], dropEnv: ["B"] });
   assert.ok(r.ok, r.message);
-  const cs = calls();
-  assert.deepEqual(cs[0], ["mcp", "remove", "e2"]);
-  assert.deepEqual(cs[1].slice(0, 5), ["mcp", "add-json", "-s", "user", "e2x"]);
-  const j = lastJson();
-  assert.deepEqual(j, { type: "stdio", command: "npx", args: ["-y", "y"], env: { A: "9" } }, "同名覆盖、点掉的删掉、旧值不残留");
+  assert.equal(calls().length, 0);
+  assert.deepEqual(extOff().mcp.e2x, { type: "stdio", command: "npx", args: ["-y", "y"], env: { A: "9" } }, "同名覆盖、点掉的删掉、旧值不残留");
+  assert.equal(extOff().mcp.e2, undefined);
 });
 
-test("editMcp：远程改本地清掉远程字段，本地改远程清掉本地字段", async () => {
-  resetLog();
-  putDef("e7", { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok" } });
+test("editMcp：停用条目远程改本地清掉远程字段，本地改远程清掉本地字段", async () => {
+  putOff("e7", { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok" } });
   const r = await editMcp({ name: "e7", transport: "stdio", target: "npx -y x", env: [], headers: [], dropEnv: [], dropHeaders: [] });
   assert.ok(r.ok, r.message);
-  const j = lastJson();
+  const j = extOff().mcp.e7;
   assert.equal(j.command, "npx");
   assert.deepEqual(j.args, ["-y", "x"]);
   assert.ok(!("url" in j), "url 清掉");
   assert.ok(!("headers" in j), "claude 不存 stdio 请求头：这里显式删掉，别静默丢令牌");
-  resetLog();
-  putDef("e8", { type: "stdio", command: "npx", args: ["-y", "x"], env: { A: "1" } });
+  putOff("e8", { type: "stdio", command: "npx", args: ["-y", "x"], env: { A: "1" } });
   const r2 = await editMcp({ name: "e8", transport: "http", target: "http://h2/mcp", env: [], headers: [], dropEnv: [], dropHeaders: [] });
   assert.ok(r2.ok, r2.message);
-  const j2 = lastJson();
+  const j2 = extOff().mcp.e8;
   assert.equal(j2.url, "http://h2/mcp");
   assert.ok(!("command" in j2) && !("env" in j2), "本地字段清掉");
 });
 
-test("editMcp：add 失败把旧定义原样加回；回滚也失败就明说", async () => {
-  resetLog();
+test("editMcp：活跃条目在来源验证前诚实拒绝，不碰 CLI（E08；execEdit 回滚待 V3 恢复覆盖）", async () => {
   putDef("e3", { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok" } });
-  fs.writeFileSync(failOnce, "");
+  resetLog();
   const r = await editMcp({ name: "e3", transport: "http", target: "http://new/mcp", env: [], headers: [], dropEnv: [], dropHeaders: [] });
   assert.equal(r.ok, false);
-  assert.match(r.message, /旧配置已原样恢复/);
-  const cs = calls();
-  assert.equal(cs.length, 3, "remove → add-json 失败 → 回滚 add-json");
-  assert.deepEqual(cs[2].slice(0, 5), ["mcp", "add-json", "-s", "user", "e3"]);
-  assert.deepEqual(JSON.parse(cs[2][5]), { type: "http", url: "http://old/mcp", headers: { Authorization: "Bearer tok" } }, "回滚的是旧名 + 旧定义");
-  fs.writeFileSync(failAll, "");
-  const r2 = await editMcp({ name: "e3", transport: "http", target: "http://new2/mcp", env: [], headers: [], dropEnv: [], dropHeaders: [] });
-  assert.equal(r2.ok, false);
-  assert.match(r2.message, /没能恢复/);
-  fs.rmSync(failAll, { force: true });
+  assert.match(r.message, /找不到这条/);
+  assert.equal(calls().length, 0, "没定义可写回，不能先 remove 再失败");
 });
 
 test("editMcp：停用中的条目只改停用名单，不碰 claude，可改名", async () => {
@@ -141,25 +121,23 @@ test("editMcp：停用中的条目只改停用名单，不碰 claude，可改名
   assert.equal(off.mcp.dx, undefined);
 });
 
-test("editMcp：改名撞已有名字直接拒（两边名单都查）；远程传环境变量照拒", async () => {
-  putDef("e5", { type: "http", url: "http://a/mcp" });
-  putDef("e6", { type: "http", url: "http://b/mcp" });
+test("editMcp：改名撞已有名字直接拒（只查停用名单）；远程传环境变量照拒", async () => {
+  saveExtOff({ mcp: { e5: { type: "http", url: "http://a/mcp" }, e6: { type: "http", url: "http://b/mcp" } } });
   assert.match((await editMcp({ name: "e5", newName: "e6", transport: "http", target: "http://a2/mcp" })).message, /已经有叫这个名字/);
   assert.match((await editMcp({ name: "e5", transport: "http", target: "http://a2/mcp", env: ["A=1"] })).message, /远程 MCP 不支持环境变量/);
 });
 
-test("editMcp：跨名单改名互撞也拒（停用→活跃、活跃→停用）", async () => {
+test("editMcp：停用名单内改名互撞拒；活跃条目改名先在定义查找处失败", async () => {
+  saveExtOff({ mcp: { off1: { type: "http", url: "http://o/mcp" }, off2: { type: "http", url: "http://o2/mcp" } } });
+  assert.match((await editMcp({ name: "off1", newName: "off2", transport: "http", target: "http://o2/mcp" })).message, /已经有叫这个名字/);
+  // 以前“活跃条目改名成停用名单里的名字”会拒；现在活跃条目根本没有可验证的定义，查定义时就失败
   putDef("act1", { type: "http", url: "http://a/mcp" });
-  saveExtOff({ mcp: { off1: { type: "http", url: "http://o/mcp" } } });
-  // 停用条目改名成活跃条目名字：以前会放行，留下同名幽灵
-  assert.match((await editMcp({ name: "off1", newName: "act1", transport: "http", target: "http://o2/mcp" })).message, /已经有叫这个名字/);
-  // 活跃条目改名成停用名单里的名字
-  assert.match((await editMcp({ name: "act1", newName: "off1", transport: "http", target: "http://a2/mcp" })).message, /已经有叫这个名字/);
+  assert.match((await editMcp({ name: "act1", newName: "off1", transport: "http", target: "http://a2/mcp" })).message, /找不到这条/);
 });
 
 test("editMcp：校验（找不到、坏名字、坏地址）", async () => {
   assert.match((await editMcp({ name: "ghost", transport: "http", target: "http://x/mcp" })).message, /找不到这条/);
-  putDef("e4", { type: "http", url: "http://x/mcp", headers: {} });
+  putOff("e4", { type: "http", url: "http://x/mcp", headers: {} });
   assert.match((await editMcp({ name: "e4", newName: "-bad", transport: "http", target: "http://x/mcp" })).message, /名字只能/);
   assert.match((await editMcp({ name: "e4", transport: "http", target: "notaurl" })).message, /http/);
 });

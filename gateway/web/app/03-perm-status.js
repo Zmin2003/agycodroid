@@ -19,6 +19,16 @@
   }[m] ?? m ?? "");
   // 旧名保留给别处调用：modeLabel 现在指代理模式
   const modeLabel = (m) => amLabel(m);
+  // chip 上只显示短标签（不改 lang 文件，菜单里的 8 个按钮保持完整文案）
+  const tpShort = (m) => ({"request-review": "逐项", "proceed-in-sandbox": "沙箱", "always-proceed": "始终", strict: "严格"}[m] || tpLabel(m));
+  const amShort = (m) => ({"": "默认", "accept-edits": "自动改", auto: "自动", plan: "计划"}[m] ?? amLabel(m));
+  // hint-row 折行时 48px 点按扩展区会跨行误触：量一次子元素 offsetTop 是否有两个值，折行就挂 wrapped 类，CSS 把扩展区降到 30px
+  function checkHintWrap() {
+    const row = $("hint-row");
+    if (!row) return;
+    const tops = new Set([...row.children].filter((el) => !el.classList.contains("hidden") && el.offsetParent !== null && (el.textContent || "").trim() !== "").map((el) => el.offsetTop));
+    row.classList.toggle("wrapped", tops.size > 1);
+  }
   function setPermChip(tp, am) {
     if (tp != null) state.toolPermission = tp;
     if (am != null) state.agentMode = am;
@@ -26,8 +36,10 @@
     const amv = state.agentMode ?? state.settings.agentMode ?? "";
     state.toolPermission = tpv; state.agentMode = amv;
     state.permissionMode = amv;
-    permEl.innerHTML = (tpv === "always-proceed" ? '<svg class="ei" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></svg>' : "") + esc(tpLabel(tpv) + " · " + amLabel(amv));
+    permEl.innerHTML = (tpv === "always-proceed" ? '<svg class="ei" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></svg>' : "") +
+      `<span class="hint-perm-label">${esc(tpShort(tpv) + " · " + amShort(amv))}</span>`;
     permEl.classList.toggle("danger", tpv === "always-proceed");
+    checkHintWrap();
   }
 
   // 别叫 diffHtml：各段拼在同一个作用域里，16 段版本面板的 diffHtml(text) 会把它盖掉，
@@ -249,7 +261,15 @@
   // more：清单收起时被一并收起的目标 / 后台任务条数，标在清单那一行末尾
   function tasksHtml(more) {
     const l = view.tasks;
-    if (!l || !l.length) return "";
+    if (!l || !l.length) {
+      // agy 不上报任务列表（网关 tasksCheck 带 tasksUnsupported 标记）：别留空，让人以为清单还没加载出来。
+      // 只在有会话时显示：新对话页没有任务面板，空态不该把整条 run-strip 顶出来。
+      if (view.sessionId && view.tasksUnsupported) return `<div class="rs-tasks"><div class="rs-row"><span class="rs-ico">${uiI("list")}</span><span class="rs-txt">${t("Antigravity 不上报任务列表")}</span></div></div>`;
+      // 有清单工具、但本轮还没建清单（网关发 tasks:[] + tasksUnsupported:false）：中性空态，
+      // 不是“不上报”——网关已确认过工具有清单能力，只是模型还没调它。
+      if (view.sessionId && Array.isArray(l)) return `<div class="rs-tasks"><div class="rs-row"><span class="rs-ico">${uiI("list")}</span><span class="rs-txt">${t("暂无任务")}</span></div></div>`;
+      return "";
+    }
     const done = l.filter((x) => x.status === "completed").length, all = done === l.length;
     // 什么时候都能 ✕ 收起：没做完的、会话又跑起来的也一样（群友 11-05；以前在跑时不给 ✕，继续会话后清单冒出来就叉不掉了）
     if (view.tasksHide && (view.tasksHide === tasksSig(l) || view.tasksHide === tasksSigOld(l))) return "";
@@ -301,7 +321,8 @@
           ${bgOpen ? `<div class="rs-blist">${bg.map(row).join("")}</div>` : ""}</div>`;
       }
     }
-    const tasksShown = !!tasksHtml(0), fold = tasksShown && !tasksOpen;
+    // 空态文案不参与折叠：它不是一份清单，目标 / 后台任务不能被它收起来
+    const tasksShown = !!tasksHtml(0) && !!(view.tasks && view.tasks.length), fold = tasksShown && !tasksOpen;
     const more = fold ? (g ? 1 : 0) + bg.length : 0;
     html = tasksHtml(more) + (fold ? "" : html);
     // 目标计时每秒重画整条：展开的清单、后台任务列表滚到哪儿要接着留在哪儿（审查 #48 UI07-04）
@@ -362,6 +383,8 @@
     }
   });
 
+  // 审批条命令截断：前缀 + … + 末尾 20 字符（命令末尾往往是关键参数），390px 下 1 项待确认能看到完整命令的前 30 字符以上
+  const cmdShort = (s) => { s = String(s || ""); return s.length > 80 ? s.slice(0, 60) + "…" + s.slice(-20) : s; };
   function renderPermBar() {
     const list = pendingPerms();
     permBar.classList.toggle("hidden", !list.length && !state.settings.permNotice);
@@ -378,7 +401,7 @@
     permBar.innerHTML = `
       <div class="pb-main">
         ${list.length > 1 ? `<span class="pb-n">${t("第 {i}/{n} 个", { i: 1, n: list.length })}</span>` : ""}
-        <span class="pb-txt">${uiI("pause")}${t("Antigravity 在等你确认") + " · "}<b>${esc(f.tool)}</b> <span class="mono">${esc(String(what || "").slice(0, 80))}</span></span>
+        <span class="pb-txt">${uiI("pause")}${t("Antigravity 在等你确认") + " · "}<b>${esc(f.tool)}</b> <span class="mono">${esc(cmdShort(what))}</span></span>
         <button class="pb-allow primary" data-id="${esc(String(f.id))}">${t("允许")}</button>
         <button class="pb-view">${t("查看")}</button>
       </div>
@@ -444,8 +467,15 @@
     OV.open(m, { anchor: permEl });
     const r = permEl.getBoundingClientRect(), col = colRect(), mw = Math.min(m.offsetWidth, col.width - 16);
     m.style.maxWidth = (col.width - 16) + "px";
-    m.style.bottom = (fixedH() - r.top + 6) + "px";
-    m.style.maxHeight = Math.max(120, r.top - 14) + "px";   // 矮屏：上面放不下就限高自己滚
+    const mh = Math.max(120, r.top - 14);
+    if (mh < 520) {   // 横屏 / 超高键盘：chip 上方放不下 8 个按钮 + 两组标题，改贴顶栏下方展开，最后一行不再被裁
+      m.style.top = "calc(var(--safe-t, 0px) + 48px)";
+      m.style.bottom = "";
+      m.style.maxHeight = Math.max(120, window.innerHeight - 62) + "px";
+    } else {
+      m.style.bottom = (fixedH() - r.top + 6) + "px";
+      m.style.maxHeight = mh + "px";   // 矮屏：上面放不下就限高自己滚
+    }
     // 标签在右半边就右对齐；不出对话这一栏（右边可能是浏览器窗格）
     const x0 = r.left + r.width / 2 > col.left + col.width / 2 ? r.right - mw : r.left;
     m.style.left = Math.max(col.left + 8, Math.min(x0, col.right - mw - 8)) + "px";
@@ -778,7 +808,8 @@
         }
         g.tool(id, name, input, live);
         keepTail();
-        scrollDown();
+        if (live) queueToolFollow();
+        else scrollDown();
       },
       error(msg) {
         undot(); any = true; last = null;

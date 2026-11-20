@@ -2,13 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { CFG, log, tz } from "./config.mjs";
-import { isLoginMode, noteLoggedIn } from "./models.mjs";
+import { dropModelCache, fetchModels, isLoginMode, loginState, modelsProbeActive, noteLoggedIn } from "./models.mjs";
 import { normUsage } from "./stream.mjs";
-import { agyBlocked, agyCmd, agyEnv, killTree, runAntigravity } from "./agy.mjs";
+import { agyBlocked, agyCmd, agyEnv, killTree, runAntigravity, toFront } from "./agy.mjs";
 import { RUNS } from "./runs.mjs";
 import { keyOf, providerById, upsertProvider, PROVIDER } from "./providers.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
-import { toFront } from "./local.mjs";
 
 // ── 账户登录（OAuth 全程由 agy 自己完成；网关只转递地址，不碰凭据）────────
 //
@@ -156,17 +155,29 @@ export async function authStatus(force, providerId) {
   if (r.code === 0) {
     // 按实际探的那家写，别写死 "google"：全局切到 Gemini Key 时探针成功只说明 Key 能用（L1）
     const usage = pingUsage(r.out);
+    const was = loginState();
     const v = { loggedIn: true, authMethod: probe.id === "gemini" ? "gemini" : "google", email: null, org: null, plan: null, ...(usage ? { usage } : {}) };
     AUTH_GOOD = v; AUTH_GOOD_PROVIDER = probe.id;
     // 只有 Google 那边的成功才写 LOGGED_IN：key 模式的成功不代表 Google 账号登录着（M1 另一半）
-    if (v.authMethod === "google") noteLoggedIn(true);
+    if (v.authMethod === "google") {
+      noteLoggedIn(true);
+      // 首次由未登录变已登录：登录态刚就绪，立刻重拉一次模型清单（`agy models` 此时可跑），
+      // 不用等用户手动进模型面板才看到新清单。models.mjs 借 authStatus 探登录态时不触发
+      // （modelsProbeActive），否则同一轮里 agy models 会跑两遍。失败也不影响本次登录回执。
+      if (was !== true && !modelsProbeActive()) fetchModels(true, providerById("google")).catch(() => {});
+    }
     return save(v);
   }
   if (/authentication required/i.test(out)) {
     const v = { loggedIn: false, authMethod: "none", email: null, org: null, plan: null };
     AUTH_GOOD = v; AUTH_GOOD_PROVIDER = probe.id;
     // 只有指名探 google 探出的“没登录”才是否定 Google 登录态：key 失效说明不了 Google 那边
-    if (probe.id === "google") noteLoggedIn(false);
+    if (probe.id === "google") {
+      const was = loginState();
+      noteLoggedIn(false);
+      // 刚掉线：之前拉到的 live 清单作废，下次按未登录回静态兜底
+      if (was === true) dropModelCache();
+    }
     return save(v);
   }
   const error = String(out || "").trim().split("\n").pop().slice(0, 300) || "exit " + r.code;

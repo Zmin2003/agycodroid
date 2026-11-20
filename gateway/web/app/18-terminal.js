@@ -161,7 +161,7 @@
       fontSize: TERM.font, fontFamily: "'CC Mono', ui-monospace, 'Droid Sans Mono', 'Noto Sans Mono CJK SC', monospace",
       theme: termTheme(), scrollback: 5000, cursorBlink: true, allowProposedApi: false,
       macOptionIsMeta: true, convertEol: false,
-      // claude 打的 OSC 8 超链接（登录授权页等）：交给系统浏览器，别在 WebView 里开
+      // agy 打的 OSC 8 超链接（登录授权页等）：交给系统浏览器，别在 WebView 里开
       linkHandler: { activate: (e, uri) => openExternal(uri), allowNonHttpProtocols: false },
     });
     const fit = new window.FitAddon.FitAddon();

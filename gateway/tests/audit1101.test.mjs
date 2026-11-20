@@ -97,18 +97,6 @@ test("B09 以 HTML 开头的普通提问照常显示；真的注入标签照样�
   assert.equal(isInjected("＜system-reminder>用户粘贴的"), false);
 });
 
-test("B10 CRLF 切在 \\r 与 \\n 之间：事件名和 data 不被拆开", async () => {
-  const { sseRepairer } = await import("../gw/streamfix.mjs");
-  const ev = 'event: message_start\r\ndata: {"type":"message_start","message":{"id":"m","usage":{}}}\r\n\r\n';
-  const whole = sseRepairer().feed(ev);
-  for (let cut = 1; cut < ev.length; cut++) {
-    const r = sseRepairer();
-    const out = r.feed(ev.slice(0, cut)) + r.feed(ev.slice(cut));
-    assert.equal(out, whole, "切在第 " + cut + " 个字符");
-  }
-  assert.match(whole, /^event: message_start\ndata: \{/);
-});
-
 // ── 会话记录类 ──
 import crypto from "node:crypto";
 const proj = path.join(PATHS.projects, "-audit");

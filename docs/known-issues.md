@@ -135,6 +135,15 @@ If the gateway does not come up within half an hour of upgrading, do not reinsta
 
 In-app updates also only accept packages signed with the new release certificate: a package from anywhere else, or signed by upstream, is rejected and the downloaded file is deleted. Update only from the GitHub Release ([github.com/Zmin2003/agycodroid/releases](https://github.com/Zmin2003/agycodroid/releases)).
 
+## 13. On-device small models removed (llama-server can still be run by hand)
+
+- **What you see**: there is no "on-device model" card in Settings, and no "download model" section under the llama-cpp component on the Extensions page.
+- **Why**: the on-device chat path never worked under agy (agy has no local-model endpoint mechanism), so it was fully removed after the E12 investigation (already marked Dropped in the README table). The llama-cpp component itself can still be installed; its binaries are unaffected.
+- **To still run a small model on the phone**: install the llama-cpp component, then start llama-server by hand in the terminal and call its OpenAI-compatible endpoint directly (this only proves the server itself works, not that agy can use it):
+  - `llama-server -m /sdcard/agycodroid/models/<model>.gguf --host 127.0.0.1 --port 8811 -c 8192 -np 1 --jinja --cache-reuse 256 --no-webui`
+  - `curl -s http://127.0.0.1:8811/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "<model id>", "messages": [{"role": "user", "content": "hello"}]}'`
+- **Downloaded model files are untouched**: `.gguf` files under `/sdcard/agycodroid/models/` are not cleaned up by the removal; the already-installed `~/.claude/skills/local-model-mode/SKILL.md` on the device is no longer reinstalled by the gateway and can be deleted by hand.
+
 ## For developers: tests can create fake bugs
 
 Item 1 is tied to automated testing (item 2 has been confirmed not to be). Before fixing a problem like this, make sure it **also happens with no tests running**:

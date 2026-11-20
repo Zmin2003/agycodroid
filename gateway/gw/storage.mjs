@@ -29,14 +29,14 @@ const H = (...r) => path.join(CFG.home, ...r);
 const DATA = () => process.env.AGAPP_DATA_DIR || "";
 const FILES_DIR = () => (PREFIX ? path.dirname(PREFIX) : "");
 const TMP = () => (PREFIX ? path.join(PREFIX, "tmp") : "");
-const CLAUDE_TMP = () => (TMP() ? path.join(TMP(), "claude-" + process.getuid()) : "");
+const AGY_TMP = () => (TMP() ? path.join(TMP(), "agy-" + process.getuid()) : "");
 const STATE_FILE = () => H("agyapp-storage.json");
 
 // ── 永不碰：设置与状态、密钥、技能、插件、记忆、说明文件、审计与网关日志（落在这些下面的一律不删，哪怕规则算错了） ──
 const NEVER = () => [H(".keys"), H(".ssh"), H(".gateway-token"), H(".bldtools"), H(".claude", "skills"), H(".claude", "plugins"),
   H(".claude", "projects"), H(".claude", "CLAUDE.md"), H(".claude", "settings.json"), H(".claude", ".credentials.json"), H(".claude.json"),
   H(".gemini"),   // LG-16：Gemini CLI 的家目录（凭据/配置）：和 .claude 那几条一样，清理永不碰
-  H(".cache", "agyapp-login"), H(".cache", "llama-api-key"), H("priv-audit.jsonl"), H("gateway.log"), H(".agyapp-userconf"), H(".config")];
+  H(".cache", "agyapp-login"), H("priv-audit.jsonl"), H("gateway.log"), H(".agyapp-userconf"), H(".config")];
 const NEVER_NAME = /^(agyapp-key.*|\.gateway-token|.*\.pem|id_[a-z0-9]+(\.pub)?|known_hosts|hosts\.yml)$/;
 
 /** 真实路径：最后一级是软链的不跟（删的是链接本身） */
@@ -135,9 +135,9 @@ async function cacheCandidates(open, now) {
 }
 
 // ── 第 2 类：临时文件 ──
-/** $TMPDIR 里的条目：顶层每一项；claude-<uid> 往下拆到 <项目>/<会话号> */
+/** $TMPDIR 里的条目：顶层每一项；agy-<uid> 往下拆到 <项目>/<会话号> */
 async function tmpUnits(open, live, now) {
-  const root = TMP(), ct = CLAUDE_TMP(), units = [];
+  const root = TMP(), ct = AGY_TMP(), units = [];
   if (!root) return units;
   const add = async (p, rel, sid) => {
     let st; try { st = fs.lstatSync(p); } catch { return; }
@@ -154,7 +154,7 @@ async function tmpUnits(open, live, now) {
     if (p !== ct) { await add(p, n); continue; }
     let slugs = []; try { slugs = fs.readdirSync(ct); } catch {}
     for (const s of slugs) {
-      if (s === "bundled-skills") continue;         // claude 解出来的内置技能：在跑的 claude 用到时才读，不动
+      if (s === "bundled-skills") continue;         // 历史遗留的技能目录：没有代码创建或读取它，是否还被 agy 读未确认，先不动
       const sp = path.join(ct, s);
       let es = []; try { es = fs.lstatSync(sp).isDirectory() ? fs.readdirSync(sp) : null; } catch {}
       if (es === null) { await add(sp, path.join(n, s)); continue; }
@@ -255,7 +255,7 @@ async function programs() {
     components: f ? await du(path.join(f, "components")) : null,
     compData: await du(H(".agycodroid")),
     pkgs: pkgSizes(),
-    claude: versions,
+    agy: versions,
     workspace: await du(CFG.workspace),
     shared: process.env.AGAPP_SHARED ? await du(process.env.AGAPP_SHARED) : null,
     home: homeDirs.slice(0, 12),

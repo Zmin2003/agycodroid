@@ -150,7 +150,7 @@ t "/tmp 硬编码" "rg --version >/dev/null || exit 1; rg -l --no-messages -uu '
 fi
 cd /; rm -rf "$W"
 echo "== Antigravity CLI"
-t "claude 命令" "claude --version"
+t "agy 命令" "agy --version"
 # 记录 vs 磁盘（组件记录、包清单、模块、自定义组件）由网关核：它有全部记录。网关自己起的自检不再问（本机实况另外报）
 TF=${AGAPP_TOKEN_FILE:-$HOME/.gateway-token}
 # 端口只认数字（审查 10-29 第六份 低2）：带 @ 之类就能把令牌头送到别处

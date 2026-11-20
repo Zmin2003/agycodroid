@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { ensureManagedBridge, retireManagedBridge, warmManagedBridge } from "../gw/managed-bridge.mjs";
+import { retireManagedBridge, warmManagedBridge } from "../gw/managed-bridge.mjs";
 import { guardRegistryFlock, registryFlockFixture } from "./fixtures/registry-flock.mjs";
 
 // 用确定的假值验证环境隔离；不读取或转发调用者的任何真实凭据。
@@ -102,178 +102,6 @@ after(() => {
   for (const p of [reg, record, component]) fs.rmSync(p, { force: true });
 });
 
-test("冷态在包装前调用固定组件 ensure，等待 ready；支持大安装记录", async () => {
-  const f = fixture();
-  let done = false;
-  const result = ensureManagedBridge(f.p).then((r) => { done = true; return r; });
-  await delay(20);
-  assert.equal(done, false);
-  assert.equal(await result, true);
-  assert.deepEqual(f.calls(), [{ command: "ensure", apiInEnv: false, agyappRun: false }]);
-});
-
-test("并发会话共用同一次就绪，不启动多套组件", async () => {
-  const f = fixture();
-  assert.deepEqual(await Promise.all(Array.from({ length: 12 }, () => ensureManagedBridge(f.p))), Array(12).fill(true));
-  assert.equal(f.calls().length, 1);
-});
-
-test("ready 缓存固定 20 秒，命中不续期、不过早失效，也不每轮 spawn", async (t) => {
-  const f = fixture();
-  let now = Date.now();
-  t.mock.method(Date, "now", () => now);
-  assert.equal(await ensureManagedBridge(f.p), true);
-  now += 10000;
-  assert.equal(await ensureManagedBridge(f.p), true);
-  now += 9999;
-  assert.deepEqual(await Promise.all(Array.from({ length: 10 }, () => ensureManagedBridge(f.p))), Array(10).fill(true));
-  assert.equal(f.calls().length, 1, "20 秒内不能重复执行组件入口");
-  now += 2;
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(f.calls().length, 2, "20 秒到期后必须重新确认就绪");
-});
-
-for (const [name, change] of [
-  ["注册文件", (f) => replaceJson(reg, f.r)],
-  ["安装记录", (f) => replaceJson(record, { ...f.rec, at: 12345 })],
-  ["固定入口", () => fs.writeFileSync(component, fixtureSource + "\n// installed entry changed\n")],
-]) test(`ready 缓存绑定${name}，文件变更后立即重新 ensure`, async () => {
-  const f = fixture();
-  assert.equal(await ensureManagedBridge(f.p), true);
-  change(f);
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(f.calls().length, 2);
-});
-
-for (const [name, change] of [
-  ["schema 2 注册", (f) => put(reg, { ...f.r, schema: 2 })],
-  ["非 ok 安装记录", (f) => put(record, { ...f.rec, state: "installing" })],
-  ["安装记录缺失", () => fs.rmSync(record)],
-  ["固定入口缺失", () => fs.rmSync(component)],
-]) test(`已有 ready 缓存不能掩盖${name}`, async () => {
-  const f = fixture();
-  assert.equal(await ensureManagedBridge(f.p), true);
-  change(f);
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  assert.equal(f.calls().length, 1);
-});
-
-test("远端、其他回环、错误边界、登录及端侧均不启动", async () => {
-  const f = fixture();
-  for (const baseUrl of ["https://other.example.invalid", "http://127.0.0.1:34592", f.r.endpoint + ".invalid", f.r.endpoint + "/v1", f.r.endpoint + "?token=fake", "http://fixture@127.0.0.1:34591", "http://127.1:34591"]) {
-    assert.equal(await ensureManagedBridge({ custom: true, baseUrl }), false);
-  }
-  for (const flags of [{ login: true }, { local: true }, { custom: false }]) assert.equal(await ensureManagedBridge({ ...f.p, ...flags }), false);
-  assert.equal(f.calls().length, 0);
-});
-
-test("缺少注册不接管其他本机服务；注册不允许指定命令", async () => {
-  const f = fixture();
-  fs.rmSync(reg);
-  assert.equal(await ensureManagedBridge(f.p), false);
-  put(reg, null);
-  assert.equal(await ensureManagedBridge(f.p), false);
-  fs.writeFileSync(reg, "{bad-json");
-  assert.equal(await ensureManagedBridge({ custom: true, baseUrl: "http://127.0.0.1:34592" }), false);
-  put(reg, { ...f.r, command: "do-not-execute" });
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  assert.equal(f.calls().length, 0);
-});
-
-test("卸载或安装损坏后拒绝启动，不执行私有副本", async () => {
-  const f = fixture();
-  fs.rmSync(record);
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  put(record, { id: "openai-bridge", state: "installing", files: ["lib/openai-bridge/component.cjs"] });
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  assert.equal(f.calls().length, 0);
-});
-
-test("注册符号链接和被替换的固定入口不会执行其他脚本", async () => {
-  const f = fixture();
-  const dest = path.join(f.dir, "copied-registration");
-  fs.renameSync(reg, dest);
-  fs.symlinkSync(dest, reg);
-  assert.equal(await ensureManagedBridge(f.p), false);
-  fs.unlinkSync(reg); put(reg, f.r);
-  const moved = path.join(f.dir, "moved-component.cjs");
-  fs.renameSync(component, moved);
-  fs.symlinkSync(moved, component);
-  try { await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/); }
-  finally { fs.unlinkSync(component); fs.renameSync(moved, component); }
-  assert.equal(f.calls().length, 0);
-});
-
-test("失败明确结束且短期重复请求不反复拉起", async () => {
-  const f = fixture("fail");
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  assert.equal(f.calls().length, 1);
-});
-
-test("错误实例和就绪期间注册、安装记录被删除均拒绝", async () => {
-  let f = fixture("wrong");
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  f = fixture();
-  const work = ensureManagedBridge(f.p);
-  fs.rmSync(reg);
-  await assert.rejects(work, /本地 OpenAI 桥未就绪/);
-  f = fixture();
-  const removal = ensureManagedBridge(f.p);
-  fs.rmSync(record);
-  await assert.rejects(removal, /本地 OpenAI 桥未就绪/);
-});
-
-test("恢复会话命中 ready 缓存，重开 App 后仍读取持久注册重新确认", async () => {
-  const f = fixture();
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(await ensureManagedBridge({ ...f.p, baseUrl: f.p.baseUrl + "/" }), true);
-  assert.equal(f.calls().length, 1);
-  const fresh = await import("../gw/managed-bridge.mjs?new-gateway");
-  assert.equal(await fresh.ensureManagedBridge(f.p), true);
-  assert.equal(f.calls().length, 2);
-});
-
-test("组件管理器先 abort 在途 ensure 再卸载，不等 75 秒、不误杀常驻服务", { timeout: 8000 }, async (t) => {
-  const f = fixture("resident-hang");
-  let retirement;
-  t.after(async () => {
-    stopFixtureProcess(f.dir, "launcher"); stopFixtureProcess(f.dir, "resident");
-    if (retirement) await within(retirement.catch(() => {}), 1500, "假卸载清理未结束");
-  });
-  const first = ensureManagedBridge(f.p), second = ensureManagedBridge(f.p);
-  // 立即接 rejection handler；卸载应同时结束两个共享等待者。
-  const starting = Promise.allSettled([first, second]);
-  await until(() => fs.existsSync(path.join(f.dir, "resident.pid")), "假 ensure 未启动常驻服务");
-  const resident = Number(fs.readFileSync(path.join(f.dir, "resident.pid"), "utf8"));
-  assert.doesNotThrow(() => process.kill(resident, 0));
-  const before = performance.now();
-  const removal = retirement = retireManagedBridge("openai-bridge");
-  await assert.rejects(ensureManagedBridge(f.p), /本地 OpenAI 桥未就绪/);
-  assert.equal(await within(removal, 3000, "retire 仍在等待 75 秒 ensure 超时"), true);
-  const settled = await within(starting, 1000, "在途 ensure 等待者未结束");
-  assert.ok(settled.every((r) => r.status === "rejected"));
-  assert.ok(performance.now() - before < 3000);
-  assert.deepEqual(f.calls().map((c) => c.command), ["ensure", "uninstall"]);
-  assert.doesNotThrow(() => process.kill(resident, 0), "retire 只能终止 ensure 启动器，不能误杀常驻服务");
-  const heartbeat = () => { try { return Number(fs.readFileSync(path.join(f.dir, "heartbeat"), "utf8")); } catch { return 0; } };
-  const beforeBeat = heartbeat();
-  await until(() => heartbeat() > beforeBeat + 1, "卸载误杀常驻服务，心跳已停止", 1000);
-  assert.equal(fs.existsSync(reg), false);
-  assert.equal(await ensureManagedBridge(f.p), false);
-  assert.equal(await retireManagedBridge("other-component"), false);
-});
-
-test("卸载清除 ready 缓存，原样恢复注册后仍须重新 ensure", async () => {
-  const f = fixture();
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(await retireManagedBridge("openai-bridge"), true);
-  assert.equal(fs.existsSync(reg), false);
-  put(reg, f.r);
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.deepEqual(f.calls().map((c) => c.command), ["ensure", "uninstall", "ensure"]);
-});
-
 test("合法 uninstall 删除自身后注册新实例：retire 成功且保留 replacement，不执行新目录", async () => {
   const f = fixture("replace-reg"), replacement = replacementFixture(f);
   assert.equal(await retireManagedBridge("openai-bridge"), true);
@@ -363,36 +191,6 @@ test("坏注册遇到锁争用也不能无锁删除，锁恢复后可安全清�
   assert.equal(fs.existsSync(reg), false); assert.deepEqual(f.calls(), []);
 });
 
-test("已 aborted 的等待者不启动 ensure", async () => {
-  const f = fixture(), controller = new AbortController();
-  controller.abort();
-  await assert.rejects(ensureManagedBridge(f.p, { signal: controller.signal }), { name: "AbortError" });
-  assert.equal(f.calls().length, 0);
-});
-
-test("所有等待者取消后共享 ensure 仍继续，完成后可复用 ready", async () => {
-  const f = fixture(), first = new AbortController(), second = new AbortController();
-  const waiting = [ensureManagedBridge(f.p, { signal: first.signal }), ensureManagedBridge(f.p, { signal: second.signal })];
-  const settled = Promise.allSettled(waiting);
-  await until(() => f.calls().length === 1, "共享 ensure 未启动");
-  first.abort(); second.abort();
-  const results = await settled;
-  assert.ok(results.every((r) => r.status === "rejected" && r.reason.name === "AbortError"));
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(f.calls().length, 1, "取消等待者不能取消后台共享启动");
-});
-
-test("停止等待只取消本会话，不杀共享启动器或另一会话", async () => {
-  const f = fixture(), controller = new AbortController();
-  const first = ensureManagedBridge(f.p, { signal: controller.signal });
-  const second = ensureManagedBridge(f.p);
-  await until(() => f.calls().length === 1, "共享 ensure 未启动");
-  controller.abort();
-  await assert.rejects(first, { name: "AbortError" });
-  assert.equal(await second, true);
-  assert.equal(await ensureManagedBridge(f.p), true);
-  assert.equal(f.calls().length, 1);
-});
 
 test("网关启动预热：有注册时后台拉起一次", async () => {
   const f = fixture();
@@ -491,12 +289,13 @@ for (const pending of [false, true]) test(`网关启动预热：提前请求${pe
   const f = fixture("fail"), state = path.join(f.dir, "runtime-home/.claude-code-router");
   fs.mkdirSync(state, { recursive: true });
   const lock = path.join(state, "recovery.failed");
+  // 提前请求本身也是预热：它失败后才写下旧锁，第二次预热清旧锁时须连失败缓存一起清掉。
+  const request = warmManagedBridge();
+  await until(() => f.calls().length === 1, "提前预热未启动");
+  if (!pending) await request;
   fs.writeFileSync(lock, "previous failure\n");
   const old = new Date(Date.now() - process.uptime() * 1000 - 60000);
   fs.utimesSync(lock, old, old);
-  const request = assert.rejects(ensureManagedBridge(f.p));
-  await until(() => f.calls().length === 1, "提前 ensure 未启动");
-  if (!pending) await request;
   fs.writeFileSync(path.join(f.dir, "mode"), "ok");
   assert.equal(await warmManagedBridge(), true);
   await request;
@@ -518,4 +317,26 @@ test("网关启动预热：组件不健康只当没预热，不抛出", async ()
   const f = fixture("fail");
   assert.equal(await warmManagedBridge(), false);
   assert.deepEqual(f.calls().map((call) => call.command), ["ensure"]);
+});
+
+// 删桥后覆盖缺口补位（round2 bridge-verify）：原“retire 取消在途 ensure”用例随
+// ensureManagedBridge 删除而消失；inFlight 现只由 warm 经 startBridge 填充，
+// retire 仍同步快照 inFlight 并逐个 cancel——本用例直接覆盖“retire 取消一次在途 warm 启动”。
+test("retire 取消在途 warm 启动：不等 70 秒、不误杀常驻服务", async () => {
+  const f = fixture("resident-hang");
+  const warming = warmManagedBridge();
+  await until(() => f.calls().length === 1, "预热未启动 ensure");
+  await until(() => fs.existsSync(path.join(f.dir, "heartbeat")), "常驻服务未起心跳");
+  const beatBefore = Number(fs.readFileSync(path.join(f.dir, "heartbeat"), "utf8"));
+  const started = performance.now();
+  const retired = await within(retireManagedBridge("openai-bridge"), 10000, "retire 应取消在途 warm，不等 70 秒挂起");
+  const elapsed = performance.now() - started;
+  assert.equal(retired, true);
+  assert.ok(elapsed < 10000, `retire 应在 10 秒内完成，实际 ${elapsed}ms`);
+  assert.equal(await within(warming, 10000, "在途 warm 应随 retire 取消而收尾"), false);
+  assert.deepEqual(f.calls().map((call) => call.command), ["ensure", "uninstall"]);
+  assert.equal(fs.existsSync(reg), false, "retire 成功后注册应已清除");
+  await delay(200);
+  const beatAfter = Number(fs.readFileSync(path.join(f.dir, "heartbeat"), "utf8"));
+  assert.ok(beatAfter > beatBefore, "常驻服务心跳应继续，不能被 retire 误杀");
 });

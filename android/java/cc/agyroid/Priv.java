@@ -170,7 +170,7 @@ final class Priv {
     }
 
     /**
-     * 把界面叫回前台（官方账户登录在浏览器里授权完，回调落在 claude 的托管页上，用户不知道该回哪）。
+     * 把界面叫回前台（官方账户登录在浏览器里授权完，回调落在 agy 的托管页上，用户不知道该回哪）。
      * 安卓 10 起后台不许直接起 Activity：有 Shizuku 就以 shell 身份 am start（不受这条限制）；
      * 没有就弹一条高优先级通知，点一下回来。返回走的是哪条路
      */
@@ -266,7 +266,7 @@ final class Priv {
 
     // ── 后台保活增强 ─────────────────────────────────────────────────────
     /**
-     * 安卓 12+ 的"幽灵进程"限制：所有应用的子进程合计超过 32 个就开始杀 —— claude、bash、node、
+     * 安卓 12+ 的"幽灵进程"限制：所有应用的子进程合计超过 32 个就开始杀 —— agy、bash、node、
      * 编译器全是子进程，一次并行构建就可能被收割。另有电池白名单、后台运行限制、待机分组。
      * 这些都要 shell 权限才改得动，所以放在 Shizuku 后面，并且只在用户点了开关之后做。
      */
@@ -432,23 +432,24 @@ final class Priv {
                 case "upd_status": resp = Updater.get(ctx).status(); break;
                 case "upd_check": Updater.get(ctx).checkAsync(true); resp = Updater.get(ctx).status(); break;
                 case "upd_apply": {
-                    String item = req.optString("item"), ver = req.optString("version", "");
+                    // 旧网关 / 旧设置页仍发 "claude"：归一化成 "agy" 再走（Updater.normalizeItemId，R1）
+                    String item = Updater.normalizeItemId(req.optString("item")), ver = req.optString("version", "");
                     int pid = 0; try { pid = sock.getPeerCredentials().getPid(); } catch (IOException ignored) {}
                     // 换渠道还没完（可能在等确认降级）：这时的版本信息是临时的，先不接装 Antigravity CLI（10-31 七轮核验）
                     // 没装的不存在降级（卸载后重装：界面改完设置紧接着就发这条）
-                    if ("claude".equals(item) && Updater.get(ctx).switchingNow() && Updater.get(ctx).claudeInstalled()) {
+                    if ("agy".equals(item) && Updater.get(ctx).switchingNow() && Updater.get(ctx).agyInstalled()) {
                         resp = new JSONObject().put("ok", false).put("message", Tr.t("正在切换 Antigravity CLI 的版本设置，稍后再试"));
                         break;
                     }
                     // 不带版本号 = 装当前渠道查到的那一版：按那一版判（10-31 六轮核验）
                     String chk = ver.trim().isEmpty() ? Updater.get(ctx).latestAntigravity() : ver;
-                    if ("claude".equals(item) && Updater.get(ctx).agyDowngrade(chk)
+                    if ("agy".equals(item) && Updater.get(ctx).agyDowngrade(chk)
                         && !ask(Tr.f("把 Antigravity CLI 降级到 {0}", chk), caller(pid), "upd:" + chk, false)) {
                         resp = new JSONObject().put("ok", false).put("message", Tr.t("没有允许，Antigravity CLI 没有降级"));
                         break;
                     }
-                    // 装的就是判过的这一版：别让 apply 再去读一次可能已被换掉的 claude.latest
-                    resp = Updater.get(ctx).apply(item, true, "claude".equals(item) && ver.trim().isEmpty() ? chk : ver);
+                    // 装的就是判过的这一版：别让 apply 再去读一次可能已被换掉的 agy.latest
+                    resp = Updater.get(ctx).apply(item, true, "agy".equals(item) && ver.trim().isEmpty() ? chk : ver);
                     break;
                 }
                 case "upd_set": {
@@ -654,10 +655,10 @@ final class Priv {
     static boolean touchesSelf(String text) { return PrivRules.touchesSelf(text, ctx.getPackageName()); }
 
     /** 会话口令（32 位十六进制）。不认发起方自己的环境变量：同 uid 的进程都能读到别的会话的口令，再塞进自己的环境冒用（审查 0601 高-1）。
-     *  沿父进程往上找到网关（本应用直接拉起、跑 server.mjs 的那个），只认网关的直接子进程身上的 —— 那是这一轮的 claude，
+     *  沿父进程往上找到网关（本应用直接拉起、跑 server.mjs 的那个），只认网关的直接子进程身上的 —— 那是这一轮的 agy，
      *  环境是网关给的，会话里跑的命令改不了。终端、别的会话、setsid 脱离出去的进程、不是本应用拉起的网关，都找不到这条链，照常问。
      *  靠两条不变量成立，改动时别破坏（审查 0601b）：① 本应用的直接子进程只有网关（GatewayService.spawnGateway）；
-     *  ② AGAPP_PRIV_SESS 只放进 run.mjs 给 claude 的环境，网关的其他直接子进程（终端的 ptyhost、cc-mem…）一律不带。
+     *  ② AGAPP_PRIV_SESS 只放进 run.mjs 给 agy 的环境，网关的其他直接子进程（终端的 ptyhost、cc-mem…）一律不带。
      *  比如把终端改成 shell 直接挂在网关下面，shell 就能 exec env AGAPP_PRIV_SESS=偷来的口令 重新执行自己，冒充已允许的会话 */
     static String sessToken(int pid) { return chainToken(pid, android.os.Process.myPid()); }
     /** me：本应用的进程号（拆出来是为了能在宿主上测） */
@@ -668,16 +669,16 @@ final class Priv {
             if (pp <= 0) return null;
             // 网关经引导起时命令行里是 boot.mjs 的原文，原文里也有 "server.mjs"（GatewayService.spawnGateway）
             if (pp == me) return below > 0 && proc(cur, "cmdline").contains("server.mjs") ? envToken(below) : null;
-            // 0.6.7 起网关和发行版的 claude 不可转储（android/native/nodump.c）：/proc 里看不见，读不了 stat 也读不了环境。
-            // 往上数碰到看不见的那一层就问网关作证（它认得自己起的每一轮 claude，见 gateway/gw/run.mjs privWitness）。
-            // 请求方自己就看不见（上面 pp<=0）不问：会话里的命令都是 claude 的子孙，看得见
+            // 0.6.7 起网关和发行版的 agy 不可转储（android/native/nodump.c）：/proc 里看不见，读不了 stat 也读不了环境。
+            // 往上数碰到看不见的那一层就问网关作证（它认得自己起的每一轮 agy，见 gateway/gw/run.mjs privWitness）。
+            // 请求方自己就看不见（上面 pp<=0）不问：会话里的命令都是 agy 的子孙，看得见
             if (pp != 1 && ppid(pp) <= 0) return witness(pp, cur);
             below = cur; cur = pp;
         }
         return null;
     }
 
-    /** 问网关：anc（看不见的祖先）、top（它下面看得见的那个）是不是它起的某一轮 claude，口令是什么。应答按派生钥匙验签 */
+    /** 问网关：anc（看不见的祖先）、top（它下面看得见的那个）是不是它起的某一轮 agy，口令是什么。应答按派生钥匙验签 */
     static String witness(int anc, int top) {
         try {
             byte[] nb = new byte[16];
@@ -811,7 +812,7 @@ final class Priv {
         boolean risky = PrivRules.risky(argv, envp != null, req.optString("cwd", "/")) && !(envp == null && shotArmed(argv, req.optString("shot", null)))
             || PrivRules.namesSelf(text, ctx.getPackageName());   // 免问的 am force-stop 等点了本应用 / Shizuku 的名：也要问（审查 0601c）
         // 免确认：设置里打开了总开关，或这个会话已经点过「本会话都允许」。动到本应用自己、Shizuku / Sui 的命令照样问
-        String sess = risky && "claude".equals(who) ? sessToken(peerPid) : null;
+        String sess = risky && "agy".equals(who) ? sessToken(peerPid) : null;
         boolean self = risky && touchesSelf(text);
         String pass = !risky || self ? null : noAsk() ? "免确认" : sess != null && SESS_OK.contains(sess) ? "本会话已允许" : null;
         if (pass != null) who = who + "·" + pass;
@@ -884,7 +885,7 @@ final class Priv {
                 parent = new String(java.nio.file.Files.readAllBytes(new java.io.File("/proc/" + ppid + "/cmdline").toPath()), StandardCharsets.UTF_8);
             } catch (Exception ignored) {}
             if (parent.contains("cc-mem")) return "cc-mem";
-            if (e.contains("\0AGAPP_RUN=1\0")) return "claude";
+            if (e.contains("\0AGAPP_RUN=1\0")) return "agy";
             if (e.contains("\0AGAPP_TERMINAL=1\0")) return "terminal";
             if (e.contains("\0AGAPP_PORT=")) return "gateway";
         } catch (Exception ignored) {}

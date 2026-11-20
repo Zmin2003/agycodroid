@@ -78,8 +78,9 @@ public class GatewayService extends Service {
     /** 服务这会儿在不在（常驻通知里点了停止之后为 false） */
     static boolean serviceUp() { return self != null; }
 
-    static void start(Context c) {
-        start(c, new Intent(c, GatewayService.class));
+    /** @return 系统收没接受启动请求（见下面 start(c, i)：targetSdk 31+ 后台拉前台服务会被拒，调用方要告诉用户） */
+    static boolean start(Context c) {
+        return start(c, new Intent(c, GatewayService.class));
     }
 
     /** 系统闹钟叫醒：和界面明确打开的启动不同，干完活要能自己退（见 onStartCommand 的 closeWhenIdle）
@@ -733,6 +734,22 @@ public class GatewayService extends Service {
         return cmd.contains("\0--input-type=module\0-e\0") && cmd.endsWith("\0" + app + "\0" + Env.PORT + "\0");
     }
 
+    /** /proc/<pid>/cmdline 是不是安装器子进程（install-agy.sh / install-agy.mjs / first-run.sh）。
+     *  squatted() 的兜底清理按 AGAPP_TOKEN_FILE 认「网关留下的进程」：安装子进程绝不能进这个名单——
+     *  它们不占网关端口，杀了只会让安装报 rc=137（2026-11-20 Meizu 18 实案，R1）。
+     *  新版安装器已不带 AGAPP_TOKEN_FILE（Env.applyForInstaller），这里再按 cmdline 认一次，
+     *  防旧版 / 别的路带上的安装子进程。普通 curl 不认：它也可能是别的下载，杀了只断一次、脚本会续传重试 */
+    static boolean isInstallerCmd(String cmd) {
+        if (cmd == null) return false;
+        return cmd.contains("install-agy.mjs") || cmd.contains("install-agy.sh") || cmd.contains("first-run.sh");
+    }
+
+    /** /proc/<pid>/cmdline 原文（\0 分隔）；读不到返回 "" */
+    static String readCmdline(File f) {
+        try { return new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8); }
+        catch (Exception e) { return ""; }
+    }
+
     private static boolean alivePid(int pid) {
         try { android.system.Os.stat("/proc/" + pid); return true; } catch (Exception e) { return false; }
     }
@@ -786,6 +803,12 @@ public class GatewayService extends Service {
                 if (android.system.Os.stat(d.getPath()).st_uid != me) continue;
                 String envs = new String(java.nio.file.Files.readAllBytes(new File(d, "environ").toPath()), java.nio.charset.StandardCharsets.UTF_8);
                 if (!("\0" + envs).contains("\0AGAPP_TOKEN_FILE=")) continue;
+                // 安装器子进程不占网关端口，别杀：新版安装器已不带 AGAPP_TOKEN_FILE（Env.applyForInstaller），
+                // 这里再按 cmdline 认一次，防旧版 / 别的路带上的安装子进程（杀了安装就报 rc=137，R1）
+                if (isInstallerCmd(readCmdline(new File(d, "cmdline")))) {
+                    Log.w(TAG, "端口被占但 pid=" + name + " 是安装器子进程，先不打扰");
+                    continue;
+                }
                 Log.w(TAG, "端口被占、网关不在：结束网关留下的进程 pid=" + name);
                 android.os.Process.sendSignal(Integer.parseInt(name), 9);
                 killed++;

@@ -10,7 +10,7 @@ import { AUTO_EVERY, autoCleanCfg, autoCleanTick, cleanStorage, rmChecked, scanS
 
 const DAY = 86400e3;
 const H = (...r) => path.join(CFG.home, ...r);
-const TMP = path.join(PREFIX, "tmp"), CT = path.join(TMP, "claude-" + process.getuid());
+const TMP = path.join(PREFIX, "tmp"), CT = path.join(TMP, "agy-" + process.getuid());
 const made = [];
 const put = (f, s = "x", ageDays = 0) => {
   fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s);
@@ -71,7 +71,7 @@ test("临时文件：7 天没动的删；目录里有新文件的、有进程开
     await cleanStorage(["tmp"], { picks: ["d10"] });
     assert.ok(ex(held), "有进程开着的不删（勾了也不删）");
     fs.closeSync(fd);
-    await cleanStorage(["tmp"], { picks: ["d10", "claude-" + process.getuid() + "/-proj/" + sidLive] });
+    await cleanStorage(["tmp"], { picks: ["d10", "agy-" + process.getuid() + "/-proj/" + sidLive] });
     assert.ok(!ex(d), "关掉以后勾选能删，新文件也一起");
     assert.ok(ex(live), "勾了在跑的会话也不删");
   } finally { RUNS.delete("d10-run"); try { fs.closeSync(fd); } catch {} }

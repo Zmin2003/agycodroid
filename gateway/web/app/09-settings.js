@@ -10,8 +10,11 @@
   // 状态里的当前接口名：同上规则（旧网关没有 providerLabelEn 就用中文名）
   const provName = (s) => (s && ((provEn() && s.providerLabelEn) || s.providerLabel || s.provider)) || "";
   const pHint = (x) => (provEn() && x.hintEn) || x.hint || "";
-  const GROUP_NAME = provEn() ? { claude: "Antigravity", third: "Third-party (just add a key)", local: "On-device", custom: "Custom endpoints" }
-    : { claude: "Antigravity", third: t("第三方（填 Key 即用）"), local: t("端侧（本机运行）"), custom: t("自定义接口") };
+  // 接口只有 google / gemini 两家（见 providers.mjs）：下拉框按实际 group 动态分组，
+  // google → Antigravity，gemini → Gemini API Key。以前写死的 claude/third/local/custom
+  // 四个分组与服务端两家的 group 对不上，下拉框一个接口都列不出来，只剩“＋ 新增自定义接口…”死路。
+  const GROUP_NAME = { google: "Antigravity", gemini: "Gemini API Key" };
+  const groupLabel = (g) => GROUP_NAME[g] || g;
   const post = (p, body) => api(p, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}),
   });
@@ -21,7 +24,7 @@
       const r = await api("/api/providers");
       state.providers = r.providers || [];
       state.providerActive = r.active;
-      if (!state.provView || (state.provView !== "__new__" && !state.providers.some((p) => p.id === state.provView))) {
+      if (!state.provView || !state.providers.some((p) => p.id === state.provView)) {
         state.provView = r.active;
       }
       const sel = $("set-provider");
@@ -32,15 +35,14 @@
         const st = p.login ? "" : (p.hasKey ? "" : (provEn() ? " · no key yet" : t(" · 未配 Key")));
         return `<option value="${esc(p.id)}">${tag}${esc(pLabel(p))}${st}</option>`;
       };
-      sel.innerHTML = ["claude", "third", "local", "custom"].filter((g) => g !== "local" || groups.local).map((g) =>
-        `<optgroup label="${GROUP_NAME[g]}">` + (groups[g] || []).map(opt).join("") +
-        (g === "custom" ? `<option value="__new__">${provEn() ? "+ Add a custom endpoint…" : t("＋ 新增自定义接口…")}</option>` : "") + `</optgroup>`).join("");
+      sel.innerHTML = Object.keys(groups).map((g) =>
+        `<optgroup label="${esc(groupLabel(g))}">` + (groups[g] || []).map(opt).join("") + `</optgroup>`).join("");
       sel.value = state.provView;
       $("provider-count").textContent = t("{n} 个", { n: state.providers.length });
       const cur = state.providers.find((p) => p.id === r.active) || {};
       $("provider-info").textContent = t("当前在用：{name}", { name: pLabel(cur) || r.active });
       $("provider-info").title = cur.baseUrl || "";
-      renderProvCard();
+      if (setVisible("provider")) renderProvCard();
     } catch (e) {
       $("provider-info").textContent = t("读取接口清单失败：{msg}", { msg: e.message });
     }
@@ -50,7 +52,7 @@
   let provOpen = null;
   function foldProvCard() {
     const id = state.provView, p = (state.providers || []).find((x) => x.id === id);
-    const auto = !(p && p.active && (p.login || p.local || p.hasKey));
+    const auto = !(p && p.active && (p.login || p.hasKey));
     const open = provOpen == null ? auto : provOpen;
     $("prov-card").classList.toggle("hidden", !open);
     $("prov-more").textContent = open ? t("收起") : t("详情");
@@ -79,14 +81,11 @@
     paintProvShow();
     // 卡片容器是复用的：密钥卡 / 自定义卡会在它上面挂 onclick（闭包里记着那一家）。
     // 换卡前必须摘掉，否则旧处理还在 —— 在登录卡上点「使用这个接口」，冒泡上来又把接口切回上一家
-    // （实测：同一毫秒发出 provider=anthropic 和 provider=deepseek，后者赢）。
+    // （实测：同一毫秒发出两个接口的切换，后者赢）。
     box.onclick = null;
-    if (id === "__new__") return renderCustomCard(box, null);
     const p = (state.providers || []).find((x) => x.id === id);
     if (!p) { box.innerHTML = ""; return; }
     if (p.login) return renderLoginCard(box, p);
-    if (p.local) return renderLocalCard(box, p);
-    if (p.custom) return renderCustomCard(box, p);
     return renderKeyCard(box, p);
   }
 
@@ -104,70 +103,33 @@
     toast(t("已切到 {name}（下一条消息生效）", { name: p.label }));
   }
 
-  // ── 端侧小模型卡：llama.cpp 装没装、有没有 GPU、模型目录里有哪些、聊天 / 自定义模式、服务状态 ──
-  async function renderLocalCard(box, p) {
-    box.innerHTML = `<div class="sub">${esc(pLabel(p))}</div><div class="tiny">${t("读取中…")}</div>`;
-    let j;
-    try { j = await api("/api/local"); } catch (e) { box.innerHTML += `<div class="prov-state err">${esc(e.message)}</div>`; return; }
-    if (state.provView !== p.id) return;
-    const gb = (n) => (n / 1073741824).toFixed(1) + " GB";
-    const ok = (b) => b ? "✓" : "✗";
-    const sv = j.server || {}, cu = j.custom || {};
-    const cmdText = t("请帮我给端侧小模型配置一个自定义模式（指定工具、系统提示、llama-server 参数）。");
-    const svText = sv.state === "ready" ? t("已加载 {name}（{min} 分钟不用自动卸载）", { name: sv.model, min: Math.round(sv.idleMs / 60000) })
-      : sv.state === "loading" ? t("正在加载 {name}…", { name: sv.model })
-      : sv.state === "error" ? t("上次没起来：{msg}", { msg: sv.err || "?" })
-      : t("未运行（发消息时自动加载）");
-    box.innerHTML = `<div class="sub">${esc(pLabel(p))}</div>
-      <div class="tiny">${esc(pHint(p))}</div>
-      <div class="local-facts tiny">
-        <div>${ok(j.bin)} ${j.bin ? t("llama.cpp 已装") : t("没装 llama.cpp：到「扩展」页装 llama-cpp 组件")}</div>
-        <div>${j.gpu ? "✓ " + t("GPU 推理（Vulkan）") : "· " + t("只有 CPU 推理（装 GPU 驱动组件可以快几倍）")}</div>
-        <div>· ${t("内存 {total}，可用 {avail}；上下文 {ctx} token，{n} 线程", { total: gb(j.memTotal), avail: gb(j.memAvail), ctx: (Number(j.ctx) || 0).toLocaleString(), n: Number(j.threads) || 0 })}</div>
-      </div>
-      <div class="tiny" style="margin:8px 0 4px">${t("模型（{dir}）", { dir: esc(j.dirs[0] || "") })}</div>
-      ${j.models.length ? `<div class="local-models">${j.models.map((m) => `<div class="tiny">· <code>${esc(m.id)}</code> ${gb(m.size)} <button class="btn sm ghost lm-del" data-del="${esc(m.id)}">${t("删除")}</button></div>`).join("")}</div>`
-        : `<div class="tiny dim">${t("还没有模型。到「扩展」页 llama-cpp 组件下的「下载模型」一键下载，或把 .gguf 文件放进上面的目录。")}</div>`}
-      <div class="tiny" style="margin:10px 0 4px">${t("模式")}</div>
-      <div class="local-mode">
-        <label><input type="radio" name="lm" value="chat" ${j.mode !== "custom" ? "checked" : ""}> ${t("聊天")}<span class="tiny dim"> — ${t("不给工具，提示最短、回得最快")}</span></label>
-        <label><input type="radio" name="lm" value="custom" ${j.mode === "custom" ? "checked" : ""} ${cu.ok ? "" : "disabled"}> ${cu.ok ? esc(cu.label) : t("自定义")}<span class="tiny dim"> — ${
-          cu.ok ? (cu.tools ? t("工具：{tools}", { tools: esc(cu.tools) }) : t("不给工具")) : cu.have ? "" : t("还没配置")}</span></label>
-        ${cu.have && !cu.ok ? `<div class="tiny err">${t("配置文件有误，已按聊天模式跑：{msg}", { msg: esc(cu.err) })}</div>` : ""}
-      </div>
-      <div class="local-custom tiny dim">
-        ${t("手机算力有限，小模型干不了活，所以只内置聊天。想自己折腾的话，可以写 {file} 开一个自定义模式（指定工具、系统提示、llama-server 参数）。最省事的办法：切到云端模型，把下面这句发给它：", { file: "<code>" + esc(cu.path || "~/.agycodroid/local-mode.json") + "</code>" })}
-        <div class="local-copy"><code>${esc(cmdText)}</code><button class="btn sm ghost" data-act="copy">${t("复制")}</button></div>
-      </div>
-      <div class="prov-state">${esc(svText)}${sv.loadMs ? ` · ${t("加载用了 {s} 秒", { s: (sv.loadMs / 1000).toFixed(1) })}` : ""}</div>
-      <div class="row-actions">
-        ${sv.state === "ready" || sv.state === "loading" ? `<button class="btn sm ghost" data-act="stop">${t("卸载模型")}</button>` : ""}
-        <button class="btn sm ghost" data-act="refresh">${t("刷新")}</button>
-        ${j.bin && j.models.length ? useBtn(p) : ""}
-      </div>`;
-    box.onclick = async (e) => {
-      // 手动放进目录 / 直链下好的模型也要能在应用里删（0.6.9 审计 195-F.4）
-      const del = e.target.closest ? e.target.closest("[data-del]") : null;
-      if (del) {
-        const id = del.dataset.del;
-        if (!confirm(t("删掉模型「{id}」？文件会从模型目录里删除。", { id }))) return;
-        const j = await post("/api/local/model", { op: "remove", id }).catch((e2) => ({ ok: false, message: e2.message }));
-        if (j && j.ok === false) return toast(t("删除失败：{msg}", { msg: j.message || "?" }), true);
-        toast(t("已删除模型「{id}」", { id }));
-        return renderLocalCard(box, p);
-      }
-      const act = e.target.dataset && e.target.dataset.act;
-      if (act === "use") return useProvider(p);
-      if (act === "refresh") return renderLocalCard(box, p);
-      if (act === "stop") { await post("/api/local", { stop: true }).catch((e2) => toast(e2.message, true)); return renderLocalCard(box, p); }
-      if (act === "copy") { copyText(cmdText); return toast(t("已复制")); }
-    };
-    box.querySelectorAll('input[name="lm"]').forEach((r) => r.addEventListener("change", async () => {
-      // 失败只报错，单选按网关的真实状态重画；不能接着说「已切换」（#177-8）
-      const j = await post("/api/local", { mode: r.value }).catch((e2) => ({ ok: false, message: e2.message }));
-      if (j && j.ok === false) { toast(j.message || t("保存失败"), true); return renderLocalCard(box, p); }
-      toast(t("已切换（下一条消息生效）"));
-    }));
+  // “更多模型”每行解析（复用旧自定义卡 #cc-more 的规则）：`模型名` 或 `模型名 窗口`，
+  // 窗口如 256k、1m（k=1024、m=1048576）；空行跳过。返回 { list } 或 { error }。
+  function parseMoreModels(text) {
+    const list = [];
+    const lines = String(text || "").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i].trim();
+      if (!ln) continue;
+      const lm = /^(\S+)(?:\s+(\d+(?:\.\d+)?)\s*([km]?))?$/i.exec(ln.replace(/[,_](?=\d)/g, ""));
+      if (!lm) return { error: t("更多模型第 {n} 行看不懂：写成「模型名」或「模型名 窗口」，窗口如 256k、1m", { n: i + 1 }) };
+      const w = lm[2] ? Math.round(Number(lm[2]) * ({ k: 1024, m: 1048576 }[lm[3].toLowerCase()] || 1)) : 0;
+      if (lm[2] && !(w >= 1024 && w <= 16777216)) return { error: t("上下文窗口填 1024 到 16777216 之间的整数，也可以写 256k、1m") };
+      if (!list.some((m) => m.id === lm[1])) list.push({ id: lm[1], contextWindow: w });
+    }
+    return { list };
+  }
+  const moreModelsText = (p) => (p.extraModels || []).map((m) => m.id + (m.contextWindow ? " " + m.contextWindow : "")).join("\n");
+  const moreModelsHint = () => t("每行一个：模型名，或“模型名 窗口”（如 gemini-3.8-flash-medium 1m）。agy 不公布上下文窗口，不填就是未知，用量条只显示已用 token。");
+  async function saveMoreModels(p) {
+    const el = $("pc-more"); if (!el) return;
+    const parsed = parseMoreModels(el.value);
+    if (parsed.error) return toast(parsed.error, true);
+    try { await post("/api/providers/save", { id: p.id, extraModels: parsed.list }); } catch (e2) { return toast(e2.message, true); }
+    toast(t("已保存"));
+    dropProvModels();
+    await loadProviders();
+    await loadModels(true);
   }
 
   // ── 账户登录卡 ──
@@ -176,11 +138,18 @@
       <div class="prov-state" id="login-state">${t("查询登录状态…")}</div>
       <div class="row-actions" id="login-actions"></div>
       <div id="login-flow"></div>
-      <div class="tiny">${esc(pHint(p))}</div>`;
+      <div class="tiny">${esc(pHint(p))}</div>
+      <div class="tiny" style="margin-top:10px">${t("更多模型")}</div>
+      <textarea id="pc-more" rows="3" placeholder="${esc(t("每行一个：模型名，或“模型名 窗口”，如 gemini-3.8-flash-medium 1m"))}">${esc(moreModelsText(p))}</textarea>
+      <div class="tiny">${esc(moreModelsHint())}</div>
+      <div class="row-actions"><button class="btn sm" id="pc-more-save">${t("保存更多模型")}</button></div>`;
+    box.querySelector("#pc-more-save")?.addEventListener("click", () => saveMoreModels(p));
     let st;
     // 查询期间换了卡：迟到的失败别去碰已经不在的节点（审查 D-06）。换走又换回同一家时卡片是重画过的，
     // 只比接口 id 会让旧回执盖到新卡上：认这一次画出来的节点（审查 #52 D-06）
-    const mine = box.querySelector("#login-state"), live = () => mine.isConnected && state.provView === p.id;
+    const mine = box.querySelector("#login-state"), visit = setVisit;
+    const live = () => setVisible("provider", visit) && mine.isConnected && state.provView === p.id;
+    if (!live()) return;
     try { st = await api("/api/login/status?provider=" + encodeURIComponent(p.id)); } catch (e) { if (live()) mine.textContent = t("查询失败：{msg}", { msg: e.message }); return; }
     if (!live()) return;
     paintLoginState(st, p);
@@ -235,8 +204,12 @@
   }
   /** 用量面板：agy 的 usage 字段（input / output / thinking / cache_read / total tokens），没有 Anthropic 官方账户的周额度这一说 */
   async function loadQuota() {
+    const page = pageVisit, cat = setVisit;
+    const live = () => pageVisible("usage", page) || setVisible("usage", cat) || setVisible("provider", cat);
+    if (!live()) return;
     let st = null;
-    try { st = await api("/api/login/status"); } catch {}
+    try { st = await sameGet("/api/login/status"); } catch {}
+    if (!live()) return;
     const box = $("quota-field");
     box.classList.toggle("hidden", !(st && st.loggedIn));
     const u = st && st.usage;
@@ -257,8 +230,8 @@
     clearTimeout(quotaT);
     quotaT = setTimeout(() => {
       if (document.hidden) return;
-      const usageOpen = curPage === "usage" && !$("pages").classList.contains("hidden");
-      if (setOpen || usageOpen) loadQuota().catch(() => {});
+      const usageOpen = pageVisible("usage");
+      if (usageOpen || setVisible("provider") || setVisible("usage")) loadQuota().catch(() => {});
       if (usageOpen) loadAcctCard(false).catch(() => {}); else qbLoad(false).catch(() => {});   // 顶栏细条、速览卡
     }, 800);
   }
@@ -328,6 +301,8 @@
       if (st.loggedIn) toast((st.email ? t("✓ 已登录：{email}", { email: st.email }) : t("✓ 已登录")) + (p.active ? "" : t("，点「使用这个接口」切过去")));
       else if (st.last && !st.last.ok) toast(t("登录没有完成"), true);
       if (state.provView === p.id) renderProvCard();
+      // 登录成功：重拉一次模型清单（网关侧 authStatus 也会推一次刷新，这里补前端重拉）
+      if (st.loggedIn && typeof loadModels === "function") loadModels(true).catch(() => {});
       refreshStatus();
     }, 2000);
   }
@@ -433,12 +408,14 @@
   }
   // 设置里的密钥卡底部只留一行摘要，明细在用量页（「额度与消费」）
   async function loadBill(p, force) {
-    const el = $("pc-bill"); if (!el) return;
+    const el = $("pc-bill"), visit = setVisit;
+    const live = () => setVisible("provider", visit) && state.provView === p.id && el === $("pc-bill");
+    if (!el || !live()) return;
     if (!el.innerHTML) el.innerHTML = `<div class="tiny">${t("查询余额…")}</div>`;
     let b;
     try { b = await api(`/api/billing?id=${encodeURIComponent(p.id)}${force ? "&refresh=1" : ""}`); }
-    catch (e) { el.innerHTML = `<div class="tiny">${esc(t("查询失败：{msg}", { msg: e.message }))}</div>`; return; }
-    if (state.provView !== p.id || !$("pc-bill")) return;
+    catch (e) { if (live()) el.innerHTML = `<div class="tiny">${esc(t("查询失败：{msg}", { msg: e.message }))}</div>`; return; }
+    if (!live()) return;
     const br = billBrief(b);
     el.innerHTML = `<div class="bill-head"><span class="sub">${t("余额与消费")}</span>
       <button class="btn sm ghost" data-gopage="usage">${t("在用量页查看")}</button></div>
@@ -588,19 +565,22 @@
   const usOther = new Map();   // id → { login, usage } / { bill }
   const usBrief = (id) => { const x = usOther.get(id); if (!x) return ""; const br = x.login ? loginBrief(x.usage) : billBrief(x.bill); return br.text || (x.login ? t("发一条消息后显示") : "—"); };
   async function loadAcctCard(force) {
-    if (!$("us-acct")) return;
+    const visit = pageVisit;
+    if (!$("us-acct") || !pageVisible("usage", visit)) return;
+    const ok = latest("acct-card"), live = () => pageVisible("usage", visit) && ok();
     const cur = await qbLoad(force);
-    if (curPage !== "usage") return;
+    if (!live()) return;
     $("us-acct-name").textContent = cur ? cur.name : "";
     $("us-acct-cur").innerHTML = !cur ? "" : cur.login ? usageHtml(cur.usage)
       : cur.bill ? billRows(cur.bill, { id: cur.id }) : `<div class="tiny">${t("查不到这个接口的用量")}</div>`;
     let list = [];
-    try { list = (await api("/api/providers")).providers || []; } catch {}
+    try { list = (await sameGet("/api/providers")).providers || []; } catch {}
+    if (!live()) return;
     // 官方账户先问清登没登录再决定列不列：先列「读取中…」再删掉，行数一变下面的卡片就往上跳（#38）
-    const lst = list.some((p) => p.login && p.id !== (cur ? cur.id : state.serverStatus?.provider)) ? await api("/api/login/status").catch(() => null) : null;
-    if (curPage !== "usage") return;
+    const lst = list.some((p) => p.login && p.id !== (cur ? cur.id : state.serverStatus?.provider)) ? await sameGet("/api/login/status").catch(() => null) : null;
+    if (!live()) return;
     // 「其他」= 主卡那家以外的：主卡按会话那家算（可能不是全局），这里也按它排，别把会话那家列两遍、全局那家漏掉（#144-1）
-    const others = list.filter((p) => p.id !== (cur ? cur.id : state.serverStatus?.provider) && !p.local && (p.login ? !!(lst && lst.loggedIn) : p.hasKey));
+    const others = list.filter((p) => p.id !== (cur ? cur.id : state.serverStatus?.provider) && (p.login ? !!(lst && lst.loggedIn) : p.hasKey));
     const box = $("us-acct-others");
     const keep = new Set([...box.querySelectorAll("details[open]")].map((d) => d.dataset.id));
     box.innerHTML = others.length ? `<div class="sub">${t("其他接口")}</div>` + others.map((p) =>
@@ -619,6 +599,7 @@
         const b = await api(`/api/billing?id=${encodeURIComponent(p.id)}${force ? "&refresh=1" : ""}`).catch(() => null);
         x = { bill: b && !b.error ? b : null };
       }
+      if (!live()) return;
       usOther.set(p.id, x);
       const d = box.querySelector(`details[data-id="${CSS.escape(p.id)}"]`);
       if (!d) return;
@@ -628,7 +609,7 @@
       el.classList.toggle("hot", br.lvl === 2);
       if (d.open) fill(d);
     }));
-    if (!box.querySelector("details")) box.innerHTML = "";
+    if (live() && !box.querySelector("details")) box.innerHTML = "";
   }
   // 提醒设置
   (function () {
@@ -667,6 +648,9 @@
         ${useBtn(p)}
       </div>
       <div class="prov-state" id="pc-result"></div>
+      <div class="tiny" style="margin-top:10px">${t("更多模型")}</div>
+      <textarea id="pc-more" rows="3" placeholder="${esc(t("每行一个：模型名，或“模型名 窗口”，如 gemini-3.8-flash-medium 1m"))}">${esc(moreModelsText(p))}</textarea>
+      <div class="tiny">${esc(moreModelsHint())}</div>
       <div class="tiny">${t("端点")} <code>${esc(p.baseUrl)}</code>${p.defaultModel ? ` · ${t("默认模型")} <code>${esc(p.defaultModel)}</code>` : ""}
         ${webUrl(p.keyUrl) ? `<br><a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">${t("去官网创建 Key ↗")}</a>` : ""}
         <br>${esc(pHint(p) || t("Key 只存在本机应用私有目录，由 agy 按需读取（不进环境变量）。"))}
@@ -692,9 +676,18 @@
       const body = { id: p.id, apiKey: keyEl.value.trim() };
       if ($("pc-endpoint")) body.endpoint = $("pc-endpoint").value;
       else if (p.endpointLost) body.endpoint = p.endpoint;   // 只剩一条线路时没有下拉框，也得把新线路记下来，提示才会消失（196-凭据.1）
+      // 更多模型：只在改过时才随这次保存一起发（没改过不发，免得空点一次「保存」也走保存分支）
+      let moreChanged = false;
+      const moreEl = $("pc-more");
+      if (moreEl) {
+        const parsed = parseMoreModels(moreEl.value);
+        if (parsed.error) return toast(parsed.error, true);
+        moreChanged = JSON.stringify(parsed.list) !== JSON.stringify(p.extraModels || []);
+        if (moreChanged) body.extraModels = parsed.list;
+      }
       // 还没 Key、输入框也空着：点保存不能说「已保存」，其实什么都没配上（审查 P3-3）
-      if (act === "save" && !body.apiKey && !p.hasKey && !(body.endpoint && body.endpoint !== p.endpoint)) return toast(t("先把 API Key 粘进来再保存"), true);
-      if (act === "save" || body.apiKey || body.endpoint !== p.endpoint) {
+      if (act === "save" && !body.apiKey && !p.hasKey && !(body.endpoint && body.endpoint !== p.endpoint) && !moreChanged) return toast(t("先把 API Key 粘进来再保存"), true);
+      if (act === "save" || body.apiKey || body.endpoint !== p.endpoint || moreChanged) {
         let r;
         try { r = await post("/api/providers/save", body); } catch (e2) { return toast(e2.message, true); }
         // 线路失效后只重选、没填新 Key：网关把旧 Key 清掉了（196-凭据.1）
@@ -705,7 +698,7 @@
         if (keyEl.value.trim() !== body.apiKey) return toast(msg); // 同卡提交后又敲了新内容：留着
         keyEl.value = "";
         if (r && r.keyCleared) return reloadProv(msg);
-        if (act === "save") return reloadProv(msg, true);
+        if (act === "save") { await reloadProv(msg, true); await loadModels(true); return; }   // 更多模型刚保存：模型清单跟着重拉
       }
       await testAndShow(p.id);
     };

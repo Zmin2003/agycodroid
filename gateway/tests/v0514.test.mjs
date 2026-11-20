@@ -1,6 +1,6 @@
-// v0.5.14（agy 版）：#57 清单是静态的（文档示例 + 用户自加的 slug）、独立审查（低-4 原型链）
-// 旧版 #57 的内嵌清单（data: URL 的 /models 响应）已不存在：agy 没有 /models 可拉，
-// 清单不发请求，inlineModels、modelsUrl 都没有了；窗口一律不知道，不借第一项的。
+// v0.5.14（agy 版）：#57 清单平时走 `agy models` 拉取（已登录的 google/gemini），
+// 未登录 / 不认识的厂商 / 拉取失败时回静态兜底（文档示例 + 用户自加的 slug）、独立审查（低-4 原型链）
+// 旧版 #57 的内嵌清单（data: URL 的 /models 响应）已不存在：inlineModels、modelsUrl 都没有了；窗口一律不知道，不借第一项的。
 import "../gw/config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +9,7 @@ import { agyEnv, currentModelInfo } from "../gw/agy.mjs";
 
 const P = (o) => ({ id: "custom-v0514", custom: true, explicit: true, baseUrl: "http://127.0.0.1:1", apiKey: "fixture-only", ...o });
 
-test("静态清单：不发请求，冷缓存就拿得到（#57）", async () => {
+test("静态兜底：不认识的厂商不走 live，冷缓存就拿得到（#57）", async () => {
   const real = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => { calls++; throw new Error("no network in test"); };

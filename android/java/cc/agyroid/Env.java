@@ -615,7 +615,7 @@ final class Env {
         e.put("AGAPP_7ZZ", nlib("libcc7zz.so"));          // 随包的 7-Zip（文件管理器的压缩包、终端里的 7z / 7zz），见 third_party/7zip
         // glibc 程序 --preload 的列表：libccnodump.so —— 带 AGAPP_NODUMP=1 起的发行版程序设不可转储，
         // 别的进程不认这个变量、什么也不做（安全 4 第 3 层，android/native/nodump.c）。经加载器时 applyLoader 再插一个 exec-shim。
-        // agy 是 bionic 构建、直接跑，不挂给 claude 用的 seccomp 垫片 libccenosys.so
+        // agy 是 bionic 构建、直接跑；seccomp 垫片 libccenosys.so 已停编（无加载方，见 scripts/build.sh），这里不挂它
         e.put("AGAPP_GLIBC_PRELOAD", nlib("libccnodump.so"));
         e.put("AGAPP_LOG", log.getPath());
         e.put("AGAPP_LEDGER", Ledger.file(this).getPath());   // 修复账本：网关记安全模式、界面能翻
@@ -628,11 +628,26 @@ final class Env {
         if (loader) applyLoader(e);
     }
 
+    /** 安装器子进程（Installer.run 起的 bash / node / curl / tar）的环境：和 apply() 一样，
+     *  但不带 AGAPP_TOKEN_FILE。网关清理（GatewayService.squatted 的兜底一段）按这个变量认
+     *  「网关留下的进程」直接 SIGKILL；安装子进程带上它，端口被别的应用占着、清理线程跑起来时
+     *  会被自己人杀掉，installAgy 收到 rc=137（2026-11-20 Meizu 18 实案，见 R1）。
+     *  安装器子进程不需要令牌文件：它们不跑网关、不答 /__proof。网关自己起进程仍走 apply()。 */
+    void applyForInstaller(Map<String, String> e) {
+        apply(e);
+        stripTokenMarker(e);
+    }
+
+    /** 纯逻辑：去掉环境里的网关令牌标记（applyForInstaller 用；测试直接调，不碰 Context） */
+    static void stripTokenMarker(Map<String, String> e) {
+        if (e != null) e.remove("AGAPP_TOKEN_FILE");
+    }
+
     /**
      * 「经加载器」的环境（与直接执行的差别全在这里）：
      *  - bionic：LD_PRELOAD 挂 termux-exec 的 linker 版，exec 数据目录里的程序时自动改成 linker64 起；强制模式，28 包上也照样走（便于验证）
      *  - glibc：devkit 里的 glibc 程序经 APK 里的 libldlinux.so 起，--preload 再加 exec-shim.so，Bun 拉子进程时同样改写（见 native/exec-shim.c）。
-     *    agy 是 bionic 构建、直接跑，不走这条路，也不挂 seccomp 垫片 libccenosys.so
+     *    agy 是 bionic 构建、直接跑，不走这条路；seccomp 垫片 libccenosys.so 已停编
      *  - node：经 linker64 起时 process.execPath 是 linker64，execpath.cjs 改回真实路径
      * glibc 进程不能继承 LD_PRELOAD（bionic 库，ld.so 直接报 invalid ELF header）
      */

@@ -1,12 +1,17 @@
-// 用户级配置留痕：~/.claude 下那些「每次对话都会交给模型、或者打开就会运行」的配置，变了就要人点头。
+// 用户级配置留痕：Antigravity CLI 的用户级配置（~/.gemini/antigravity-cli/settings.json）
+// 是每次对话都会读的配置（permissions / model / agentMode / MCP 等），变了就要人点头。
 //
 // 为什么不靠 guard：guard 看的是命令文本，拆字符串、拼变量就绕过去；模型之外的写入者（终端、后台进程、别的程序）它也看不见。
-// 这里改成看文件状态：每轮起 claude 前核一遍，和上次确认时的指纹不一样就出卡片问「保留 / 撤销」；
+// 这里改成看文件状态：每轮起 agy 前核一遍，和上次确认时的指纹不一样就出卡片问「保留 / 撤销」；
 // 每轮结束再核一遍，记下哪些是那一轮运行期间改的。撤销按确认时留的副本还原，多出来的挪进隔离目录（不删）。
-// 只在前后各比一次看不见「改了又改回」（趁 claude 读配置那几秒塞进去、读完再换回），所以另外常驻监视这些目录（inotify），
+// 只在前后各比一次看不见「改了又改回」（趁 agy 读配置那几秒塞进去、读完再换回），所以另外常驻监视这些目录（inotify），
 // 和确认过的不一样就记一笔，改回去了也照样问。起进程紧前再核一次，确认之后又被改了就不起。
 // 管的是「悄悄改」和「被注入驱动着改」：用户自己改的点一下「保留」就过，以后不再问。
 // 同 uid 的程序能连指纹记录和副本一起改，这一层防不住（和会话封签同一个前提）。
+//
+// 旧版盯的是 ~/.claude（CLAUDE.md / rules / skills / 插件等）：agy 不读那些，改动与运行无关，
+// 反而 agy 真正读的 ~/.gemini/antigravity-cli/settings.json 没人检查。2026-11-20 起只盯后者。
+// settings.json 只看会让东西跑起来的那部分（model 这类安全键不算，见 projtrust.mjs 的 SAFE_KEYS）。
 //
 // 应用自己写的（扩展页装钩子 / 插件 / MCP、组件带的 skill、常用指令…）：写之前 ucAppBegin 拍一份，写完 ucAppWrote 只认这次真改了、
 // 而且改之前是干净（已确认）的那几项 —— 不能顺手把之前埋在那儿、还没确认的东西一起认下。
@@ -17,12 +22,11 @@ import crypto from "node:crypto";
 import { CFG, log } from "./config.mjs";
 import { SAFE_KEYS } from "./projtrust.mjs";
 
-// 单个文件；JSON 的几个只看会让东西跑起来的那部分（claude 自己常写的统计、提示次数之类不算）
-const FILES = [".claude/CLAUDE.md", ".claude/settings.json", ".claude/settings.local.json", ".claude.json",
-  ".claude/plugins/installed_plugins.json", ".claude/plugins/known_marketplaces.json"];
-// 整个目录：规则、输出风格、skill、子代理、斜杠命令、钩子脚本、插件本体（打开就运行，2.1.311 实测在 plugins/cache/<市场>/<插件>/<版本>）
-const TREES = [".claude/rules", ".claude/output-styles", ".claude/skills", ".claude/agents", ".claude/commands", ".claude/hooks",
-  ".claude/plugins/cache", ".claude/plugins/marketplaces", ".claude/plugins/repos"];
+// 单个文件：agy 真正读的用户级配置。只看会让东西跑起来的那部分（settings.json 里除 SAFE_KEYS 之外的键）。
+// 没有目录树：agy 的 skills / rules / 插件不在 ~/.gemini 底下以文件形式被读取，不纳入监视。
+const AGY_SETTINGS = ".gemini/antigravity-cli/settings.json";
+const FILES = [AGY_SETTINGS];
+const TREES = [];
 const MAX_FILES = 3000, MAX_DEPTH = 8;
 const BIG = 4 << 20;            // 超过的不读内容，指纹按大小 + 修改时间 + ctime
 const COPY_MAX = 256 << 10, COPY_TOTAL = 16 << 20;
@@ -35,17 +39,9 @@ const canon = (v) => Array.isArray(v) ? "[" + v.map(canon).join(",") + "]"
   : v && typeof v === "object" ? "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}"
   : JSON.stringify(v ?? null);
 
-/** JSON 里要管的那一块：设置文件去掉不让东西跑起来的键；.claude.json 只看 MCP 服务器（全局和各项目的） */
+/** JSON 里要管的那一块：设置文件去掉不让东西跑起来的键 */
 function riskyPart(rel, j) {
   if (!j || typeof j !== "object" || Array.isArray(j)) return null;
-  if (rel === ".claude.json") {
-    const out = {};
-    if (j.mcpServers && Object.keys(j.mcpServers).length) out.mcpServers = j.mcpServers;
-    const pr = {};
-    for (const [k, v] of Object.entries(j.projects || {})) if (v && v.mcpServers && Object.keys(v.mcpServers).length) pr[k] = v.mcpServers;
-    if (Object.keys(pr).length) out.projects = pr;
-    return out;
-  }
   if (rel.endsWith("/settings.json") || rel.endsWith("/settings.local.json")) {
     const out = {};
     for (const [k, v] of Object.entries(j)) if (!SAFE_KEYS.has(k)) out[k] = v;
@@ -53,11 +49,10 @@ function riskyPart(rel, j) {
   }
   return null;
 }
-const isJsonPart = (rel) => rel === ".claude.json" || /\/settings(\.local)?\.json$/.test(rel);
+const isJsonPart = (rel) => /\/settings(\.local)?\.json$/.test(rel);
 
-// Antigravity CLI 自己在插件版本目录根上记的运行状态：每个进程一份 .in_use/<pid>（开一轮就多一个、退出删掉），清理时的 .orphaned_at。
-// 不是配置，官方给插件算摘要时也把它们排除在外（2.1.311 实测）；算进来的话开着一轮时再开一轮，必定弹「用户级配置改了」，
-// 卡片没点就一直显示排队（11-05 群友日志）。只放过这个确切的位置、小的普通文件，别处同名的照样盯。
+// 旧版（~/.claude 时代）插件版本目录根上的运行状态标记：现在不监视了，只在读旧确认记录时顺手剔掉，
+// 不然升级后它们一删就又被报成「删掉了」（见 loadRec）。
 const MARKER = /^\.claude\/plugins\/cache\/[^/]+\/[^/]+\/[^/]+\/(?:\.in_use\/[0-9]{1,10}|\.orphaned_at)$/;
 const MARKER_MAX = 4096;
 const isMarker = (rel, abs) => { if (!MARKER.test(rel)) return false; try { const l = fs.lstatSync(abs); return l.isFile() && l.size <= MARKER_MAX; } catch { return false; } };
@@ -67,7 +62,7 @@ function fingerprint(rel, abs) {
   let st; try { st = fs.statSync(abs); } catch { return null; }
   if (!st.isFile() || isMarker(rel, abs)) return null;
   let link = ""; try { if (fs.lstatSync(abs).isSymbolicLink()) link = "link:" + fs.readlinkSync(abs) + "\0"; } catch {}
-  if (st.size > (rel === ".claude.json" ? 32 << 20 : BIG)) return { h: sha(link + `big:${st.size}:${st.mtimeMs}:${st.ctimeMs}`), big: true, size: st.size };
+  if (st.size > BIG) return { h: sha(link + `big:${st.size}:${st.mtimeMs}:${st.ctimeMs}`), big: true, size: st.size };
   // 按字节读：副本要存原样（技能目录里的图片这类不是 UTF-8，按文本存会被换成 U+FFFD，#151-1）。
   // 指纹 h 的算法不变（合法 UTF-8 的文件按文本、按字节算出来一样），不然升级后已认下的全都会被报成改过
   let bytes; try { bytes = fs.readFileSync(abs); } catch { return null; }
@@ -110,8 +105,8 @@ let REC = null;           // { files: { rel: h }, modes: { rel: 权限位 } }，
 function loadRec() {
   if (REC) return REC;
   try { const j = JSON.parse(fs.readFileSync(RECORD(), "utf8")); if (j && j.files && typeof j.files === "object") REC = { files: Object.assign(Object.create(null), j.files), modes: Object.assign(Object.create(null), j.modes && typeof j.modes === "object" ? j.modes : {}) }; } catch {}
-  // 以前认下过的运行标记（见 MARKER）：现在不算了，不然升级后它们一删就又被报成「删掉了」
-  if (REC) for (const k of Object.keys(REC.files)) if (MARKER.test(k)) { delete REC.files[k]; delete REC.modes[k]; }
+  // 以前认下过的运行标记（见 MARKER）与旧版 ~/.claude 监视项：现在不算了，不然升级后它们一删就又被报成「删掉了」
+  if (REC) for (const k of Object.keys(REC.files)) if (MARKER.test(k) || k === ".claude.json" || k.startsWith(".claude/")) { delete REC.files[k]; delete REC.modes[k]; }
   return REC;
 }
 function saveRec() {
@@ -156,7 +151,7 @@ function accept(cur, filter) {
 }
 
 // ── 常驻监视：改了又改回也要看见 ──
-// 盯 home（.claude.json）、~/.claude、~/.claude/plugins 这三层（不递归，按名字筛）和 TREES 里存在的目录（递归）。
+// 盯 home 与 ~/.gemini/antigravity-cli 这两层（不递归，按名字筛）。
 // 有动静 30 毫秒后读一遍，和确认记录不一样的记进 SEEN（只留第一次看见的样子：后面多半是在改回去）。
 const WATCH = new Map();      // 绝对路径 → { w, ino }
 const SEEN = new Map();       // rel → { f, sid, at }
@@ -164,7 +159,7 @@ const PEND = new Set();
 let pendT = null;
 const ACTIVE = new Map();     // 正在跑的轮次 runId → sessionId（记是哪一轮期间改的）
 const FILE_SET = new Set(FILES), TREE_SET = new Set(TREES);
-const PARENTS = ["", ".claude", ".claude/plugins"];
+const PARENTS = ["", ".gemini", ".gemini/antigravity-cli"];
 
 function onParent(prel, name) {
   // 没有名字（监视出错后的重扫，或者平台没给文件名）：这一层底下要盯的全部过一遍（DeepSeek 复核 11-04 建议）
@@ -264,8 +259,9 @@ export function ucAppWrote(prefixes, before, keys) {
   } catch (e) { log(`[用户配置] 应用写入后认下失败：${e.message}`); }
 }
 
-// 第一次检查（升级上来、还没有记录）：这些直接进每次对话、或者会自己运行的（插件本体带钩子、MCP），先给用户看一眼；其余的（skill、命令…）直接认下
-const STRONG = (rel) => rel === ".claude/CLAUDE.md" || rel.startsWith(".claude/rules/") || rel.startsWith(".claude/output-styles/") || rel.startsWith(".claude/plugins/") || isJsonPart(rel);
+// 第一次检查（升级上来、还没有记录）：settings.json 里会让东西跑起来的键先给用户看一眼；
+// 只有安全键（model 之类）的直接认下（fingerprint 里这部分本来就是空，不进记录）
+const STRONG = (rel) => rel === AGY_SETTINGS;
 
 // ── 归因：哪一轮运行期间改的 ──
 const SNAP = new Map();      // runId → Map(rel → h)
@@ -331,9 +327,10 @@ function preview(rel, f, oldText) {
   return mask(ls.slice(0, 15).join("\n").slice(0, 900) + (ls.length > 15 ? `\n… (${ls.length})` : ""));
 }
 
-// 发行版只问这两份：CLAUDE.md、rules、skill、插件这些发行版根本不读（edition.mjs），回填进来的只有 MCP 与权限规则（seal.mjs），
-// 这两样过了破甲扫描也照样能让程序跑起来、放宽自动批准，被注入驱动着改了要人点头（0.6.9 审计 199-11-06）
-export const UC_SEALED = [".claude.json", ".claude/settings.json"];
+// 发行版只问这一份：agy 每次起都会读的 ~/.gemini/antigravity-cli/settings.json。
+// 里面的 permissions / MCP 等过了破甲扫描也照样能让程序跑起来、放宽自动批准，被注入驱动着改了要人点头。
+// ~/.claude 下的东西发行版根本不读，回填进来的只有 MCP 与权限规则（seal.mjs，已死，见其文件头）。
+export const UC_SEALED = [AGY_SETTINGS];
 
 /** 起一轮前：有没有没确认的改动。没有返回 null。only：只看这几项（发行版给 UC_SEALED） */
 export function ucPending(only = null) {
@@ -397,18 +394,13 @@ function writeAtomic(abs, data, mode = 0o600) {
 function stash(qdir, rel, abs) {
   try { if (!fs.existsSync(abs)) return; const dst = path.join(qdir, rel); fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.copyFileSync(abs, dst); } catch {}
 }
-/** JSON 文件只换回要管的那一块，claude 自己记的其余内容照留。现在的文件不是合法 JSON：先拷进隔离目录，只写回那一块 */
+/** JSON 文件只换回要管的那一块，别的键照留。现在的文件不是合法 JSON：先拷进隔离目录，只写回那一块 */
 function restorePart(rel, abs, copyText, qdir) {
   let curJ = null; try { curJ = JSON.parse(fs.readFileSync(abs, "utf8")); } catch {}
   if (!curJ || typeof curJ !== "object" || Array.isArray(curJ)) { stash(qdir, rel, abs); curJ = {}; }
   const old = JSON.parse(copyText || "{}");
-  if (rel === ".claude.json") {
-    if (old.mcpServers) curJ.mcpServers = old.mcpServers; else delete curJ.mcpServers;
-    for (const [k, v] of Object.entries(curJ.projects || {})) if (v && typeof v === "object") { if (old.projects?.[k]) v.mcpServers = old.projects[k]; else delete v.mcpServers; }
-  } else {
-    for (const k of Object.keys(curJ)) if (!SAFE_KEYS.has(k)) delete curJ[k];
-    Object.assign(curJ, old);
-  }
+  for (const k of Object.keys(curJ)) if (!SAFE_KEYS.has(k)) delete curJ[k];
+  Object.assign(curJ, old);
   writeAtomic(abs, JSON.stringify(curJ, null, 2) + "\n");
 }
 /** 挪进隔离目录（不删：万一是用户要的，还找得回来） */

@@ -20,7 +20,11 @@ export function slice(src, startMark, endMark, name) {
 export function loadKeyCard() {
   const src = read("../../web/app/09-settings.js");
   const fn = slice(src, "  function renderKeyCard(box, p) {", "  async function testAndShow(id) {", "09-settings.js");
+  // renderKeyCard 用到的“更多模型”助手（parseMoreModels / moreModelsText / moreModelsHint）
+  // 定义在 renderKeyCard 之外：切片里也要带上，否则 VM 里报 moreModelsText is not defined。
+  const helpers = slice(src, "  // “更多模型”每行解析", "  async function saveMoreModels(p) {", "09-settings.js");
   const code = `
+${helpers}
 ${fn}
 let state = { provView: "A", providerActive: "A", providers: [], settings: {} };
 let page = { els: {}, nodes: new Set() };
@@ -32,13 +36,14 @@ const pHint = () => "";
 const webUrl = (u) => (u || null);
 const useBtn = () => "";
 const loadBill = () => {};
-let toastLog = [], reloadLog = [], testLog = [], confirmRet = true;
+let toastLog = [], reloadLog = [], testLog = [], loadModelsLog = [], confirmRet = true;
 const toast = (m, e) => toastLog.push({ m, e: !!e });
 const confirm = () => confirmRet;
 let postCalls = [], postImpl = null;
 const post = (p, body) => { const c = { p, body }; postCalls.push(c); return postImpl(c); };
 let reloadProv = (...a) => { reloadLog.push(a); };
 let testAndShow = (id) => { testLog.push(id); };
+let loadModels = async (...a) => { loadModelsLog.push(a); };
 let useProvider = () => {};
 globalThis.__k = {
   state, box,
@@ -49,10 +54,11 @@ globalThis.__k = {
   get toastLog() { return toastLog; },
   get reloadLog() { return reloadLog; },
   get testLog() { return testLog; },
+  get loadModelsLog() { return loadModelsLog; },
   get postCalls() { return postCalls; },
   set postImpl(f) { postImpl = f; },
   set confirmRet(v) { confirmRet = v; },
-  reset() { toastLog = []; reloadLog = []; testLog = []; postCalls = []; },
+  reset() { toastLog = []; reloadLog = []; testLog = []; loadModelsLog = []; postCalls = []; },
 };
 `;
   const ctx = { T, ESC };

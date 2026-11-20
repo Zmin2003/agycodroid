@@ -41,8 +41,9 @@ test("A8 195-R.8：维护者通知取不到时都有提示", () => {
   assert.ok(src04.includes("r.error") && src04.includes("toast(t(\"暂时取不到维护者通知\"), true)"), "error 非空要提示");
 });
 
-test("A3 P1-2：接口卡换了主机会提示旧 Key 被清掉", () => {
-  assert.ok(src11.includes("r.keyCleared ? t(\"换了主机，旧 Key 已清掉，请重新填\")"), "keyCleared 要提示重新填");
+test("A3 P1-2：接口卡换了线路会提示旧 Key 被清掉（自定义接口卡已删，提示在内置密钥卡上）", () => {
+  assert.ok(src09.includes("r.keyCleared ? t(\"换了线路，旧 Key 已清掉，请重新填\")"), "keyCleared 要提示重新填");
+  assert.doesNotMatch(src11, /renderCustomCard/, "自定义接口卡已删，换主机提示随卡一起走");
 });
 
 test("C27 195-L.10：改强调色后重画月报", () => {
@@ -66,11 +67,6 @@ test("A6 195-G.3：顶栏登录态用 /api/status 的 auth，退出后立即刷�
 test("A7 195-G.4：登录 pending 继续轮询，晚到的授权地址补开，失败也给终端登录入口", () => {
   assert.ok(src09.includes("if (st.url && st.url !== loginUrlOpened) {"), "轮询里补开晚到的地址，且只开一次");
   assert.ok(src09.includes("paintLoginFlow(\"\", method)"), "失败分支也有流程块（终端登录入口）");
-});
-
-test("A9 195-F.4：手动放入 / 直链下好的模型能在应用里删除", () => {
-  assert.ok(src09.includes("post(\"/api/local/model\", { op: \"remove\", id })"), "调用网关的 remove");
-  assert.ok(src09.includes("删掉模型「{id}」？文件会从模型目录里删除。"), "删除前确认");
 });
 
 test("A11 196-会话.6：导入中途失败也列出已导入的数量", () => {

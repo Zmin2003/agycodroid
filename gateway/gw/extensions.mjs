@@ -26,7 +26,6 @@ let EXT_LOCK = Promise.resolve();
 function extRun(args, timeoutMs = 180000) {
   const job = EXT_LOCK.then(() => agyBlocked()).then((blocked) => blocked ? { code: -1, out: "", err: blocked } : new Promise((resolve) => {
     const [cmd0, args0] = agyCmd(args);
-    const ucb = writes ? ucAppBegin() : null;
     const child = spawn(cmd0, args0, {
       cwd: fs.existsSync(CFG.workspace) ? CFG.workspace : CFG.home,
       env: agyEnv(), stdio: ["ignore", "pipe", "pipe"], detached: true,
@@ -35,17 +34,13 @@ function extRun(args, timeoutMs = 180000) {
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");   // 按流解码：多字节字符跨块不会被拆坏
     child.stdout.on("data", (d) => (out += d)); child.stderr.on("data", (d) => (err += d));
     const t = setTimeout(() => killTree(child), timeoutMs);
-    child.on("close", (code) => { clearTimeout(t); appWrote(code === 0 ? ucb : null); resolve({ code, out, err }); });
+    child.on("close", (code) => { clearTimeout(t); resolve({ code, out, err }); });
     child.on("error", (e) => { clearTimeout(t); resolve({ code: -1, out, err: err + e.message }); });
   }));
-  // 装卸插件、加删 MCP 是应用替用户做的：这次命令改到的当场认下，别下一轮反过来问他（见 userconf.mjs）。命令失败的不认，下一轮照问。
-  // 只认对应的地方：插件只动 plugins/ 和设置里的 enabledPlugins / extraKnownMarketplaces，MCP 只动 .claude.json
-  const writes = ["plugin", "mcp"].includes(args[0]) && !args.includes("list") && !args.includes("get");
-  const appWrote = (ucb) => {
-    if (!writes) return;
-    if (args[0] === "mcp") ucAppWrote([".claude.json"], ucb);
-    else ucAppWrote([".claude/settings.json", ".claude/plugins/"], ucb, { ".claude/settings.json": ["enabledPlugins", "extraKnownMarketplaces"] });
-  };
+  // 注意（E08，V3 未验证）：以前这里把 mcp / plugin 命令改到的文件认下来（ucAppWrote），
+  // 认的是 agy 根本不写的 ~/.claude.json / ~/.claude/settings.json。agy 的插件与 MCP 配置
+  // 写到哪里还没验证出来，所以这里什么都不认领——改动若落在 userconf 监视的 settings.json 上，
+  // 下一轮照常问用户确认（宁可多问一次，不认错地方）。
   EXT_LOCK = job.catch(() => {});
   return job;
 }
@@ -130,7 +125,11 @@ async function marketplaceOp(op, arg) {
   return r.code === 0 ? { ok: true } : { ok: false, message: cliMsg(r) };
 }
 
-/** agy mcp list 只有给人看的文本（格式按 Claude 的「名字: 目标 - ✔ Connected」猜的，agy 的实际输出还没在真机上看过，解析对不上就返回空列表，别报错）。顺带做了连通检查，所以慢几秒 */
+/** agy mcp list 只有给人看的文本（格式按 Claude 的「名字: 目标 - ✔ Connected」猜的，agy 的实际输出还没在真机上看过，V3）。
+ *  解析对不上不再静默返回空列表：items 为空且原始输出非空时把原始输出放在 raw 里带回前端，
+ *  页面能如实展示“解析失败”，而不是让用户以为一个 MCP 都没有。顺带做了连通检查，所以慢几秒。
+ *  user：true = 定义已验证是用户加的；null = 来源未验证，不知道是不是用户加的（不要误判成 false）。
+ *  返回 { items, raw }；raw 只在解析失败时有值。 */
 async function listMcp() {
   const r = await extRun(["mcp", "list"], 90000);
   const out = [];
@@ -139,15 +138,17 @@ async function listMcp() {
     if (!m) continue;
     const name = m[1].trim();
     const def = userMcpDef(name);
-    out.push({ name, target: m[2].trim(), ok: m[3] === "✔", status: (m[3] + " " + m[4]).trim().slice(0, 200), cloud: name.startsWith("claude.ai "), user: !!def, hdr: headerNames(def) });
+    out.push({ name, target: m[2].trim(), ok: m[3] === "✔", status: (m[3] + " " + m[4]).trim().slice(0, 200), cloud: name.startsWith("claude.ai "), user: def ? true : null, hdr: headerNames(def) });
   }
   for (const [name, d] of Object.entries(extOff().mcp)) if (!out.some((x) => x.name === name)) out.push({ name, target: mcpTarget(d), ok: false, status: "", disabled: true });
-  return out;
+  const raw = !out.length && r.out.trim() ? r.out.replace(/\x1b\[[0-9;]*m/g, "").trim().slice(0, 4000) : null;
+  return { items: out, raw };
 }
 
 /** mcp add 的参数拼装（addMcp 与 editMcp 共用；parts 给 stdio 用，还原存量定义时按字段精确传，别再按空白重切） */
 const mcpAddArgs = (transport, name, target, env, headers, parts) => {
   // -e / --header 是可变参数，会把后面的名字吞掉：名字放前面，选项跟在后面、用 -- 收尾
+  // -s user 旗标：agy 是否接受还没在真机上验证过（V3），先按 Claude 时代的写法留着，见报告。
   const args = ["mcp", "add", "-s", "user", "--transport", transport, name];
   if (transport !== "stdio") args.push(target);
   for (const kv of [].concat(env || [])) if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(kv)) args.push("-e", kv);
@@ -187,7 +188,7 @@ export async function getMcp(b) {
   const name = String(b.name || "").trim();
   const off = extOff();
   const def = (extIdOk(name) && off.mcp[name]) || userMcpDef(name);
-  if (!def) return { ok: false, message: tz("找不到这条 MCP 配置（账户连接器不能编辑）") };
+  if (!def) return { ok: false, message: tz("找不到这条 MCP 服务器的定义（来源未验证，无法确认）") };
   const stdio = def.type !== "http" && def.type !== "sse";
   return { ok: true, name, transport: stdio ? "stdio" : def.type,
     target: stdio ? [def.command, ...(Array.isArray(def.args) ? def.args : [])].filter((x) => x != null).join(" ") : String(def.url || ""),
@@ -202,7 +203,7 @@ export async function editMcp(b) {
   const off = extOff();
   const disabled = !!(extIdOk(name) && off.mcp[name]);
   const def = disabled ? off.mcp[name] : userMcpDef(name);
-  if (!def) return { ok: false, message: tz("找不到这条 MCP 配置（账户连接器不能编辑）") };
+  if (!def) return { ok: false, message: tz("找不到这条 MCP 服务器的定义（来源未验证，无法确认）") };
   const newName = String(b.newName || name).trim();
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(newName) || badArg(newName)) return { ok: false, message: tz("名字只能用字母、数字、点、下划线、横线") };
   // 两边名单都要查：停用条目改名成活跃条目（或反过来）会留下同名幽灵，列表只显示一条、另一条会「复活」
@@ -251,7 +252,7 @@ export async function editMcp(b) {
 async function execEdit(name, newName, nd, oldDef) {
   const rm = await extRun(["mcp", "remove", name], 60000);
   if (rm.code !== 0) return { ok: false, message: cliMsg(rm) };
-  const r = await extRun(["mcp", "add-json", "-s", "user", newName, JSON.stringify(nd)], 60000);
+  const r = await extRun(["mcp", "add-json", "-s", "user", newName, JSON.stringify(nd)], 60000);   // -s user 未验证（V3），先留着
   if (r.code === 0) return { ok: true };
   const back = await extRun(["mcp", "add-json", "-s", "user", name, JSON.stringify(oldDef)], 60000);
   return { ok: false, message: back.code === 0
@@ -268,9 +269,6 @@ async function execEdit(name, newName, nd, oldDef) {
 const HOOK_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "UserPromptSubmit", "Stop",
   "SubagentStart", "SubagentStop", "SessionStart", "SessionEnd", "Notification", "PreCompact", "PostCompact",
   "InstructionsLoaded", "ConfigChange", "TaskCompleted", "TeammateIdle", "WorktreeCreate", "Setup"];
-const HOOK_SCRIPTS_DIR = path.join(CFG.home, ".claude", "hooks");
-// 常用规则用到的小脚本（源码在 claude-apk/hooks/，用 hooks/embed.mjs 生成这一行）；添加规则时写进 ~/.claude/hooks/
-const HOOK_SCRIPTS = {"cc-autosave.mjs":"// agycodroid 内置 hook（Antigravity 答完一轮时）：项目是 git 仓库、且有改动，就自动提交一次存档。只提交，不推送。\n// 用法：node cc-autosave.mjs '自动存档'   （参数是提交说明的前缀，后面自动加时间）\nimport fs from \"node:fs\";\nimport { execFileSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cwd = j.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();\nconst git = (...a) => execFileSync(\"git\", a, { cwd, encoding: \"utf8\", stdio: [\"ignore\", \"pipe\", \"pipe\"] });\ntry { if (git(\"rev-parse\", \"--is-inside-work-tree\").trim() !== \"true\") process.exit(0); } catch { process.exit(0); }\ntry {\n  if (!git(\"status\", \"--porcelain\").trim()) process.exit(0);\n  git(\"add\", \"-A\");\n  const id = [];\n  try { git(\"config\", \"user.name\"); } catch { id.push(\"-c\", \"user.name=agycodroid\"); }\n  try { git(\"config\", \"user.email\"); } catch { id.push(\"-c\", \"user.email=autosave@agycodroid.local\"); }\n  const d = new Date(), p = (n) => String(n).padStart(2, \"0\");\n  const when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;\n  git(...id, \"commit\", \"-q\", \"-m\", `${process.argv[2] || \"自动存档\"} ${when}`);\n} catch (e) {\n  process.stderr.write(\"自动存档失败：\" + String(e.stderr || e.message).slice(0, 300) + \"\\n\");\n}\n","cc-bash-log.mjs":"// agycodroid 内置 hook（用完工具之后，只管 Bash）：把 Antigravity 跑过的命令记进日志，方便事后翻看。\n// 用法：node cc-bash-log.mjs [日志文件]   默认 ~/.claude/bash-history.log\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst file = process.argv[2] || path.join(process.env.HOME || \".\", \".claude\", \"bash-history.log\");\nconst d = new Date(), p = (n) => String(n).padStart(2, \"0\");\nconst when = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;\ntry {\n  fs.mkdirSync(path.dirname(file), { recursive: true });\n  fs.appendFileSync(file, `${when}\\t${j.cwd || \"\"}\\n  ${cmd.replace(/\\n/g, \"\\n  \")}\\n`);\n} catch {}\n","cc-format.mjs":"// agycodroid 内置 hook（用完工具之后，管改文件的工具）：Antigravity 改完代码文件，用本机已装的格式化工具整理一遍。\n// 按扩展名找：ruff / black、prettier、gofmt、rustfmt、clang-format、shfmt，没装就什么也不做。\n// Markdown 和纯文本不碰（写作的稿子不该被工具改排版）。\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport { spawnSync } from \"node:child_process\";\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst f = String((j.tool_input || {}).file_path || \"\");\nif (!f || !fs.existsSync(f)) process.exit(0);\nconst ext = path.extname(f).toLowerCase();\nconst T = {\n  \".py\": [[\"ruff\", \"format\", \"-q\"], [\"black\", \"-q\"]],\n  \".js\": [[\"prettier\", \"--write\", \"--log-level\", \"warn\"]], \".mjs\": 0, \".cjs\": 0, \".jsx\": 0, \".ts\": 0, \".tsx\": 0,\n  \".json\": 0, \".css\": 0, \".scss\": 0, \".html\": 0, \".vue\": 0, \".yaml\": 0, \".yml\": 0,\n  \".go\": [[\"gofmt\", \"-w\"]], \".rs\": [[\"rustfmt\", \"-q\"]],\n  \".c\": [[\"clang-format\", \"-i\"]], \".h\": 0, \".cc\": 0, \".cpp\": 0, \".hpp\": 0,\n  \".sh\": [[\"shfmt\", \"-w\"]],\n};\nlet list = T[ext];\nif (list === 0) list = [\".c\", \".h\", \".cc\", \".cpp\", \".hpp\"].includes(ext) ? T[\".c\"] : T[\".js\"];\nif (!list) process.exit(0);\nconst has = (b) => (process.env.PATH || \"\").split(\":\").some((d) => { try { fs.accessSync(path.join(d, b), fs.constants.X_OK); return true; } catch { return false; } });\nconst tool = list.find(([b]) => has(b));\nif (tool) spawnSync(tool[0], [...tool.slice(1), f], { stdio: \"ignore\", timeout: 20000 });\n","cc-guard-bash.mjs":"// agycodroid 内置 hook（用工具之前，只管 Bash）：命令里出现这些内容就拦下。\n// 用法：node cc-guard-bash.mjs 'git push --force' '/git\\s+reset\\s+--hard/'\n// 普通写法按字面查找（空白宽松匹配）；写成 /…/ 就当正则。命中退出码 2，并告诉 Antigravity 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst cmd = String((j.tool_input || {}).command || \"\");\nif (!cmd) process.exit(0);\nconst flat = cmd.replace(/\\s+/g, \" \");\nconst hit = pats.find((p) => {\n  const m = /^\\/(.+)\\/([a-z]*)$/.exec(p);\n  if (m) { try { return new RegExp(m[1], m[2]).test(cmd); } catch { return false; } }\n  return flat.includes(p.replace(/\\s+/g, \" \"));\n});\nif (hit) {\n  process.stderr.write(`这条命令触发了禁止规则「${hit}」，已拦下：\\n${cmd.slice(0, 300)}\\n换一种更安全的做法；如果确实需要，请让用户自己执行。\\n`);\n  process.exit(2);\n}\n","cc-guard-files.mjs":"// agycodroid 内置 hook（用工具之前）：不许 Antigravity 改动匹配这些模式的文件。\n// 用法：node cc-guard-files.mjs '.env' '*.pem' 'secrets/**'\n// 模式不带 / 时比对文件名，带 / 时比对完整路径；* 不跨目录，** 跨目录。命中就退出码 2 拦下，并告诉 Antigravity 原因。\nimport fs from \"node:fs\";\nconst pats = process.argv.slice(2).filter(Boolean);\nlet j = {};\ntry { j = JSON.parse(fs.readFileSync(0, \"utf8\")); } catch {}\nconst i = j.tool_input || {};\nconst f = String(i.file_path || i.notebook_path || \"\");\nif (!f) process.exit(0);\nconst rx = (p) => new RegExp(\"^\" + p.replace(/[.+^${}()|[\\]\\\\]/g, \"\\\\$&\").replace(/\\*\\*/g, \"\\0\").replace(/\\*/g, \"[^/]*\")\n  .replace(/\\?/g, \"[^/]\").replace(/\\0/g, \".*\") + \"$\");\nconst base = f.split(\"/\").pop();\nconst hit = pats.find((p) => rx(p).test(p.includes(\"/\") ? f : base) || (p.includes(\"/\") && rx(\"**/\" + p).test(f)));\nif (hit) {\n  process.stderr.write(`这个文件受保护（规则「${hit}」），不要修改：${f}\\n如果确实需要改，请告诉用户，让用户自己处理。\\n`);\n  process.exit(2);\n}\n"};
 
 function hookSettingsFile(scope, dir) {
   if (scope === "user") return path.join(CFG.home, ".claude", "settings.json");
@@ -321,7 +319,7 @@ export function listHooks(dir) {
     scopes.push({ scope, file, exists: r.exists, error: r.error, badJson: !!r.badJson,
       hooks, disableAll: !!paused || !!(r.j && r.j.disableAllHooks) });
   }
-  return { scopes, events: HOOK_EVENTS, workspace: CFG.workspace, dir: path.resolve(String(dir || CFG.workspace)), scriptsDir: HOOK_SCRIPTS_DIR };
+  return { scopes, events: HOOK_EVENTS, workspace: CFG.workspace, dir: path.resolve(String(dir || CFG.workspace)) };
 }
 /** 界面送回来的整份 hooks：结构不对就拒绝；空组、空命令剔掉；不认识的字段（prompt / http 类 hook 等）原样留着 */
 function cleanHooks(h) {
@@ -376,23 +374,12 @@ export function saveHooks({ scope, dir, hooks, disableAll }) {
   EXT_LOCK = job.catch(() => {});
   return job;
 }
-/** 网关启动时：以前用 disableAllHooks:true 暂停的，转成挪开的办法（不然网关压成 false 后它们会重新跑起来）。
- *  用户级 + 工作区的项目级、本机级（界面管的就这三份，DeepSeek 复核建议 8）；别的项目里的照旧按项目配置确认（projtrust.mjs）处理 */
+/** 网关启动时调（server.mjs）。以前：以前用 disableAllHooks:true 暂停的，转成挪开的办法（不然网关压成 false 后它们会重新跑起来）。
+ *  现在是空操作：agy 没有 PreToolUse 钩子这套东西，~/.claude/settings.json 里的 hooks 配置 agy 从不读，
+ *  遗留的 disableAllHooks:true 是惰性数据，不会重新跑起来，没什么可迁移的；启动时不再读写这三份文件。
+ *  导出保留，server.mjs 的调用不用改。saveHooks / listHooks 本身保留（路由已返回 400，测试直接覆盖）。 */
 export async function migrateHookPause() {
-  for (const scope of ["user", "project", "local"]) {
-    let file; try { file = hookSettingsFile(scope); } catch { continue; }
-    const r = readSettingsFile(file);
-    if (!(r.j && r.j.disableAllHooks === true)) continue;
-    try { await saveHooks({ scope }); log(`hooks 的「暂停全部」已改成挪开保存：${file}`); }
-    catch (e) { log(`转换 hooks 暂停失败（${file}）：${e.message}`); }
-  }
-}
-function installHookScripts() {
-  const ucb = ucAppBegin();
-  fs.mkdirSync(HOOK_SCRIPTS_DIR, { recursive: true });
-  for (const [name, src] of Object.entries(HOOK_SCRIPTS)) fs.writeFileSync(path.join(HOOK_SCRIPTS_DIR, name), src);
-  ucAppWrote([".claude/hooks/"], ucb);
-  return { ok: true, dir: HOOK_SCRIPTS_DIR };
+  return;
 }
 /** 试运行用的 stdin：照 claude 真实传给 hook 的 JSON 造一份（工具类事件按匹配规则挑个像样的工具） */
 function hookSample(ev, matcher, cwd) {
@@ -536,13 +523,13 @@ async function setSkillMode(dir, mode) {
   return { ok: true };
 }
 
-/** 用户级 MCP 定义（~/.claude.json 顶层 mcpServers，只读）；项目级、账户连接器不归这里管 */
+/** 用户级 MCP 定义（只读）。以前读 ~/.claude.json 顶层 mcpServers——agy 根本不读那个文件，
+ *  拿它判定“是不是用户加的”是错的（E08）。agy 的 MCP 配置写在哪里、以及 agy mcp get 是否
+ *  能读回定义，都还没验证（V3）：在验证出来之前不编造来源，一律返回 null（未知），
+ *  而不是误判。后果：已启用服务器的编辑 / 停用在 V3 验证前不可用（移除仍可用），见报告。 */
 function userMcpDef(name) {
-  try {
-    const j = JSON.parse(readSmallFile(path.join(CFG.home, ".claude.json"), 32 << 20) || "{}");
-    const d = j && j.mcpServers && j.mcpServers[name];
-    return d && typeof d === "object" && !Array.isArray(d) ? d : null;
-  } catch { return null; }
+  void name;
+  return null;
 }
 /** 列表里只显示请求头的名字（值可能是令牌，不显示）：一眼能看出令牌到底配上没有，
  *  不用等 claude 报 "Dynamic Client Registration rejected (HTTP 404)" 再猜。 */
@@ -557,15 +544,16 @@ const mcpTarget = (d) => {
   return (String(d.url || [d.command, ...(Array.isArray(d.args) ? d.args : [])].filter((x) => x != null).join(" ")).slice(0, 300)
     + (env ? ` [env: ${env}]` : "") + (hdr ? ` [headers: ${hdr}]` : "")).slice(0, 500);
 };
-/** 停用 = 先把定义存进停用名单，再用 agy mcp remove 拿掉；remove 失败就把名单退回去 */
+/** 停用 = 先把定义存进停用名单，再用 agy mcp remove 拿掉；remove 失败就把名单退回去。
+ *  定义来源未验证（V3）时 userMcpDef 一律 null，停用直接拒绝——停了加不回去比误停强。 */
 async function disableMcp(name) {
   if (!extIdOk(name) || badArg(name)) return { ok: false, message: tz("名字格式不对") };
   const def = userMcpDef(name);
-  if (!def) return { ok: false, message: tz("只能停用你自己加的（用户级）MCP 服务器") };
+  if (!def) return { ok: false, message: tz("找不到这条 MCP 服务器的用户级定义，停用后加不回去（来源未验证）") };
   const off = extOff();
   off.mcp[name] = def;
   if (!saveExtOff(off)) return { ok: false, message: tz("停用名单写不进去") };
-  const r = await extRun(["mcp", "remove", "-s", "user", name], 60000);
+  const r = await extRun(["mcp", "remove", "-s", "user", name], 60000);   // -s user 未验证（V3），先留着
   if (r.code !== 0) { const o2 = extOff(); delete o2.mcp[name]; saveExtOff(o2); return { ok: false, message: cliMsg(r) }; }
   log(`MCP ${name} 已停用`);
   return { ok: true };
@@ -574,7 +562,7 @@ async function disableMcp(name) {
 async function enableMcp(name) {
   const off = extOff(), def = extIdOk(name) ? off.mcp[name] : null;
   if (!def) return { ok: false, message: tz("停用名单里没有它") };
-  const r = await extRun(["mcp", "add-json", "-s", "user", name, JSON.stringify(def)], 60000);
+  const r = await extRun(["mcp", "add-json", "-s", "user", name, JSON.stringify(def)], 60000);   // -s user 未验证（V3），先留着
   if (r.code !== 0) return { ok: false, message: cliMsg(r) };
   const o2 = extOff(); delete o2.mcp[name]; saveExtOff(o2);
   log(`MCP ${name} 已启用`);
@@ -805,7 +793,7 @@ export async function routeExtensions(req, res, u, p) {
       if (req.method === "GET" && p === "/api/ext/marketplaces") return unsupported("插件市场");
       if (req.method === "POST" && p === "/api/ext/marketplaces/add") return unsupported("插件市场");
       if (req.method === "POST" && p === "/api/ext/marketplaces/remove") return unsupported("插件市场");
-      if (req.method === "GET" && p === "/api/ext/mcp") return sendJson(res, 200, { items: await listMcp() });
+      if (req.method === "GET" && p === "/api/ext/mcp") { const mcp = await listMcp(); return sendJson(res, 200, { items: mcp.items, ...(mcp.raw ? { raw: mcp.raw } : {}) }); }
       if (req.method === "GET" && p === "/api/ext/mcp/get") return sendJson(res, 200, await getMcp({ name: u.searchParams.get("name") }));
       if (req.method === "POST" && p === "/api/ext/mcp/edit") return sendJson(res, 200, await editMcp(body));
       if (req.method === "POST" && p === "/api/ext/mcp/add") return sendJson(res, 200, await addMcp(body));

@@ -487,6 +487,16 @@ export function privCall(req, timeoutMs = 20000) {
 
 // ── 路由：/api/ledger /api/usage /api/usage/ /api/energy /api/energy/system ──
 export async function routeUsage(req, res, u, p) {
+  // 前端滚动冻结脱困前报一声：写进网关日志，事后对时间线（前端自己只在 localStorage 留最近 5 次）。
+  // 原在端侧小模型路由模块；E12 全删时迁来此处（调用方 19-boot.js 不变）。
+  if (req.method === "POST" && p === "/api/freeze") {
+    let j = {};
+    try { j = JSON.parse(await readBody(req)); } catch {}
+    // 去掉换行：不能借它在日志里伪造一行（v0514 审查低-8）
+    const touch = Array.isArray(j.touch) ? j.touch.slice(-40).map((x) => String(x).replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 80)).join(" | ") : "";
+    log(`滚动冻结脱困（${j.why === "auto" ? "自动" : "手动"}）${touch ? "，触摸：" + touch : ""}`);
+    return sendJson(res, 200, { ok: true });
+  }
   if (req.method === "GET" && p === "/api/ledger") {
     try { return sendJson(res, 200, { items: readLedger(Number(u.searchParams.get("n")) || 100) }); }
     catch (e) { return sendJson(res, 500, { message: e.code || e.message }); }

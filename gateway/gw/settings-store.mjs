@@ -31,6 +31,10 @@ export const SETTINGS = {
   maxParallel: 3,
   // 工作岛：把 Antigravity 的工作状态送到 ColorOS 16 灵动岛（可选，默认关；见 gw/work-island.mjs）
   workIsland: false,
+  // E13 最小验证 (c) 的门（默认关）：开了 + 当前接口是 Gemini API Key 时，这一轮的 agy
+  // 才会被指到本机 Gemini 桩端点（见 gw/gemini-stub.mjs）；Google 登录路径不受影响。
+  // 验证通过、OpenAI 兼容上游 provider 类型落地后，这扇门由 provider 接管，届时删掉。
+  geminiStub: false,
   // 自动起名用的型号（#60）：null = 跟对话同一型号；"off" = 不自动起；其他 = 全局那家清单里的某个型号（见 autotitle.mjs）
   titleModel: null,
   // 不在输入栏模型选单里显示的接口（只是不显示，配置照留；正在用的、全局默认的那家照样显示）
@@ -89,8 +93,9 @@ function loadSettings() {
   // agy 没有 --append-system-prompt-file，旧值清掉
   if ("appendSystemPrompt" in SETTINGS) { delete SETTINGS.appendSystemPrompt; setImmediate(saveSettings); }
   // 旧设置里留下的 Claude 专属字段：guard（PreToolUse 钩子）、autoCompactWindow（/compact）、
-  // staticCompat（seccomp 包装）、idleCompaction（空闲压缩）、localMode（端侧小模型）——agy 里都没有，清掉
-  for (const k of ["guard", "autoCompactWindow", "staticCompat", "idleCompaction", "localMode"]) if (k in SETTINGS) { delete SETTINGS[k]; setImmediate(saveSettings); }
+  // staticCompat（seccomp 包装）、idleCompaction（空闲压缩）——agy 里都没有，清掉
+  // （端侧模式键：E12 已全删，不再列入清理；旧设备残留的该键无消费方，留着无害）
+  for (const k of ["guard", "autoCompactWindow", "staticCompat", "idleCompaction"]) if (k in SETTINGS) { delete SETTINGS[k]; setImmediate(saveSettings); }
 }
 
 /** 写盘成功返回 true；失败记日志并返回 false（调用方要如实告诉用户，别报「已保存」——#122-3） */

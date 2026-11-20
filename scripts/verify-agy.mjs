@@ -60,7 +60,7 @@ async function appInfo() {
     const sig = (p) => { const ts = Date.now(), r = crypto.randomBytes(16).toString("hex"); return { "X-CC-Sig": `${ts}.${r}.${mac(`sig2:${boot}:127.0.0.1:GET:${ts}:${r}:${crypto.createHash("sha256").update("").digest("hex")}:${p}`)}` }; };
     const r = await fetch(`http://127.0.0.1:${PORT}/api/app/upd_status`, { headers: sig("/api/app/upd_status"), signal: AbortSignal.timeout(8000) });
     const j = await r.json(), it = (id) => (j.items || []).find((x) => x.id === id)?.current || "";
-    return { app: it("app"), devkit: it("devkit"), current: it("claude") };
+    return { app: it("app"), devkit: it("devkit"), current: it("agy") };
   } catch { return { app: "", devkit: "", current: "" }; }
 }
 

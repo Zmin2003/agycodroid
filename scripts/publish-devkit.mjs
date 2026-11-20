@@ -206,7 +206,7 @@ step.pin = async () => {
   const files = ["devkit-pin.json", "devkit-sources.txt", "devkit/README.md"];
   fuseOk(ROOT, files);
   gitc(ROOT, "add", ...files);
-  gitc(ROOT, "commit", "-q", "-m", `App 改钉工具包 ${TAG}${WHY ? "（" + WHY + "）" : ""}\n\n${packages} 个包，gz ${gz.slice(0, 12)}…\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`);
+  gitc(ROOT, "commit", "-q", "-m", `App 改钉工具包 ${TAG}${WHY ? "（" + WHY + "）" : ""}\n\n${packages} 个包，gz ${gz.slice(0, 12)}…`);
   git(ROOT, "push", "-q", "origin", "main");
   return { commit: git(ROOT, "rev-parse", "HEAD") };
 };
@@ -249,7 +249,7 @@ step.market = async () => {
     writeFresh(bp, s);
     fuseOk(MARKET, ["bases.json"]);
     gitc(MARKET, "add", "bases.json");
-    gitc(MARKET, "commit", "-q", "-m", `bases 加 ${TAG}${WHY ? "（" + WHY + "）" : ""}\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`);
+    gitc(MARKET, "commit", "-q", "-m", `bases 加 ${TAG}${WHY ? "（" + WHY + "）" : ""}`);
     git(MARKET, "push", "-q", "origin", "HEAD:main");
     commit = git(MARKET, "rev-parse", "HEAD");
   }

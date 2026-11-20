@@ -83,7 +83,7 @@ public final class Docs extends DocumentsProvider {
     }
 
     /** 不通过文件访问框架交出去的文件：直接复用 Share.secret() 的文件名规则（与分享出口同一套，别两处各写一份），
-     *  至少覆盖 .claude.json（含 OAuth 刷新令牌）、私钥类（*.pem/key/p12…）、.npmrc 等（0.6.10 审计 199-1-01）。
+     *  至少覆盖 .claude.json（含 OAuth 刷新令牌）、~/.gemini/antigravity-cli/（agy 配置与登录态）、私钥类（*.pem/key/p12…）、.npmrc 等（0.6.10 审计 199-1-01）。
      *  旧规则（父目录 .claude 下的 settings(.local).json）已被 Share.secret() 的路径规则覆盖。
      *  .env 有意不挡：工作区里的 .env 是用户自己的项目配置，文件管理器里要能正常编辑；分享出口 Share.secret() 同样不挡 .env，两边保持一致。
      *  若以后 Share.secret() 改为挡 .env，这里跟着挡，不用再改 Docs。 */
@@ -91,7 +91,7 @@ public final class Docs extends DocumentsProvider {
         return Share.secret(f);
     }
 
-    /** 软链接按真实路径再认一遍：工作区里自己建的别名可以指向 .claude/settings.json，只看名字会漏。 */
+    /** 软链接按真实路径再认一遍：工作区里自己建的别名可以指向 .claude/settings.json 或 ~/.gemini/antigravity-cli/settings.json，只看名字会漏。 */
     private static void denySensitive(File f) throws FileNotFoundException {
         if (sensitive(f)) throw new FileNotFoundException(Tr.t("这个文件不通过文件访问提供"));
         try {

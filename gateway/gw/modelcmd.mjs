@@ -1,6 +1,6 @@
 import { SETTINGS, saveSettings } from "./settings-store.mjs";
 import { PROVIDER, providerById } from "./providers.mjs";
-import { effortLevelsOf, fetchModels, normEffort } from "./models.mjs";
+import { effortLevelsOf, fetchModels, modelsMeta, normEffort } from "./models.mjs";
 import { effectiveModel, setSessModel } from "./sessmodel.mjs";
 
 // ── /model 与 /effort：由网关本地处理 ─────────────────────────────────
@@ -16,7 +16,7 @@ export async function handleLocalCommand(name, arg, reply, sid, stopped = () => 
   // 清单、档位、校验都按这个会话真跑的那家：钉的 → 项目默认 → 全局（和 run.mjs、/api/models 同一套，#78）
   const now = effectiveModel(sid);
   const P = providerById(now.provider) || PROVIDER;
-  const models = await fetchModels(false, P, { guess: true });   // 静态清单：直接回，不用等网络
+  const models = await fetchModels(false, P, { guess: true });   // 已登录时走 `agy models` 拉取，未登录回静态兜底（见 models.mjs）
   // 等清单期间用户点了停止：这条命令就算撤回了，迟到的清单不能再改型号或强度（#142-1）
   if (stopped()) return reply("已停止，没有改动。", name === "models" ? "model" : name);
   const curId = now.model, curEff = now.effort;
@@ -51,7 +51,11 @@ export async function handleLocalCommand(name, arg, reply, sid, stopped = () => 
         `当前模型：**${curId || "(由 agy 决定)"}**　（effort **${curEff || "默认"}**）\n\n` +
         `可用模型：\n\n${lines}\n\n` +
         `用法：\`/model <id>\`　切换思考强度：\`/effort\`\n\n` +
-        `> agy 没有公开的模型列表：上面只有官方文档给过的例子和你在接口卡里加的 slug。\n` +
+        (modelsMeta(P).source === "live"
+          ? `> 清单来自 \`agy models\`（已登录，按账户权限返回）。agy 不公布上下文窗口，窗口一律是不知道。\n`
+          : modelsMeta(P).source === "stale"
+          ? `> 拉取失败，上面是旧缓存里的清单。登录后在模型面板里刷新可重拉。\n`
+          : `> 还没登录 agy，上面是离线清单（文档示例 + 你在接口卡里加的 slug）。登录后会自动拉取 \`agy models\` 的清单。\n`) +
         `> 填清单外的名字也可以——agy 不认识会在下一轮直接报错退出，不会静默换一个。`,
         "model"
       );

@@ -21,23 +21,6 @@ import { _setSealed } from "../gw/edition.mjs";
 const SH = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 const runHook = (cmd, tool, input) => execFileSync(SH, ["-c", cmd], { input: JSON.stringify({ tool_name: tool, tool_input: input }) }).toString();
 
-test("guard 新规则：安全模式开关、甩掉这一层再起 claude 要问；平常用 claude 不问", async () => {
-  const { judge } = await import("../guard/cc-guard.mjs");
-  for (const c of ["touch ~/.agyapp-safe-mode", "curl -X POST -H x http://127.0.0.1:8791/api/safe-mode",
-    "claude --bare -p 'x'", "claude -p --settings '{}' hi", "claude --safe-mode", "claude --dangerously-skip-permissions -p hi",
-    "~/.local/share/agycodroid/claude/current/claude --setting-sources user -p x", "claude --permission-mode bypassPermissions -p x",
-    "echo x >> ~/.claude/CLAUDE.md", "cp a.md $HOME/.claude/rules/x.md",
-    "claude \"--bare\" -p x", "claude '--settings' '{}' -p x", "claude \"--permission-mode=bypassPermissions\" -p x", "claude -p --allowedTools Bash x",
-    "rm ~/.local/share/agycodroid/claude/2.1.311/manifest.json.sig", "ln -sfn /x ~/.local/share/agycodroid/claude/current"])
-    assert.ok(judge("Bash", { command: c }), c);
-  assert.ok(judge("Write", { file_path: "/data/user/0/cc.agyroid/files/home/.claude/CLAUDE.md" }));
-  assert.equal(judge("Write", { file_path: "/data/user/0/cc.agyroid/files/home/workspace/.claude/CLAUDE.md" }), null, "项目的不问");
-  assert.equal(judge("Edit", { file_path: "/data/user/0/cc.agyroid/files/home/workspace/CLAUDE.md" }), null);
-  assert.equal(judge("Read", { file_path: "/data/user/0/cc.agyroid/files/home/.claude/CLAUDE.md" }), null, "读不问");
-  for (const c of ["claude --version", "claude -p 'hello'", "claude mcp list", "echo claude is nice --bare-metal"])
-    assert.equal(judge("Bash", { command: c }), null, c);
-});
-
 test("安全模式：always-proceed 退回 request-review，其余档不动", () => {
   const f = path.join(CFG.home, ".agyapp-safe-mode");
   fs.writeFileSync(f, "1");
@@ -85,12 +68,12 @@ test("篡改留痕：界面待提示、点过就不提；模型只告诉一次",
   tamperAck();
   tamperNote();
   tamperRecord("runtime", ["TOOLS.md", "gw/x.mjs"]);
-  tamperRecord("claude", ["2.1.311/claude: binary does not match"]);
+  tamperRecord("agy", ["2.1.311/agy: binary does not match"]);
   const p = tamperPending();
   assert.equal(p.length, 2);
   const n = tamperNote();
   assert.match(n, /Runtime app-file protection was triggered \(TOOLS\.md, gw\/x\.mjs\)/);
-  assert.match(n, /Refused to start a modified Antigravity CLI binary \(2\.1\.311\/claude:_binary_does_not_match\)/);
+  assert.match(n, /Refused to start a modified Antigravity CLI binary \(2\.1\.311\/agy:_binary_does_not_match\)/);
   assert.equal(tamperNote(), "", "只说一次");
   tamperAck(p[0].id);
   assert.equal(tamperPending().length, 1);
@@ -109,7 +92,7 @@ test("agy 程序核验：没存清单的发行版不起（记篡改）、开发�
   _setSealed(true);
   const p0 = await agySeal(bin, { force: true });
   assert.equal(p0.ok, false); assert.equal(p0.why, "no manifest (reinstall agy to store one)");
-  assert.ok(tamperPending().some((e) => e.src === "claude"), "没清单也记篡改（旧 claudeSeal 不记）");
+  assert.ok(tamperPending().some((e) => e.src === "agy"), "没清单也记篡改（旧 claudeSeal 不记）");
   tamperAck(); tamperNote();
   _setSealed(false);
   fs.writeFileSync(bin, "ELF fake.");          // 换个大小，免得用上次的结论
@@ -123,7 +106,7 @@ test("agy 程序核验：没存清单的发行版不起（记篡改）、开发�
   fs.writeFileSync(path.join(dir, "agy.sha512"), "0".repeat(128));
   const r2 = await agySeal(bin, { force: true });
   assert.equal(r2.ok, false); assert.equal(r2.why, "binary does not match the installed checksum");
-  assert.ok(tamperPending().some((e) => e.src === "claude"));
+  assert.ok(tamperPending().some((e) => e.src === "agy"));
   tamperAck(); tamperNote();
   assert.deepEqual(await agySeal(bin, { force: true }), r2, "没变就用上次的结论");
   // 存对了就过
@@ -172,7 +155,7 @@ test("篡改留痕：一直在改只并成一条，没新文件不再推；文�
   tamperAck(); tamperNote();
 });
 
-test("迁移旧的暂停：工作区项目级的 disableAllHooks:true 也转过来", async () => {
+test("迁移旧的暂停：agy 没有钩子，migrateHookPause 是空操作，遗留文件原样不动（E14）", async () => {
   const { migrateHookPause } = await import("../gw/extensions.mjs");
   const file = path.join(CFG.workspace, ".claude", "settings.json");
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -180,9 +163,9 @@ test("迁移旧的暂停：工作区项目级的 disableAllHooks:true 也转过�
   fs.writeFileSync(file, JSON.stringify({ disableAllHooks: true, hooks }));
   await migrateHookPause();
   const j = JSON.parse(fs.readFileSync(file, "utf8"));
-  assert.equal(j.disableAllHooks, undefined);
-  assert.equal(j.hooks, undefined);
-  assert.deepEqual(JSON.parse(fs.readFileSync(file + ".agyapp-paused", "utf8")), hooks);
+  assert.equal(j.disableAllHooks, true, "启动迁移不再读写这份文件，遗留的暂停标记原样留着");
+  assert.deepEqual(j.hooks, hooks);
+  assert.ok(!fs.existsSync(file + ".agyapp-paused"));
   fs.rmSync(path.dirname(file), { recursive: true, force: true });
 });
 

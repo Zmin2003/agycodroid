@@ -61,7 +61,7 @@ test("usage：hours 是数组 → 留底后按空对象起，写入仍是普通�
   assert.equal(badOf("agyapp-usage.json"), 1);
 });
 
-test("model-windows：learnWindow 现在是空操作——agy 的模型窗口是静态目录，不学不写（P1-16、195-Z.9、197-9.3 的旧行为已删）", () => {
+test("model-windows：learnWindow 只学清单里已有的模型、读不到窗口不写（P1-16、195-Z.9、197-9.3 的旧行为已删）", () => {
   assert.doesNotThrow(() => models.learnWindow({ modelUsage: { m1: { contextWindow: 1234, maxOutputTokens: 99 } } }, { nativeModels: true }));
   assert.equal(fs.readFileSync(path.join(CFG.home, "agyapp-model-windows.json"), "utf8"), "null", "文件还是摆好的 null，没被改写");
   assert.equal(badOf("agyapp-model-windows.json"), 0);

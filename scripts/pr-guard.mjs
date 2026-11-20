@@ -22,7 +22,7 @@ const HIGH_PATHS = [
   [/^devkit-(pin\.json|sources\.txt)$/, "钉的工具包版本与下载源"],
   [/^android\/AndroidManifest\.xml$/, "安卓权限与组件声明"],
   [/(^|\/)(package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|requirements[^/]*\.txt|Cargo\.(toml|lock)|go\.(mod|sum)|[^/]*\.lock(\.json)?)$/, "依赖清单"],
-  [/^(gateway\/web\/(vendor|office|pdfjs|mdedit)\/|gateway\/web\/xterm[^/]*$|devkit\/vendor\/|third_party\/|claude-code\/)/, "第三方代码（应与上游发布逐字节一致）"],
+  [/^(gateway\/web\/(vendor|office|pdfjs|mdedit)\/|gateway\/web\/xterm[^/]*$|devkit\/vendor\/|third_party\/)/, "第三方代码（应与上游发布逐字节一致）"],
   [/^gateway\/guard\//, "敏感操作再确认（安全兜底）"],
   [/^i18n\/[^/]*\.mjs$/, "译文生成脚本（决定哪些译文能当代码进界面）"],
   [/(^|\/)[^/]*(sign|pgp|verify|token|auth|access|guard|secret|keystore|cert)[^/]*$/i, "签名 / 校验 / 令牌 / 权限相关"],

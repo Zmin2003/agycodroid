@@ -53,9 +53,7 @@ const PRESETS = {
 };
 
 // 端侧小模型没有了（local llama 是给 Claude Code 挂本地 llama-server 的，agy 没有这条路）。
-// local.mjs 还在用这两个导出名，留作不会被用到的常量，避免它启动即崩。
-export const LLAMA_PORT = Number(process.env.AGAPP_LLAMA_PORT) || 8811;
-export const LLAMA_KEY_FILE = path.join(CFG.home, ".cache", "llama-api-key");
+// E12 端侧小模型全删时随之删掉。
 
 // 预置条目只从配置文件里取这些"属于用户"的字段；其余以目录为准。
 const USER_FIELDS = ["apiKey", "defaultModel", "extraModels", "inlineImages"];

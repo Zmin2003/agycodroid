@@ -43,7 +43,6 @@ cp "$SRC/server.mjs" "$A/assets/app/"
 cp "$SRC/boot.mjs" "$A/assets/app/"      # 网关引导：应用从安装包里读出来经 -e 交给 node（安全 5，见 gateway/boot.mjs）
 mkdir -p "$A/assets/app/gw"; cp "$SRC/gw/"*.mjs "$A/assets/app/gw/"     # 网关的各功能模块
 mkdir -p "$A/assets/app/archive"; cp "$SRC/archive/"* "$A/assets/app/archive/"   # 建档规范与交档命令（脉络，见 gw/archive.mjs）
-mkdir -p "$A/assets/app/guard"; cp "$SRC/guard/"* "$A/assets/app/guard/"       # 敏感操作再确认的钩子（见 gateway/guard/）
 for f in "$SRC/web/"*; do case "$f" in *.bak*) ;; *) cp -R "$f" "$A/assets/app/web/";; esac; done
 cp "$A/assets/scripts/"* "$A/assets/app/scripts/"
 cp "$A/assets/bin/"* "$A/assets/app/bin/"
@@ -69,9 +68,8 @@ node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
 # 原生小库与小程序一律进 APK 的原生库目录（lib/arm64-v8a，名字得是 lib*.so）：安装时系统解到 /data/app/…/lib/arm64，
 # 应用自己的 uid 也改不了，起网关、起 agy 时直接从那里加载，没有「核过之后被换」的窗口（安全 4 第 1 层）。路径由 Env.java 经环境变量交出去
 NL="$A/nativelib"; rm -rf "$NL"; mkdir -p "$NL" "$A/assets/app/lib"     # build/ 下面会被 javac 那步整个清掉，先放这里、打包前拷过去
-# seccomp 拦截 → ENOSYS（不依赖 libc，见源码注释）。Android 14 上没有它 claude 起不来
-$CC_ANDROID -O2 -shared -fPIC -nostdlib -fno-stack-protector -Wl,-z,noexecstack -Wl,--hash-style=both \
-  -o "$NL/libccenosys.so" "$A/native/seccomp-enosys.c"
+# libccenosys.so（--preload 的 seccomp 垫片）已停编：全仓无加载方（agy 是 bionic 直跑，Env 从不挂它；见 round2 libccenosys 调查），
+# 源码在 git 历史里可恢复。静态二进制的手动兜底是下面的 libccenosysrun.so（enosys-run），仍在编。
 # 同一条思路的「从进程外面」版本：静态二进制挂不上 --preload，只好用 ptrace 做同一件事。
 # 这个是**可执行文件**不是库，所以不用 -nostdlib（它自己就是被启动的那个进程，可以正常链 libc）。
 # 入口包装在 assets/bin/enosys-run
@@ -98,7 +96,7 @@ cp "$A/native/execpath.cjs" "$A/assets/app/lib/"
 # 7-Zip（压缩包浏览、解压、压缩）：成品存在仓库里，由 scripts/build-7zz.sh 从上游源码编出；核过哈希再进 APK
 ( cd "$A/prebuilt" && [ "$(sha256sum libcc7zz.so | cut -c1-64)" = "$(cat libcc7zz.so.sha256)" ] ) || { echo "✗ android/prebuilt/libcc7zz.so 和记下的哈希对不上：重跑 sh scripts/build-7zz.sh"; exit 1; }
 cp "$A/prebuilt/libcc7zz.so" "$NL/"
-TAG=$(cat "$A/assets/app/server.mjs" "$A/assets/app/boot.mjs" "$A/assets/app/gw/"* "$A/assets/app/archive/"* "$A/assets/app/guard/"* "$A/assets/app/TOOLS.md" $(find "$A/assets/app/web" -type f | sort) "$A/assets/app/scripts/"* "$A/assets/app/bin/"* "$A/assets/app/pre/"* "$A/assets/app/lib/"* "$NL/"libcc*.so | md5sum | cut -c1-12)
+TAG=$(cat "$A/assets/app/server.mjs" "$A/assets/app/boot.mjs" "$A/assets/app/gw/"* "$A/assets/app/archive/"* "$A/assets/app/TOOLS.md" $(find "$A/assets/app/web" -type f | sort) "$A/assets/app/scripts/"* "$A/assets/app/bin/"* "$A/assets/app/pre/"* "$A/assets/app/lib/"* "$NL/"libcc*.so | md5sum | cut -c1-12)
 echo "$TAG" > "$A/assets/app/TAG"
 echo "  tag $TAG"
 # 逐文件清单（sha256 + 相对路径）：启动时应用按它核对 files/app，被改过、多出来的就从安装包还原（防项目钩子 / MCP 之类偷偷改网关）

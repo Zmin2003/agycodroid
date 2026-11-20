@@ -27,9 +27,6 @@ if (!files.length) { console.error("没有匹配的测试文件"); process.exit(
 const MS = {
   "bgseal.test.mjs": 130404,
   "run0520.test.mjs": 121831,
-  "bridge-config.test.mjs": 57078,
-  "bridge-models.test.mjs": 33765,
-  "managed-bridge.test.mjs": 16885,
   "office-worker-model.test.mjs": 16259,
   "ccmem0520.test.mjs": 14743,
   "a0610-main-run.test.mjs": 13430,

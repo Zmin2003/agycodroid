@@ -59,8 +59,10 @@ test("前端跟上：第三方不计花费提示、线路失配 / 明文 http �
   assert.match(s09, /p\.endpointLost \?/);
   assert.match(s09, /else if \(p\.endpointLost\) body\.endpoint = p\.endpoint/, "只剩一条线路也要把线路存下");
   assert.match(s09, /r\.keyCleared/);
-  for (const s of [s09, s11]) assert.match(s, /p\.plainHttp \?/);
-  assert.match(s11, /r\.warning/);
+  assert.match(s09, /p\.plainHttp \?/, "明文 http 警告（内置密钥卡上）");
+  assert.match(s09, /r\.warning/, "Key 样子不对只提醒不拦");
+  assert.doesNotMatch(s11, /p\.plainHttp/, "自定义卡已删（agy 适配 W1），其明文警告随卡一起走");
+  assert.doesNotMatch(s11, /renderCustomCard/, "自定义卡已删");
   assert.match(s04, /it\.sched \? t\("定时任务"\)/);
 });
 

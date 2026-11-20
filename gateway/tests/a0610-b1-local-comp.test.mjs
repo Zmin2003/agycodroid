@@ -1,4 +1,4 @@
-// 端侧模型与组件安装的几处回归（0.6.9 审计 195-F.5/F.7、#185、195-Z.11、195-T.4、#186、200-10-08）
+// 组件安装的几处回归（0.6.9 审计 195-F.5、#185、195-Z.11、195-T.4、#186、200-10-08；E12 端侧小模型全删，195-F.7 测试随之删）
 import "../gw/config.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +8,6 @@ import { spawn } from "node:child_process";
 import { CFG, PREFIX } from "../gw/config.mjs";
 import { COMP_DIR, compRecords, compRemove, reapComponentRuns, sha256File } from "../gw/components.mjs";
 import { modManifest, modSpaceNeed } from "../gw/modules.mjs";
-import { ensureLlama } from "../gw/local.mjs";
 
 const FILES = path.dirname(PREFIX);
 const dk = (sha) => fs.writeFileSync(path.join(PREFIX, ".devkit-ok"), JSON.stringify({ sha256: sha }));
@@ -21,7 +20,6 @@ after(() => {
   fs.rmSync(path.join(FILES, "manifest-test"), { recursive: true, force: true });
   fs.rmSync(path.join(FILES, "devkit-stage"), { recursive: true, force: true });
   for (const f of ["bin/shared", "bin/aonly", "bin/b"]) fs.rmSync(path.join(PREFIX, f), { force: true });
-  fs.rmSync(path.join(CFG.home, "models"), { recursive: true, force: true });
 });
 
 test("sha256File：校验中途取消，下一个数据块就停（195-F.5）", async () => {
@@ -78,15 +76,6 @@ test("启动时清掉上一任网关留下的组件子进程（195-T.4）", asyn
   const r = await Promise.race([closed, new Promise((res) => setTimeout(() => res(null), 3000))]);
   assert.ok(r, "子进程应当被结束");
   assert.ok(!fs.existsSync(mark), "运行标记要清掉");
-});
-
-test("钉住的端侧模型被删：报错，不静默换成最小模型（195-F.7）", async () => {
-  const dir = path.join(CFG.home, "models");
-  fs.mkdirSync(dir, { recursive: true });
-  const f = path.join(dir, "present.gguf");
-  fs.writeFileSync(f, "");
-  fs.truncateSync(f, 12 * 1024 * 1024);
-  await assert.rejects(ensureLlama("gone-model", () => {}), /已经不在了/);
 });
 
 test("模块 MANIFEST：空/缺失不装，路径不能出包（200-10-08）", () => {

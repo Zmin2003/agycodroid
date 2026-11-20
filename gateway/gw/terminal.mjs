@@ -5,7 +5,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { CFG, HERE, PATHS, PREFIX, log, tz } from "./config.mjs";
-import { agyEnv, ensureShell, shellIsFallback, killTree } from "./agy.mjs";
+import { agyEnv, ensureShell, shellIsFallback, killTree, writeAgySettings, safeMode } from "./agy.mjs";
+import { sealed } from "./edition.mjs";
+import { PROVIDER } from "./providers.mjs";
 import { NEXT, readBody, sendJson } from "./http.mjs";
 
 // ── 应用内终端 ────────────────────────────────────────────────────────
@@ -131,6 +133,14 @@ function termNew({ cols, rows, login, cwd: want } = {}) {
   const id = seq.toString(36) + crypto.randomBytes(8).toString("hex");   // 别靠 Math.random 那 20 来位（审查 低20）
   // 终端里的每个进程都带着这个标记：关闭终端时按它把 setsid 跑掉的后代也找出来（200-4.04）
   env.AGAPP_TERM_ID = id;
+  // 终端封口（E06）：开终端时按界面设置重写 agy 的 settings.json，和网关会话同一份（agy.mjs writeAgySettings，
+  // runAntigravity 同款配方：无本轮附加规则，只有全局设置 + 安全模式）。
+  // 失败不阻塞开终端（和 run.mjs:406 同款 fail-open），只记日志 + 首屏说一声。
+  let termSealed = true;
+  if (sealed()) {
+    try { termSealed = writeAgySettings(PROVIDER, { safe: safeMode() }); }
+    catch (e) { termSealed = false; log(`写 agy 设置失败: ${e.message}`); }
+  }
   const child = spawn(pc[0], [...pc.slice(1), String(rows), String(cols), shell], {
     cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe", "pipe"],
   });
@@ -161,6 +171,7 @@ function termNew({ cols, rows, login, cwd: want } = {}) {
   if (login) { const loginTimer = setTimeout(sendLogin, 5000); loginTimer.unref?.(); }
   if (shellIsFallback()) out(`\r\n[${tz("未找到 bash，已回落到系统 sh")}]\r\n`);   // terminal M1：首屏说一声，别让用户以为还在 bash 里
   if (cwdNote) out(`\r\n[${tz("目录不存在：{dir}，已改用 {cwd}", { dir: cwdNote, cwd })}]\r\n`);
+  if (sealed() && !termSealed) out(`\r\n[${tz("写 agy 设置失败，这个终端里的 agy 没有封口")}]\r\n`);   // 终端封口失败：只说一声，不拦开终端
   child.stdin.on("error", () => {});
   child.stdio[3]?.on("error", () => {});
   const ended = (code) => {

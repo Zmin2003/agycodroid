@@ -135,6 +135,15 @@
 
 应用内更新也只认新发布证书签的包：从非官方渠道拿到的、或上游签名的安装包会被拒绝安装并删掉下载文件。只从 GitHub Release（[github.com/Zmin2003/agycodroid/releases](https://github.com/Zmin2003/agycodroid/releases)）更新。
 
+## 13. 端侧小模型已移除（llama-server 仍可手动跑）
+
+- **现象**：设置页没有「端侧小模型」卡片，扩展页 llama-cpp 组件下也没有「下载模型」入口。
+- **原因**：端侧聊天链路在 agy 下从未跑通过（agy 没有本地模型端点机制），E12 排查后决定全删（README 对照表里已标 Dropped）。llama-cpp 组件本身还能装，二进制不受影响。
+- **还想在本机跑小模型**：装好 llama-cpp 组件后，在终端里手动起 llama-server，再用它的 OpenAI 兼容接口直调（只能验证服务本身能不能跑，不能证明 agy 能用它）：
+  - `llama-server -m /sdcard/agycodroid/models/<模型>.gguf --host 127.0.0.1 --port 8811 -c 8192 -np 1 --jinja --cache-reuse 256 --no-webui`
+  - `curl -s http://127.0.0.1:8811/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "<模型 id>", "messages": [{"role": "user", "content": "你好"}]}'`
+- **已下载的模型文件不动**：`/sdcard/agycodroid/models/` 里的 `.gguf` 不会随删除被清理；设备上已装的 `~/.claude/skills/local-model-mode/SKILL.md` 网关不再重装，残留文件可手动删。
+
 ## 给开发者：测试动作本身会制造假问题
 
 上面第 1 条和自动化测试有关（第 2 条已确认不是），修这类问题之前请先确认**不跑测试时也会出现**：

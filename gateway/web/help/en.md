@@ -5,7 +5,7 @@ agycodroid runs the **official, unmodified Antigravity CLI** on your phone, wrap
 ## Getting started
 
 1. **Install the toolkit**: on first launch, tick the modules you want. The default set is about 330 MB and resumes if interrupted.
-2. **Sign in or add a key**: sign in with your Google account once in the browser (or run interactive agy once in a terminal to authenticate), or enter a Gemini API key in Settings — or a key for DeepSeek, Qwen or another compatible endpoint.
+2. **Sign in or add a key**: sign in with your Google account once in the browser (or run interactive agy once in a terminal to authenticate), or enter a Gemini API key in Settings.
 3. **Start a conversation**: tap ＋ in the top bar, or New chat in the sidebar.
 4. **Put it to work**: Antigravity asks before editing files or running commands; switch the permission mode under the input bar.
 
@@ -24,7 +24,7 @@ The right end of the top bar normally shows just ⋯. Tap it and the shortcuts y
 
 The menu button at the top left opens the sidebar: places to go at the top (Chats, Projects, Scheduled tasks, with Extensions, Capabilities, Usage and Help under More), recent chats in the middle, and the account row at the bottom, which opens Settings.
 
-The thin line under the top bar shows **context usage**; the further right, the fuller. Its second half shows the current provider's usage: agy's usage (input / output / thinking / cache_read / total tokens) when you sign in with a Google account, or the balance for DeepSeek, Kimi and similar. If a provider doesn't report its context window, fill in **Context window** for that custom provider under **Provider & model** in Settings, and the usage bar's scale follows it; without one the bar shows "capacity unknown". Tap the line for details; every provider’s usage and spending, plus reminders, are under **Usage and spending** at the top of the Usage page. In the input area, ＋ attaches files and opens common actions. The row below shows the model, thinking effort and permission mode; tap any of them to change it. The model picker only lists providers you can use: a Antigravity account that isn’t signed in, or an on-device model with nothing downloaded, is left out. To hide a provider you’ve set up, pick it under **Provider & model** in Settings and turn off **Show in the model picker** (its settings are kept, and the one in use is always listed).
+The thin line under the top bar shows **context usage**; the further right, the fuller. Its second half shows the current provider's usage: agy's usage (input / output / thinking / cache_read / total tokens) when you sign in with a Google account. agy doesn't publish context windows: add one per model under **Provider & model** in Settings (**More models**, one `model window` per line), and the usage bar's scale follows it; without one the bar shows "capacity unknown". Tap the line for details; every provider’s usage and spending, plus reminders, are under **Usage and spending** at the top of the Usage page. In the input area, ＋ attaches files and opens common actions. The row below shows the model, thinking effort and permission mode; tap any of them to change it. The model picker only lists providers you can use: a Google account that isn’t signed in, or a Gemini API key that isn’t entered, is left out. To hide a provider you’ve set up, pick it under **Provider & model** in Settings and turn off **Show in the model picker** (its settings are kept, and the one in use is always listed).
 
 ## Make it yours
 
@@ -128,31 +128,7 @@ Layout follows the window width, not orientation:
 
 ## Third-party endpoints
 
-First check which protocol the endpoint speaks; the setup differs:
-
-- **Anthropic protocol** (the address usually ends in `/anthropic`, or the provider says it is for Antigravity CLI): Settings → Provider & model → "＋ Add a custom endpoint…", then fill in the address, key and default model name. **You can leave the model list URL empty**: the app then looks for `/v1/models` and `/models` on the same host as the API address, and if it finds a list you can pick models from it. If the provider doesn't publish a list, typing the model name still works.
-- **OpenAI protocol** (only `/v1/chat/completions`): Extensions → Optional components → install "OpenAI API local protocol bridge", then tap "Config". The bridge translates between the two protocols on the device; the model still runs remotely, on your own key and quota.
-  - **Several APIs are supported**: each API has its own address, key, models (tick the option to read the model list automatically to pick from suggestions) and context window, and you choose one default model across all of them. Saving shows which services your conversations will be sent to and only takes effect after you confirm. Saved keys are never shown again; leave the key empty when changing other fields to keep it.
-  - `https://api.example.com` or `…/v1` is completed to `/v1` automatically; if the provider uses a custom path, enter the full `…/chat/completions` address it gives you. Services that only offer `/v1/responses` won't work.
-  - After saving, "Local bridge ready" with "Model inference has not been tested" is normal: tap "Use in a new session" and send a short message. Only a real reply proves it works. Saving does not switch your current conversation.
-**Example template** (not a real service; replace the values with what your provider gives you):
-
-```text
-Base URL: https://api.example.com/anthropic
-Auth: Authorization: Bearer
-Default model: your-model-id
-Fast model: your-fast-model-id (optional)
-Models URL: https://api.example.com/v1/models (optional)
-Extra models (one per line):
-your-model-id 200k
-your-cheap-model 128k
-Context window: 200k (optional; only if the provider doesn't report one)
-```
-
-Third-party endpoints are your choice; the app does not vet or endorse them. The operator can see your key, code and conversations, so use only services you trust, and do not use shared or resold accounts.
-- **Context window**: enter what the provider really supports for this model (`256k`, `1m` or an integer), or leave it empty for 200k. A larger number doesn't make the model bigger; it only makes compaction come too late.
-- **No response from upstream**: custom endpoints wait 90 seconds for response headers and retry 3 times, so a stalled upstream shows retries under the bubble instead of hanging at "Connecting". To change it, set `API_TIMEOUT_MS` in the endpoint's `extraEnv`.
-- 401 usually means the key belongs to another provider or has stray spaces; 429 is rate limiting or quota. If text works but images or tools fail, the model itself probably doesn't support them; narrow it down in a new text-only conversation.
+Third-party endpoints are not supported at the moment (the OpenAI protocol bridge cannot be connected to chat).
 
 ## Extensions
 

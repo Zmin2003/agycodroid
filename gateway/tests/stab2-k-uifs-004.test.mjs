@@ -2,7 +2,11 @@
 // 并把视图/当前卡重画回 A。前端逻辑，VM 抽取实际源码跑（harness 见 fixtures/card-vm.mjs）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadKeyCard, loadCustomCard, pKeyA, pCustomA, customEls } from "./fixtures/card-vm.mjs";
+import fs from "node:fs";
+import { loadKeyCard, pKeyA } from "./fixtures/card-vm.mjs";
+
+const src09 = fs.readFileSync(new URL("../web/app/09-settings.js", import.meta.url), "utf8");
+const src11 = fs.readFileSync(new URL("../web/app/11-usage.js", import.meta.url), "utf8");
 
 function deferred() {
   let resolve, reject;
@@ -81,46 +85,39 @@ test("UIFS-004：清除 Key 的迟到回执也不许重画已切走的卡", asyn
   assert.equal(keyB.value, "sk-B");
 });
 
-// ── 自定义接口卡（11-usage.js）────────────────────────────────────────
-test("BUG-UIFS-004：自定义卡保存还没回来就切走，旧回执不许把视图切回去", async () => {
-  const h = loadCustomCard();
-  h.setCard(customEls());
-  h.render(pCustomA());
-  const d = deferred();
-  h.postImpl = () => d.promise;
-  const running = h.run("save");
-  h.setView("B");
-  d.resolve({ ok: true, id: "A" });
-  await running;
-  assert.equal(h.state.provView, "B", "旧回执把视图切回 A 了");
-  assert.equal(h.reloadLog.length, 0, "旧回执重画了当前卡");
+// ── 自定义接口卡已删（agy 适配 W1，第 4 项）────────────────────────────
+// renderCustomCard 与“＋ 新增自定义接口…”死路一起删了：保存被网关明确拒绝的表单
+// 不应再出现在界面上。下面锁住“删干净了”，以及“更多模型”入口搬到内置密钥卡之后，
+// 迟到回执的防护（UIFS-004）仍然成立。
+test("自定义接口卡已删：11-usage.js 里没有 renderCustomCard，09 里没有 __new__ 入口", () => {
+  assert.doesNotMatch(src11, /renderCustomCard/, "renderCustomCard 已删");
+  assert.doesNotMatch(src11, /cc-more|cc-label/, "自定义卡的 cc-* 控件已删");
+  assert.doesNotMatch(src09, /__new__/, "__new__ 死路选项已删");
+  assert.doesNotMatch(src09, /renderCustomCard/, "09 里不再调自定义卡");
 });
 
-test("BUG-UIFS-004：自定义卡提交后又敲了新 Key，旧回执不许重画掉", async () => {
-  const h = loadCustomCard();
-  const keyEl = { value: "" };
-  h.setCard(customEls({ "pc-key": keyEl }));
-  h.render(pCustomA());
-  const d = deferred();
-  h.postImpl = () => d.promise;
-  const running = h.run("save");
-  keyEl.value = "sk-新敲的还没提交";
-  d.resolve({ ok: true, id: "A" });
-  await running;
-  assert.equal(keyEl.value, "sk-新敲的还没提交", "提交后新敲的 Key 被旧回执重画掉了");
-  assert.equal(h.reloadLog.length, 0, "有未提交的新 Key 时不许重画卡片");
-  assert.equal(h.toastLog.length, 1);
-});
-
-test("自定义卡正常保存（没切卡）仍提交并刷新（回归保护）", async () => {
-  const h = loadCustomCard();
-  h.setCard(customEls());
-  h.render(pCustomA());
-  h.postImpl = () => Promise.resolve({ ok: true, id: "A" });
+test("更多模型改过再点保存：随保存一起发 extraModels，保存后重拉模型清单", async () => {
+  const h = loadKeyCard();
+  const keyA = { value: "sk-A" }, moreA = { value: "m-new 1m\nm-old" };
+  h.setCard({ "pc-key": keyA, "pc-more": moreA, "pc-endpoint": null, "pc-result": {} });
+  h.render({ ...pKeyA(), extraModels: [{ id: "m-old", contextWindow: 0 }] });
+  h.postImpl = () => Promise.resolve({ ok: true });
   await h.run("save");
   assert.equal(h.postCalls.length, 1);
-  assert.equal(h.postCalls[0].p, "/api/providers/save");
-  assert.equal(h.postCalls[0].body.id, "A");
-  assert.equal(h.state.provView, "A");
-  assert.equal(h.reloadLog.length, 1);
+  // VM 里建的对象与主 realm 原型不同，deepStrictEqual 会误判：按 JSON 比
+  assert.equal(JSON.stringify(h.postCalls[0].body.extraModels), JSON.stringify([{ id: "m-new", contextWindow: 1048576 }, { id: "m-old", contextWindow: 0 }]));
+  assert.equal(h.reloadLog.length, 1, "保存后刷新接口卡");
+  assert.equal(h.loadModelsLog.length, 1, "保存后重拉模型清单");
+  assert.equal(keyA.value, "", "正常保存后清空 Key 输入");
+});
+
+test("更多模型没改过：点保存不重复发 extraModels", async () => {
+  const h = loadKeyCard();
+  const keyA = { value: "sk-A" }, moreA = { value: "m-old" };
+  h.setCard({ "pc-key": keyA, "pc-more": moreA, "pc-endpoint": null, "pc-result": {} });
+  h.render({ ...pKeyA(), extraModels: [{ id: "m-old", contextWindow: 0 }] });
+  h.postImpl = () => Promise.resolve({ ok: true });
+  await h.run("save");
+  assert.equal(h.postCalls.length, 1);
+  assert.equal("extraModels" in h.postCalls[0].body, false, "没改过就不发");
 });

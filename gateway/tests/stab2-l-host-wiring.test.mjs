@@ -1,5 +1,5 @@
 // 第二份稳定性报告 l 组：Android 宿主修复的接线锚点。
-// 纯逻辑由 android/tests/cc/codroid/Stab2LHostTest.java 跑；这里只检查生命周期 / 投递路径确实接上了，
+// 纯逻辑由 android/tests/cc/agyroid/Stab2LHostTest.java 跑；这里只检查生命周期 / 投递路径确实接上了，
 // 因为这些时序在 JS 测试里模拟不了，真机也没跑（见交付说明「未测」）。
 import { test } from "node:test";
 import assert from "node:assert/strict";

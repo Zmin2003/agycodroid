@@ -34,11 +34,12 @@ function agyPlatform() {
 }
 const devUpd = {
   auto: true, lastCheck: 0, checking: false, error: "",
-  // 注意：这里的 id 仍是 "claude"——它是 UI（10-settings-device.js）、Java Updater.java、reconcile.mjs 共用的线上传输键，
-  // 四处都认 "claude"，只改一处会断。用户看到的名字是下面的 name："Antigravity CLI"，已经改对了。
-  agy: { id: "claude", name: "Antigravity CLI", current: "", latest: "", state: "unknown", message: "", done: 0, total: 0 },
+  // 注意：这里的 id 是 "agy"——它是 UI（10-settings-device.js）、Java Updater.java、reconcile.mjs 共用的线上传输键，
+  // 三处都认 "agy"（Java 侧 rc=137 一轮已改，入境还认旧 "claude" 别名）。用户看到的名字是下面的 name："Antigravity CLI"，已经改对了。
+  agy: { id: "agy", name: "Antigravity CLI", current: "", latest: "", state: "unknown", message: "", done: 0, total: 0 },
 };
 try { Object.assign(devUpd, JSON.parse(fs.readFileSync(DEV_UPD_FILE, "utf8")), { checking: false, error: "" }); devUpd.agy.state = devUpd.agy.state === "installing" ? "unknown" : devUpd.agy.state; } catch {}
+if (devUpd.agy) devUpd.agy.id = "agy";   // 旧 agyapp-update.json 里存的 id 可能是 "claude"，读出来就归一化（rc=137 一轮改名）
 const devUpdSave = () => { try { fs.writeFileSync(DEV_UPD_FILE, JSON.stringify(devUpd)); } catch {} };
 /** 跑某个 agy 二进制的 --version（新下载的那个在换上去之前先这样试跑一次）。
  *  agy 是原生 bionic / 系统二进制，直接跑，不用经过 glibc 加载器。 */
@@ -212,7 +213,7 @@ async function devApp(op, b) {
     return devUpdStatus();
   }
   if (op === "upd_apply") {
-    if (b.item !== "claude") return { ok: false, message: tz("开发端只管 Antigravity CLI（应用本体由你在本机构建安装）") };
+    if (b.item !== "agy") return { ok: false, message: tz("开发端只管 Antigravity CLI（应用本体由你在本机构建安装）") };
     if (devUpd.agy.state !== "available" && devUpd.agy.state !== "error") return { ok: false, message: tz("没有可装的新版，先检查更新") };
     devUpdInstall();
     return { ok: true, message: tz("开始更新 Antigravity CLI") };

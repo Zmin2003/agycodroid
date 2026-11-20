@@ -38,7 +38,7 @@ export const PATHS = {
   gwLoader: process.env.AGAPP_GW_LOADER || process.env.AGAPP_LOADER || path.join(CFG.runtime, "glibc", "lib", "ld-linux-aarch64.so.1"),
   gwGlibcLib: process.env.AGAPP_GW_GLIBC_LIB || process.env.AGAPP_GLIBC_LIB || path.join(CFG.runtime, "glibc", "lib"),
   agy: process.env.AGAPP_AGY || path.join(CFG.home, ".local", "share", "agycodroid", "agy", "current", "agy"),
-  // 给 glibc 程序预加载的小库（seccomp 垫片等）。agy 是 bionic，不用它；只留给 devside / custom 探针。
+  // 给 glibc 程序预加载的小库（exec-shim + nodump 这类；seccomp 垫片 libccenosys.so 已停编，不在里面）。agy 是 bionic，不用它；只留给 devside / custom 探针。
   preload: process.env.AGAPP_AGY_PRELOAD || process.env.AGAPP_CLAUDE_PRELOAD || "",
   node: path.join(CFG.runtime, "node", "node"),
   nodeLib: path.join(CFG.runtime, "node", "lib"),
@@ -54,7 +54,7 @@ export const PATHS = {
   projects: path.join(CFG.home, "agyapp-sessions"),
 };
 
-// 给 glibc 程序 --preload 的库（冒号分隔）。经加载器时 Env.java 给的是 seccomp-enosys.so + exec-shim.so
+// 给 glibc 程序 --preload 的库（冒号分隔）。Env.java 给的是 libccnodump.so，经加载器时再加 libccexecshim.so；seccomp 垫片 libccenosys.so 已停编，不在里面
 export const GLIBC_PRELOAD = process.env.AGAPP_GLIBC_PRELOAD || (PATHS.preload && fs.existsSync(PATHS.preload) ? PATHS.preload : "");
 /** glibc 进程的环境：摘掉 LD_PRELOAD —— 经加载器时网关环境里挂着 termux-exec（bionic 库），glibc 的 ld.so 读到直接报 invalid ELF header */
 export function glibcEnv(env = process.env) {

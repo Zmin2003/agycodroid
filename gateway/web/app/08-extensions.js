@@ -26,7 +26,7 @@
   $("tab-ext").addEventListener("click", (e) => {
     // 只排除行「里面」的按钮、链接、折叠块：整个分区本身就是 <details>，以前一律被它挡掉，组件和模块的说明永远点不开（审查 F-001）
     const r = e.target.closest(".xrow, .ccard"); if (!r || !r.querySelector(".it-more")) return;
-    const i = e.target.closest("button, a, input, select, textarea, label, summary, details, .gh-auth, .llm-dl");
+    const i = e.target.closest("button, a, input, select, textarea, label, summary, details, .gh-auth");
     if (i && r.contains(i)) return;
     r.classList.toggle("open");
   });
@@ -50,7 +50,10 @@
   const OFF_TIP = () => t("停用后 Antigravity 看不到它，命令文件还在，随时可以启用。");
   async function loadModules() {
     clearTimeout(modTimer);
-    const [r, xoff] = await Promise.all([api("/api/devkit/modules").catch(() => null), extOffNow()]);
+    const visit = pageVisit, live = () => pageVisible("ext", visit);
+    if (!live()) return;
+    const [r, xoff] = await Promise.all([sameGet("/api/devkit/modules").catch(() => null), extOffNow()]);
+    if (!live()) return;
     const modOff = new Set(xoff.mod || []);
     const on = !!(r && r.supported && r.modular);
     $("mod-field").classList.toggle("hidden", !on);
@@ -107,7 +110,7 @@
       return rowItem(esc(pickLang(m.name) || m.id) + tag, '<span class="mono">' + (m.key || []).map(esc).join(" ") + "</span>",
         '<span class="num">' + size + "</span>" + acts, { more: desc, extra: bar });
     }).join("");
-    if (moving && pageOn("ext")) modTimer = setTimeout(loadModules, 1500);
+    if (moving && pageOn("ext")) modTimer = setTimeout(() => { if (live()) loadModules(); }, 1500);
     // 装 / 卸完成后（列表里不再有进行中的那块）再刷组件卡；模块 POST 一返回任务才刚起，不能当场刷
     if (!moving && modTouched && pageOn("ext")) { modTouched = false; loadComponents(); }
   }
@@ -161,12 +164,13 @@
     if (bar._html !== inner) {
       bar._html = inner; bar.innerHTML = inner;
       bar.classList.toggle("hidden", chips.length < 2 && !cur);    // 只有一类时没什么可切的
-      for (const it of items) it.classList.toggle("hidden", !!cur && !it.dataset.tags.split(" ").includes(cur));
     }
+    for (const it of items) it.classList.toggle("hidden", !!cur && !it.dataset.tags.split(" ").includes(cur));
   }
   $("tab-ext").addEventListener("click", (e) => {
     const c = e.target.closest(".idx-chip"); if (!c) return;
     extPick[c.dataset.sec] = c.dataset.idx; renderIdx(c.dataset.sec);
+    if (c.dataset.sec === "comp") syncCatalog();
   });
   // 节头照设计稿：图标块 + 标题，下面一句说明（原来是节里第一行小字，挪进标题里）；节不再折叠，靠顶上的分区导航跳
   for (const d of document.querySelectorAll("#tab-ext details.ext-sec")) {
@@ -211,16 +215,27 @@
       toast(t("已检查组件更新"));
     });
   });
+  // E12 已删 llmDl（端侧小模型目录读取）：上游 82228b1 的 syncCatalog / pauseCatalog
+  // 在分叉里没有目录可同步/可停，这里留空操作，仅保住已贴入的调用接线（renderIdx 切片、
+  // pauseExtReads、loadComponents 的 !r.supported 分支），避免未定义引用。
+  function syncCatalog() {}
+  function pauseCatalog() {}
+  function pauseExtReads() {
+    clearTimeout(compTimer); clearTimeout(modTimer); clearTimeout(ghAuth.timer);
+    compLoad++;
+    pauseCatalog();
+  }
   async function loadComponents(refresh) {
+    if (!pageOn("ext")) return "stale";
     const request = ++compLoad;
     clearTimeout(compTimer);
     const r = await api("/api/components" + (refresh ? "?refresh=" + (refresh === true ? 1 : refresh) : "")).catch((e) => ({ supported: true, items: [], indexError: e.message }));
     const compOff = new Set((await extOffNow()).comp || []);
     // 完成后的刷新比卸载中的轮询新；旧响应不能把已恢复的卡片盖回去。
-    if (request !== compLoad) return "stale";
+    if (request !== compLoad || !pageOn("ext")) return "stale";
     const outcome = { err: r.indexError || "" };
     $("comp-field").classList.toggle("hidden", !r.supported);
-    if (!r.supported) return loadGhField();
+    if (!r.supported) { syncCatalog(); return loadGhField(); }
     const box = $("comp-list");
     const btn = (c, id, label) => `<button data-c="${c}" data-id="${esc(id)}">${label}</button>`;
     const html = (r.items || []).map((c) => {
@@ -229,7 +244,7 @@
       const size = c.available ? t("下载约 {a}，装好后约 {b}", { a: MB(c.bytes), b: MB(c.installed) }) : "";
       const st = c.state === "outdated" && !c.available ? t("工具包更新过，暂无适配版本") : ({
         absent: c.available ? t("未安装") : t("暂无适配当前工具包的版本"),
-        downloading: t("下载中"), verifying: t("校验中"), installing: t("正在装进工具包…"), removing: t("正在卸载…"), configuring: t("正在配置…请等待完成"), "fetching-models": t("正在读取模型清单…"),
+        downloading: t("下载中"), verifying: t("校验中"), installing: t("正在装进工具包…"), removing: t("正在卸载…"),
         ok: t("已安装"), update: t("有新版本"), outdated: t("工具包已更新，需要重新安装"),
         damaged: t("安装不完整，需要重新安装"), error: t("安装失败"),
       }[c.state] || c.state);
@@ -272,28 +287,24 @@
       if (webUrl(c.homepage) && c.state !== "ok") desc += '<div class="tiny"><a class="weblink" href="' + esc(c.homepage) + '">' + esc(c.homepage) + "</a></div>";
       if (c.state === "ok" && c.bin.length) desc += '<div class="tiny">' + t("命令：") + " " + c.bin.map((b) => "<code>" + esc(b) + "</code>").join(" ") + "</div>";
       if (c.id === "gh" && c.state === "ok") desc += '<div class="gh-auth" id="gh-auth">' + ghAuth.html + "</div>";
-      if (c.id === "llama-cpp" && c.state === "ok") desc += '<details class="llm-dl" id="llm-dl"' + (llmDl.open ? " open" : "") + "><summary>" + t("下载模型") + '</summary><div id="llm-dl-body">' + llmDl.html + "</div></details>";
       const used = (c.usedBy || []).map((d) => esc(pickLang(d.name) || d.id));
       const cat = c.category && CAT()[c.category] ? c.category : "other";
       const tags = ["cat:" + cat];
-      if (["ok", "removing", "configuring", "fetching-models"].includes(c.state)) tags.push("inst");
+      if (["ok", "removing"].includes(c.state)) tags.push("inst");
       if (["update", "outdated", "damaged", "error"].includes(c.state)) tags.push("upd");
       // 设计稿的卡片：分类色图标 + 名称 + 「版本 · 大小」，验证过的带盾牌；底下一条虚线隔开状态和按钮
       const [cc, ci] = CAT_LOOK[cat] || CAT_LOOK.other;
-      const dotSt = { ok: "ok", update: "warn", downloading: "warn", verifying: "warn", installing: "warn", removing: "warn", configuring: "warn", "fetching-models": "warn", outdated: "err", damaged: "err", error: "err" }[c.state] || "";
-      const dotL = c.unsupported && !["removing", "configuring", "fetching-models"].includes(c.state) ? (gpuOnly === "mali" ? t("需要 Mali GPU") : t("需要骁龙")) : { ok: t("已装"), update: t("可更新"), absent: c.available ? t("未装") : t("暂无适配版本") }[c.state] || st;
+      const dotSt = { ok: "ok", update: "warn", downloading: "warn", verifying: "warn", installing: "warn", removing: "warn", outdated: "err", damaged: "err", error: "err" }[c.state] || "";
+      const dotL = c.unsupported && c.state !== "removing" ? (gpuOnly === "mali" ? t("需要 Mali GPU") : t("需要骁龙")) : { ok: t("已装"), update: t("可更新"), absent: c.available ? t("未装") : t("暂无适配版本") }[c.state] || st;
       let cbtn = "";
       if (c.state === "removing") cbtn = compRemovalHint();
-      else if (c.state === "configuring") cbtn = '<span class="tiny muted" role="status">' + esc(t("正在配置…请等待完成")) + "</span>";
-      else if (c.state === "fetching-models") cbtn = '<span class="tiny muted" role="status">' + esc(t("正在读取模型清单…")) + "</span>";
       else if (c.unsupported && c.state !== "ok") cbtn = '<span class="muted">' + t("本机用不了") + "</span>";
       else if (c.state === "absent" && c.available) cbtn = btn("install", c.id, ei("download") + MB(c.bytes)).replace("<button ", '<button class="btn sm ghost" ');
       else if (c.state === "downloading" || c.state === "verifying") cbtn = btn("cancel", c.id, t("取消")).replace("<button ", '<button class="btn sm ghost" ');
       else if (c.state === "ok") {
-        // 停用放最前：「配置」要紧挨着「卸载」（组件卡测试约定的顺序）
+        // 停用放最前
         const isOff = compOff.has(c.id);
         cbtn = btn("toggle", c.id, isOff ? t("启用") : t("停用")).replace("<button ", `<button class="btn sm ghost" data-on="${isOff ? 1 : 0}" title="${esc(OFF_TIP())}" `);
-        if (c.id === "openai-bridge") cbtn += btn("configure", c.id, t("配置")).replace("<button ", '<button class="btn sm ghost" ');
         cbtn += btn("remove", c.id, t("卸载")).replace("<button ", '<button class="btn sm ghost" ');
       } else if (["update", "outdated", "damaged", "error"].includes(c.state)) {
         if (c.available) cbtn += btn("install", c.id, ei("download") + (c.state === "update" ? t("更新") : t("重新安装"))).replace("<button ", '<button class="btn sm" ');
@@ -301,10 +312,10 @@
         // 索引里没有对应构建时没有安装按钮，至少给个重新拉清单的入口（0.6.10 审计 195-I.7）
         if (c.state === "outdated" && !c.available) cbtn += btn("reindex", c.id, t("检查更新")).replace("<button ", '<button class="btn sm ghost" ');
       }
-      const live = (c.id === "gh" && c.state === "ok") || (c.id === "llama-cpp" && c.state === "ok") ? desc.slice(desc.indexOf(c.id === "gh" ? '<div class="gh-auth"' : '<details class="llm-dl"')) : "";
+      const live = (c.id === "gh" && c.state === "ok") ? desc.slice(desc.indexOf('<div class="gh-auth"')) : "";
       const more = (live ? desc.slice(0, desc.length - live.length) : desc) + '<div class="it-meta">' + meta + "</div>";
       const warn = (c.error ? '<div class="tiny err">' + esc(c.error) + "</div>" : "") + (miss.length && c.state !== "ok" ? '<div class="tiny warn">' + t("要先装：{names}", { names: listOf(miss) }) + "</div>" : "");
-      return (`<div class="item ccard${c.unsupported && !["ok", "removing", "configuring", "fetching-models"].includes(c.state) ? " dim" : ""}" data-comp="${esc(c.id)}" data-tags="${esc(tags.join(" "))}">
+      return (`<div class="item ccard${c.unsupported && !["ok", "removing"].includes(c.state) ? " dim" : ""}" data-comp="${esc(c.id)}" data-tags="${esc(tags.join(" "))}">
         <div class="cc-top"><span class="icobox" style="--c:${cc}">${ei(ci)}</span><div class="grow"><b>${name}</b><div class="mono muted">${esc(ver || "")}${ver ? " · " : ""}${MB(c.state === "ok" ? c.installed : c.bytes)}</div></div>${c.verified ? `<span class="vmark" title="${esc(t("真机验证过"))}">${ei("shield")}</span>` : ""}</div>
         ${warn}${bar}${live}<div class="it-more">${more}</div>
         <div class="cc-foot">${sdot(dotSt, dotL)}<span class="cc-btns">${cbtn}</span></div></div>`)
@@ -327,17 +338,14 @@
     const changed = box._html !== next;
     if (changed) {
       const opened = new Set([...box.querySelectorAll(".ccard.open")].map((c) => c.dataset.comp));
-      // live 区（GitHub 登录状态、模型下载面板）是缓存外原地更新的：整块重画会把它们打回初始值，
-      // 记下来写回，别让用户在 #llm-url 里的输入和展开态被一秒一次的轮询吞掉
-      const gh = $("gh-auth"), dl = $("llm-dl"), url = $("llm-url");
-      const ghHtml = gh ? gh.innerHTML : null, dlHtml = dl ? dl.innerHTML : null, dlOpen = dl ? dl.open : false, urlVal = url ? url.value : null;
+      // live 区（GitHub 登录状态）是缓存外原地更新的：整块重画会把它打回初始值，记下来写回
+      const gh = $("gh-auth");
+      const ghHtml = gh ? gh.innerHTML : null;
       const active = document.activeElement, activeId = active && active.id && box.contains(active) ? active.id : null;
       box.innerHTML = next; box._html = next;
       // 进度更新可以换卡片，用户刚展开的说明不能每秒被收回去。
       for (const c of box.querySelectorAll(".ccard")) if (opened.has(c.dataset.comp)) c.classList.add("open");
       if (ghHtml != null && $("gh-auth")) $("gh-auth").innerHTML = ghHtml;
-      if (dlHtml != null && $("llm-dl")) { $("llm-dl").innerHTML = dlHtml; $("llm-dl").open = dlOpen; }
-      if (urlVal != null && $("llm-url")) $("llm-url").value = urlVal;
       if (activeId && box.querySelector("#" + activeId)) box.querySelector("#" + activeId).focus();
     }
     $("comp-count").textContent = (r.items || []).length || "";
@@ -345,16 +353,13 @@
     ext.compBytes = (r.items || []).filter((c) => c.installedVersion || c.state === "ok").reduce((s, c) => s + (c.installed || 0), 0); paintStorage();
     renderIdx("comp", [["inst", t("已装")], ["upd", t("要更新")], ...Object.entries(CAT()).map(([k, v]) => ["cat:" + k, v])]);
     if ($("gh-auth")) loadGhAuth(refresh);
-    if ($("llm-dl")) {
-      if (changed) $("llm-dl").addEventListener("toggle", () => { llmDl.open = $("llm-dl").open; if (llmDl.open) loadLlmDl(); });
-      if (llmDl.open) loadLlmDl();
-    }
     // 有在跑的就一秒刷一次；抽屉关了 / 换了页签就停
-    if ((compRemoving.size || (r.items || []).some((c) => c.progress || ["removing", "configuring", "fetching-models"].includes(c.state))) && pageOn("ext"))
-      compTimer = setTimeout(loadComponents, 1000);
+    if ((compRemoving.size || (r.items || []).some((c) => c.progress || c.state === "removing")) && pageOn("ext"))
+      compTimer = setTimeout(() => { if (request === compLoad && pageOn("ext")) loadComponents(); }, 1000);
     // 先显示的是上回存下的列表、网关还在后台拉新索引：两秒后再要一次，拉完自然停
     else if (r.refreshing && pageOn("ext"))
-      compTimer = setTimeout(loadComponents, 2000);    return outcome;
+      compTimer = setTimeout(() => { if (request === compLoad && pageOn("ext")) loadComponents(); }, 2000);
+    return outcome;
   }
 
   // ── 自定义组件：用户自己导入 Linux arm64 程序。选文件 → 网关分析（ELF 类型、缺的库）→ 勾要用的命令 → 安装（补库、写入口和技能）──
@@ -491,106 +496,27 @@
     }
   });
 
-  // ── llama-cpp 组件下的「下载模型」子卡：内置目录按家族折叠（网关里固定 sha256），一键下载 / 取消 / 删除；也能贴 .gguf 直链 ──
-  const llmDl = { open: false, html: "", timer: 0, fam: new Set(), items: new Map(), big: 6, url: "" };
-  async function loadLlmDl() {
-    clearTimeout(llmDl.timer);
-    const r = await api("/api/local/catalog").catch((e) => ({ items: [], err: e.message }));
-    const GB = (n) => (n / 1073741824).toFixed(1) + " GB";
-    const TAG = { think: t("会先思考"), code: t("偏写代码") };
-    llmDl.big = r.big || 6;
-    llmDl.items = new Map((r.items || []).map((m) => [m.id, m]));
-    const row = (m) => {
-      const j = m.job;
-      let st = "", act = "";
-      if (j && (j.phase === "downloading" || j.phase === "verifying")) {
-        const pct = j.total ? Math.min(100, (j.done / j.total) * 100).toFixed(1) : 0;
-        st = (j.total ? '<div class="comp-bar"><i style="width:' + pct + '%"></i></div>' : "") +
-          '<div class="tiny">' + (j.phase === "verifying" ? t("校验中") : t("下载中")) + " " + GB(j.done) + (j.total ? " / " + GB(j.total) : "") + "</div>";
-        act = '<button class="btn sm ghost" data-lm="cancel" data-id="' + esc(m.id) + '">' + t("取消") + "</button>";
-      } else if (m.have) {
-        st = '<span class="tiny">' + t("已下载") + (m.inUse ? " · " + t("正在使用") : "") + "</span>";
-        act = '<button class="btn sm ghost" data-lm="remove" data-id="' + esc(m.id) + '">' + t("删除") + "</button>";
-      } else {
-        if (j && j.phase === "error") st = '<div class="tiny err">' + t("下载失败：{msg}", { msg: esc(j.err) }) + "</div>";
-        act = '<button class="btn sm' + (m.params > llmDl.big ? " ghost" : "") + '" data-lm="download" data-id="' + esc(m.id) + '">' + (j ? t("重试") : t("下载")) + "</button>" +
-          (m.custom ? '<button class="btn sm ghost" data-lm="cancel" data-id="' + esc(m.id) + '">' + t("移除") + "</button>" : "");
-      }
-      const info = m.custom ? '<span class="tiny dim">' + esc(m.repo) + "</span>"
-        : '<span class="tiny">' + m.params + "B · " + GB(m.bytes) + "</span>" + (m.tag ? ' <span class="tiny dim">' + TAG[m.tag] + "</span>" : "") +
-          (m.params > llmDl.big ? ' <span class="tiny warn">' + t("偏大") + "</span>" : "");
-      return '<div class="llm-item"><div class="llm-row"><code>' + esc(m.id) + "</code> " + info + '<span class="llm-act">' + act + "</span></div>" + st + "</div>";
-    };
-    const fams = [];
-    for (const m of r.items || []) if (!m.custom && !fams.includes(m.fam)) fams.push(m.fam);
-    const custom = (r.items || []).filter((m) => m.custom);
-    llmDl.html = '<div class="tiny dim">' + t("模型放在 /sdcard/agycodroid/models，下好后到 设置 → 模型服务 → 端侧小模型 使用。本机内存 {ram} GB。都是 Q4_K_M 量化；手机上 1–4B 比较实用，超过 6B 会很慢。", { ram: r.ram || "?" }) + "</div>" +
-      (r.err ? '<div class="tiny err">' + esc(r.err) + "</div>" : "") +
-      fams.map((f) => {
-        const list = r.items.filter((m) => !m.custom && m.fam === f);
-        const n = list.filter((m) => m.have).length, busy = list.some((m) => m.job && m.job.phase !== "error");
-        return '<details class="llm-fam" data-fam="' + esc(f) + '"' + (llmDl.fam.has(f) || busy ? " open" : "") + "><summary>" + esc(f) +
-          ' <span class="tiny dim">' + list.length + (n ? " · " + t("已下载 {n}", { n }) : "") + "</span></summary>" + list.map(row).join("") + "</details>";
-      }).join("") +
-      custom.map(row).join("") +
-      '<div class="llm-url"><div class="tiny dim">' + t("目录里没有的：贴一个 .gguf 文件的下载链接（HuggingFace / 魔搭等）。不校验哈希，只核对文件头。") + "</div>" +
-      '<div class="llm-url-row"><input type="url" id="llm-url" placeholder="https://huggingface.co/…/resolve/main/xxx.gguf" value="' + esc(llmDl.url) + '">' +
-      '<button class="btn sm" data-lm="url">' + t("下载") + "</button></div></div>";
-    // 输入框里正打着字就别整块重绘（会丢光标）：只更新上面的列表
-    const body = $("llm-dl-body");
-    if (body) {
-      const typing = document.activeElement && document.activeElement.id === "llm-url";
-      // 正打字的输入框原地不动，只换它前面的节点：把聚焦的元素挪到新位置，多数 WebView 上会丢焦点、收输入法（审查 F9）
-      if (typing) {
-        const box = document.createElement("div"); box.innerHTML = llmDl.html; box.querySelector(".llm-url").remove();
-        const keep = body.querySelector(".llm-url");
-        for (const x of [...body.childNodes]) if (x !== keep) x.remove();
-        keep.before(...box.childNodes);
-      }
-      else body.innerHTML = llmDl.html;
-      body.querySelectorAll(".llm-fam").forEach((d) => d.addEventListener("toggle", () => { d.open ? llmDl.fam.add(d.dataset.fam) : llmDl.fam.delete(d.dataset.fam); }));
-      // 正打字的输入框是原地保留的：每次轮询都 addEventListener 会越积越多（195-6.04）
-      const inp = $("llm-url"); if (inp) inp.oninput = () => { llmDl.url = inp.value; };
-    }
-    const busy = (r.items || []).some((m) => m.job && m.job.phase !== "error");
-    if (busy && llmDl.open && $("llm-dl") && pageOn("ext"))
-      llmDl.timer = setTimeout(loadLlmDl, 1000);
-  }
-  $("tab-ext").addEventListener("click", async (e) => {
-    const b = e.target.closest("button[data-lm]");
-    if (!b || b.disabled) return;
-    const op = b.dataset.lm, id = b.dataset.id, m = llmDl.items.get(id);
-    if (op === "remove" && !confirm(t("删除模型 {name}？", { name: id }))) return;
-    if (op === "download" && m && m.params > llmDl.big && !confirm(t("{name} 约 {p}B 参数、{size}。手机上会很慢，内存也可能不够。仍然下载？", { name: id, p: m.params, size: (m.bytes / 1073741824).toFixed(1) + " GB" }))) return;
-    const body = { op, id };
-    if (op === "url") {
-      body.url = ($("llm-url") && $("llm-url").value.trim()) || "";
-      if (!body.url) return toast(t("先贴链接"), true);
-    }
-    b.disabled = true;
-    const r = await post("/api/local/model", body).catch((er) => ({ ok: false, message: er.message }));
-    if (!r.ok) toast(t("失败：{msg}", { msg: r.message || "" }), true);
-    else if (op === "url") llmDl.url = "";
-    if (op === "url" && $("llm-url")) $("llm-url").blur();
-    loadLlmDl();
-  });
-
   // ── gh 登录卡：设备码流程。令牌只在 gh 自己那儿，网关只回账号名与状态 ──
   const ghAuth = { html: "", at: 0, timer: 0, polling: false };
   // 没有组件系统的地方（开发端）：gh 在 PATH 里就单独给一张 GitHub 卡片，登录卡同一套
   async function loadGhField() {
+    const visit = pageVisit;
     const st = await api("/api/gh/auth").catch(() => null);
+    if (!pageVisible("ext", visit)) return;
     $("gh-field").classList.toggle("hidden", !(st && st.installed));
     if (!st || !st.installed) return;
     $("gh-field-box").innerHTML = '<div class="item"><div class="it-title">GitHub CLI（gh）</div><div class="gh-auth" id="gh-auth">' + ghAuth.html + "</div></div>";
-    loadGhAuth(true);
+    loadGhAuth(true, st);
   }
-  async function loadGhAuth(force) {
+  async function loadGhAuth(force, data) {
+    const visit = pageVisit, live = () => pageVisible("ext", visit);
+    if (!live()) return;
     clearTimeout(ghAuth.timer);
     // 组件列表下载时一秒刷一次，gh auth status 要联网验令牌，别跟着每秒跑
     if (!force && !ghAuth.polling && Date.now() - ghAuth.at < 30000) return;
     ghAuth.at = Date.now();
-    const r = await api("/api/gh/auth").catch((e) => ({ installed: true, accounts: [], error: e.message }));
+    const r = data || await api("/api/gh/auth").catch((e) => ({ installed: true, accounts: [], error: e.message }));
+    if (!live()) return;
     const j = r.job, wasPolling = ghAuth.polling;
     ghAuth.polling = !!j && ["starting", "waiting"].includes(j.state);
     if (wasPolling && j && j.state === "done") toast(j.git ? t("GitHub 已登录，git 推送已配好") : t("GitHub 已登录，但 git 凭据没配上，可在终端运行 gh auth setup-git"), !j.git);
@@ -616,8 +542,7 @@
     ghAuth.html = h;
     const box = $("gh-auth");
     if (box) box.innerHTML = h;
-    if (ghAuth.polling && box && pageOn("ext"))
-      ghAuth.timer = setTimeout(loadGhAuth, 2000);
+    if (ghAuth.polling && box) ghAuth.timer = setTimeout(() => { if (live()) loadGhAuth(); }, 2000);
   }
 
   async function loadExtPlugins() {
@@ -663,92 +588,6 @@
     loadExtSkills();
   });
 
-  // ── Hooks：Claude Code 专属，Antigravity CLI 没有（见 loadExtHooks）。下面这套旧界面留着没删，只是不再调用。
-  // 事件名（PreToolUse 等）与脚本路径都是 Claude 时代的；如将来 agy 出了等价机制再接回来 ──
-  const HK = { data: null, scope: localStorage.getItem("cc.hookScope") || "user", edit: null, recipe: null };
-  const HK_EV = {
-    PreToolUse: [tk("用工具之前"), tk("Antigravity 每次调用工具（改文件、跑命令、联网……）之前。退出码 2 会拦下这次调用，stderr 里写的原因会转告 Antigravity。")],
-    PostToolUse: [tk("用完工具之后"), tk("工具执行成功之后。适合格式化、记录、检查；动作已经做了，退出码 2 只会把 stderr 反馈给 Antigravity。")],
-    UserPromptSubmit: [tk("你发出消息时"), tk("你每发一条消息。命令打印的内容会作为补充说明一起交给 Antigravity；退出码 2 会拦下这条消息。")],
-    Stop: [tk("Antigravity 答完一轮时"), tk("Antigravity 这一轮回答结束。适合自动存档、提醒；退出码 2 会让它接着干（小心死循环）。")],
-    SessionStart: [tk("会话开始时"), tk("新开、继续、清空或压缩后的会话开始时。命令打印的内容会作为背景交给 Antigravity。")],
-    SessionEnd: [tk("会话结束时"), tk("会话结束时，适合收尾清理。")],
-    Notification: [tk("Antigravity 发提醒时"), tk("Antigravity 要你确认权限、或者闲着等你回复时。")],
-    PermissionRequest: [tk("要你确认权限时"), tk("弹出权限确认之前。进阶用法：输出 JSON 可以替你自动允许或拒绝。")],
-    PostToolUseFailure: [tk("工具出错之后"), tk("工具执行失败之后。")],
-    SubagentStart: [tk("子代理开始时"), ""],
-    SubagentStop: [tk("子代理结束时"), tk("子代理干完活时；退出码 2 会让它接着干。")],
-    PreCompact: [tk("压缩上下文之前"), ""],
-    PostCompact: [tk("压缩上下文之后"), ""],
-  };
-  const hkEvName = (ev) => (HK_EV[ev] ? t(HK_EV[ev][0]) : ev);
-  const HK_TOOL_EV = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"];
-  const HK_MATCH_CHIPS = {
-    tool: ["Bash", "Edit|Write|MultiEdit", "Read", "WebFetch|WebSearch", "mcp__.*"],
-    SessionStart: ["startup", "resume", "clear", "compact"],
-    PreCompact: ["manual", "auto"], PostCompact: ["manual", "auto"],
-    Notification: ["permission_prompt", "idle_prompt"],
-  };
-  const hkChips = (ev) => (HK_TOOL_EV.includes(ev) ? HK_MATCH_CHIPS.tool : HK_MATCH_CHIPS[ev]);
-  const shq = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
-  /** 把命令拆成参数（认单引号、双引号、反斜杠），用来从常用规则的命令里取回参数 */
-  function shArgs(cmd) {
-    const out = []; let cur = null, q = "";
-    for (let i = 0; i < cmd.length; i++) {
-      const c = cmd[i];
-      if (q === "'") { if (c === "'") q = ""; else cur += c; continue; }
-      if (q === '"') { if (c === '"') q = ""; else if (c === "\\" && i + 1 < cmd.length) cur += cmd[++i]; else cur += c; continue; }
-      if (/\s/.test(c)) { if (cur != null) out.push(cur); cur = null; continue; }
-      if (cur == null) cur = "";
-      if (c === "'" || c === '"') q = c; else if (c === "\\" && i + 1 < cmd.length) cur += cmd[++i]; else cur += c;
-    }
-    if (cur != null) out.push(cur);
-    return out;
-  }
-  const lines = (s) => String(s || "").split("\n").map((x) => x.trim()).filter(Boolean);
-  const hkScript = (name) => `node "$HOME/.claude/hooks/${name}"`;
-  const HK_RECIPES = [
-    { id: "guard-files", title: tk("保护重要文件"), desc: tk("Antigravity 想改 .env、密钥、签名文件时直接拦下，并告诉它原因。"),
-      event: "PreToolUse", matcher: "Edit|Write|MultiEdit|NotebookEdit", script: "cc-guard-files.mjs",
-      label: tk("受保护的文件（一行一个；* 是通配符，带 / 就按路径比）"), param: ".env\n.env.*\n*.pem\n*.key\n*.keystore\n*.jks\nid_rsa*\nid_ed25519*",
-      cmd: (p) => hkScript("cc-guard-files.mjs") + " " + lines(p).map(shq).join(" "), back: (a) => a.slice(2).join("\n") },
-    { id: "guard-bash", title: tk("拦下危险命令"), desc: tk("命令里出现强推、硬重置、删根目录这类内容就不让跑，并告诉 Antigravity 换个做法。"),
-      event: "PreToolUse", matcher: "Bash", script: "cc-guard-bash.mjs",
-      label: tk("禁止的内容（一行一个；写成 /…/ 就是正则）"),
-      param: "git push --force\ngit push -f\n/git\\s+reset\\s+--hard/\n/\\brm\\s+-\\w*[rR]\\w*\\s+(\\/|~\\/?|\\$HOME\\/?)(\\s|$)/\nmkfs\n/\\bdd\\s+if=/",
-      cmd: (p) => hkScript("cc-guard-bash.mjs") + " " + lines(p).map(shq).join(" "), back: (a) => a.slice(2).join("\n") },
-    { id: "autosave", title: tk("每轮自动存档（git）"), desc: tk("Antigravity 每答完一轮，项目里有改动就自动提交一次，随时能退回任意一步。只提交不推送；不是 git 仓库的项目什么也不做。"),
-      event: "Stop", matcher: "", script: "cc-autosave.mjs", single: true, label: tk("提交说明的开头"), param: tk("自动存档"),
-      cmd: (p) => hkScript("cc-autosave.mjs") + " " + shq(String(p).trim() || t("自动存档")), back: (a) => a[2] || "" },
-    { id: "prompt-note", title: tk("每条消息附上固定要求"), desc: tk("你每发一条消息，自动把这段话一起交给 Antigravity，比如「回答用中文」「改之前先说思路」。"),
-      event: "UserPromptSubmit", matcher: "", label: tk("要附上的话"), param: tk("回答用中文；动手改之前先简单说一下打算怎么做。"),
-      cmd: (p) => "printf '%s\\n' " + shq(String(p).trim()), test: (c) => /^printf '%s\\n' /.test(c), back: (a) => a[2] || "" },
-    { id: "session-file", title: tk("开会话时读入进度文件"), desc: tk("每次开新会话（或压缩上下文后），把项目里的一个文件读给 Antigravity，比如进度、大纲、人物表。文件不存在就跳过。"),
-      event: "SessionStart", matcher: "", single: true, label: tk("文件（相对项目目录）"), param: tk("进度.md"),
-      cmd: (p) => "cat " + shq(String(p).trim()) + " 2>/dev/null || true", test: (c) => /^cat '.*' 2>\/dev\/null \|\| true$/.test(c), back: (a) => a[1] || "" },
-    { id: "bash-log", title: tk("记下 Antigravity 跑过的命令"), desc: tk("每条命令连同时间、目录追加到命令历史记录里，方便事后翻看。（待实测）"),
-      event: "PostToolUse", matcher: "Bash", script: "cc-bash-log.mjs", cmd: () => hkScript("cc-bash-log.mjs") },
-    // 注意：上面几条常用规则的命令与脚本路径（~/.claude/hooks/…）都是 Claude 时代的遗留，Hooks 本身已不支持，下面这套界面不再渲染。
-    { id: "format", title: tk("改完代码自动格式化"), desc: tk("Antigravity 改完代码文件，用本机已装的工具（ruff / black、prettier、gofmt、clang-format……）整理格式；没装就不动。Markdown 和纯文本不碰。"),
-      event: "PostToolUse", matcher: "Edit|Write|MultiEdit", script: "cc-format.mjs", cmd: () => hkScript("cc-format.mjs") },
-  ];
-  const hkRecipeOf = (ev, h) => h && h.type === "command" && HK_RECIPES.find((r) => r.event === ev &&
-    (r.script ? String(h.command).includes(r.script) : r.test(String(h.command))));
-  const hkScopeData = () => HK.data && HK.data.scopes.find((s) => s.scope === HK.scope);
-  const hkFlat = (sc) => {
-    const out = [];
-    const hooks = sc && sc.hooks;
-    if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return out;
-    for (const [ev, groups] of Object.entries(hooks)) {
-      if (!Array.isArray(groups)) continue;                       // 合法 JSON 但形状不对：整个 Hooks 区不能因此崩掉
-      groups.forEach((g, gi) => {
-        if (!g || typeof g !== "object" || !Array.isArray(g.hooks)) return;
-        for (let hi = 0; hi < g.hooks.length; hi++) out.push({ ev, gi, hi, matcher: typeof g.matcher === "string" ? g.matcher : "", h: g.hooks[hi] });
-      });
-    }
-    return out;
-  };
-
   async function loadExtHooks() {
     // Hooks 是 Claude Code 专属（PreToolUse 等），Antigravity CLI 没有：网关的 /api/ext/hooks* 一律返回 400，这里直接写明不支持，不调接口。
     // 作用域、规则列表、常用规则和表单入口一并藏起来。
@@ -760,255 +599,6 @@
     $("hook-form-box")?.classList.add("hidden");
   }
 
-  function renderHooks() {
-    const d = HK.data; if (!d || !Array.isArray(d.scopes)) return;
-    const total = d.scopes.reduce((a, s) => a + hkFlat(s).length, 0);
-    $("ext-h-count").textContent = total;
-    const proj = String(d.dir || "").split("/").pop() || d.dir;
-    const SC = { user: t("所有项目"), project: t("本项目（{name}）", { name: proj }), local: t("本项目·只在本机") };
-    $("hook-scope").innerHTML = d.scopes.map((s) =>
-      `<button class="idx-chip${s.scope === HK.scope ? " on" : ""}" data-hscope="${esc(s.scope)}">${esc(SC[s.scope])}<span>${hkFlat(s).length}</span></button>`).join("");
-    const sc = hkScopeData();
-    const SCD = {
-      user: t("写在用户级设置里，所有项目都生效。"),
-      project: t("写在项目的设置里，只在这个项目生效；项目进了 git 的话会跟着仓库走。"),
-      local: t("写在项目的本地设置里，只在这个项目、这台设备上生效。"),
-    };
-    // 发行版不跑这里配的钩子（见 gw/edition.mjs、seal.mjs）：配置照样能看能改，只是不加载
-    $("hook-bar").innerHTML = (d.sealed ? `<div class="tiny warn">${esc(t("发行版不运行这里配置的 hooks：hooks 能执行任意命令、把任意内容放进对话，agycodroid 没法检查。规则留在文件里，不会被删。"))}</div>` : "") + `<div class="tiny">${esc(SCD[HK.scope])}
-        ${sc && sc.file && sc.exists ? `<a href="#" data-hk="open-file">${t("打开配置文件")}</a>` : ""}</div>
-      <label class="tiny hk-pause"><input type="checkbox" data-hk="pause"${sc && sc.disableAll ? " checked" : ""}> ${t("暂停这一层的 hooks（规则留着，先不跑）")}</label>`;
-    if (!sc || sc.error && !sc.badJson) { $("ext-hooks").innerHTML = `<div class="tiny warn">${esc((sc && sc.error) || "")}</div>`; return; }
-    if (sc.badJson) {
-      $("ext-hooks").innerHTML = `<div class="tiny warn">${esc(t("这个配置文件不是合法的 JSON（{msg}），先打开修好，这里才能改。", { msg: sc.error }))}</div>`;
-      return;
-    }
-    const items = hkFlat(sc);
-    $("ext-hooks").innerHTML = items.map((it, i) => {
-      const r = hkRecipeOf(it.ev, it.h);
-      const title = r ? t(r.title) : hkEvName(it.ev);
-      const meta = [r ? hkEvName(it.ev) : it.ev, it.matcher ? t("匹配：{m}", { m: it.matcher }) : "", it.h.timeout ? t("超时 {n} 秒", { n: it.h.timeout }) : ""].filter(Boolean);
-      const body = it.h.type === "command" ? it.h.command : JSON.stringify(it.h);
-      return `<div class="item hk-item${sc.disableAll ? " off" : ""}" data-i="${i}">
-        <div class="it-title">${esc(title)}</div>
-        <div class="it-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div>
-        <div class="hk-cmd mono">${esc(body)}</div>
-        <div class="it-acts">${it.h.type === "command" ? `<button data-hk="test">${t("试运行")}</button><button data-hk="edit">${t("修改")}</button>` : ""}
-          <button data-hk="del">${t("删除")}</button></div>
-        <div class="hk-out"></div></div>`;
-    }).join("") || `<div class="tiny">${t("这里还没有规则。下面「常用规则」点一下就能加。")}</div>`;
-    $("hook-recipes").innerHTML = HK_RECIPES.map((r) => extItem(esc(t(r.title)), `<span>${esc(hkEvName(r.event))}</span>`,
-      `<button data-hk="recipe" data-id="${esc(r.id)}">${t("添加…")}</button>`, `<div class="tiny ext-desc">${esc(t(r.desc))}</div>`)).join("");
-    if (!items.length && !HK.edit && !HK.recipe) $("hook-recipes-box").open = true;
-  }
-
-  /** 表单：新建 / 修改 / 从常用规则添加。常用规则只填参数，命令自动拼好（也能直接改命令） */
-  function hkForm(init) {
-    const box = $("hook-form-box"), f = $("hook-form");
-    box.open = true;
-    const r = HK.recipe;
-    const evs = HK.data.events;
-    const main = Object.keys(HK_EV).filter((e) => evs.includes(e));
-    const more = evs.filter((e) => !main.includes(e));
-    if (init.event && !evs.includes(init.event)) more.push(init.event);
-    f.innerHTML = `
-      ${r ? `<div class="hk-rtitle">${esc(t(r.title))}</div><div class="tiny">${esc(t(r.desc))}</div>` : ""}
-      <label class="tiny">${t("什么时候跑")}</label>
-      <select data-f="event">${main.map((e) => `<option value="${esc(e)}">${esc(hkEvName(e))} · ${esc(e)}</option>`).join("")}
-        ${more.length ? `<optgroup label="${esc(t("其他（进阶）"))}">${more.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join("")}</optgroup>` : ""}</select>
-      <div class="tiny hk-evdesc"></div>
-      <div class="hk-match"><label class="tiny hk-mlabel"></label>
-        <input data-f="matcher" autocomplete="off" spellcheck="false" placeholder="${esc(t("留空 = 全部"))}">
-        <div class="hk-chips"></div></div>
-      ${r && r.label ? `<label class="tiny">${esc(t(r.label))}</label>
-        ${r.single ? `<input data-f="param" autocomplete="off" spellcheck="false">` : `<textarea data-f="param" rows="5" class="mono" spellcheck="false"></textarea>`}` : ""}
-      <label class="tiny">${t("运行的命令")}${r ? ` <span class="hk-auto">${t("（按上面自动生成，也可以直接改）")}</span>` : ""}</label>
-      <textarea data-f="command" rows="3" class="mono" spellcheck="false" autocapitalize="off" placeholder="${esc(t("例如：echo 你好 >> ~/log.txt"))}"></textarea>
-      <div class="hk-row"><label class="tiny">${t("超时（秒，留空用默认 60）")}</label><input data-f="timeout" type="number" min="1" max="600" inputmode="numeric"></div>
-      <div class="row-actions"><button class="btn sm ghost" data-hk="f-test">${t("试运行")}</button>
-        <button class="btn sm" data-hk="f-save">${HK.edit ? t("保存修改") : t("添加")}</button>
-        <button class="btn sm ghost" data-hk="f-cancel">${t("取消")}</button></div>
-      <div class="hk-out"></div>`;
-    const q = (k) => f.querySelector(`[data-f="${k}"]`);
-    q("event").value = init.event || "PreToolUse";
-    q("matcher").value = init.matcher || "";
-    q("command").value = init.command || "";
-    q("timeout").value = init.timeout || "";
-    if (q("param")) q("param").value = init.param != null ? init.param : t(r.param);
-    const sync = () => {
-      const ev = q("event").value, chips = hkChips(ev);
-      f.querySelector(".hk-evdesc").textContent = HK_EV[ev] ? t(HK_EV[ev][1]) : "";
-      f.querySelector(".hk-match").classList.toggle("hidden", !chips && !q("matcher").value);
-      f.querySelector(".hk-mlabel").textContent = HK_TOOL_EV.includes(ev) ? t("管哪些工具（工具名，可用 | 分隔或写正则；留空 = 全部）") : t("只在这几种情况跑（留空 = 全部）");
-      f.querySelector(".hk-chips").innerHTML = (chips || []).map((c) => `<button type="button" class="idx-chip" data-chip="${esc(c)}">${esc(c)}</button>`).join("");
-    };
-    q("event").addEventListener("change", sync);
-    if (q("param")) q("param").addEventListener("input", () => { q("command").value = r.cmd(q("param").value); });
-    if (r && !init.command) q("command").value = r.cmd(q("param") ? q("param").value : "");
-    sync();
-    box.scrollIntoView({ block: "start", behavior: "smooth" });
-  }
-  const hkFormVal = () => {
-    const f = $("hook-form"), q = (k) => f.querySelector(`[data-f="${k}"]`);
-    const to = parseInt(q("timeout").value, 10);
-    return { event: q("event").value, matcher: q("matcher").value.trim(), command: q("command").value.trim(), timeout: to > 0 ? to : 0 };
-  };
-  // 「自己写一条」展开时要真的给出表单：以前只展开一块空白，没法从零新建（审查 09-03 / #49 P2-10）
-  $("hook-form-box").addEventListener("toggle", () => {
-    const box = $("hook-form-box");
-    if (box.open && !$("hook-form").children.length && HK.data) { HK.edit = null; HK.recipe = null; hkForm({}); }
-    else if (!box.open) { HK.edit = null; HK.recipe = null; $("hook-form").innerHTML = ""; }
-  });
-  function hkCloseForm() { HK.edit = null; HK.recipe = null; $("hook-form").innerHTML = ""; $("hook-form-box").open = false; }
-
-  async function hkSave(hooks, extra) {
-    const sc = hkScopeData();
-    const r = await api("/api/ext/hooks/save", { method: "POST", body: JSON.stringify({ scope: HK.scope, dir: HK.data.dir, hooks, ...extra }) });
-    if (r.ok === false) {
-      toast(r.code === "badjson" ? t("这个配置文件不是合法的 JSON（{msg}），先打开修好，这里才能改。", { msg: r.message }) : t("保存失败：{msg}", { msg: r.message }), true);
-      return false;
-    }
-    toast(t("已保存，下一条消息生效"));
-    await loadExtHooks();
-    return !!sc;
-  }
-  const hkClone = () => JSON.parse(JSON.stringify((hkScopeData() || {}).hooks || {}));
-
-  /** 试运行结果：按事件和退出码说人话 */
-  function hkShowResult(box, res, ev, cmd, matcher, timeout) {
-    const blockEv = ["PreToolUse", "PermissionRequest", "UserPromptSubmit"].includes(ev);
-    const ctxEv = ["UserPromptSubmit", "SessionStart"].includes(ev);
-    let v, cls = "ok";
-    if (res.timedOut) { v = t("超时了，命令没跑完就被停掉。"); cls = "warn"; }
-    else if (res.code === 0) v = ctxEv && res.stdout.trim() ? t("正常结束：打印的内容会作为补充说明交给 Antigravity。") : blockEv ? t("放行：Antigravity 照常继续。") : t("正常结束。");
-    else if (res.code === 2) { v = blockEv ? t("拦下（退出码 2）：Antigravity 这一步不会执行，stderr 里的话会转告它。") : ev === "Stop" || ev === "SubagentStop" ? t("退出码 2：Antigravity 会接着干，stderr 里的话会转告它。") : t("退出码 2：stderr 里的话会反馈给 Antigravity。"); cls = "warn"; }
-    else { v = t("出错了（退出码 {n}）：不会拦下，Antigravity 照常继续。", { n: res.code }); cls = "err"; }
-    const pre = (label, s) => s.trim() ? `<div class="tiny">${label}</div><pre class="hk-pre">${esc(s.slice(0, 4000))}</pre>` : "";
-    box.innerHTML = `<div class="hk-verdict ${cls}">${esc(v)} <span class="tiny">${res.ms} ms</span></div>
-      ${pre(t("输出（stdout）"), res.stdout)}${pre(t("错误输出（stderr）"), res.stderr)}
-      <details class="ext-more"><summary>${t("模拟的输入（可以改了再试）")}</summary>
-        <textarea class="mono hk-input" rows="8" spellcheck="false">${esc(res.input)}</textarea>
-        <button class="btn sm ghost" data-hk="retest">${t("再试一次")}</button></details>`;
-    box.querySelector('[data-hk="retest"]').onclick = (e) => { e.preventDefault(); hkRunTest(box, ev, cmd, matcher, timeout, box.querySelector(".hk-input").value); };
-  }
-  async function hkRunTest(box, ev, cmd, matcher, timeout, input) {
-    if (!cmd) return toast(t("命令是空的"), true);
-    box.innerHTML = `<div class="tiny">${t("运行中…")}</div>`;
-    // 内置脚本没装上时试运行必然失败：以前把这个错误吞了，用户只看到“命令跑不起来”（197-2.9）
-    if (/\$HOME\/\.claude\/hooks\/cc-/.test(cmd)) {
-      let inst;
-      try { inst = await api("/api/ext/hooks/scripts", { method: "POST", body: "{}" }); }
-      catch (e) { box.innerHTML = `<div class="tiny warn">${esc(t("内置脚本没装上：{msg}", { msg: e.message }))}</div>`; return; }
-      if (inst.ok === false) { box.innerHTML = `<div class="tiny warn">${esc(t("内置脚本没装上：{msg}", { msg: inst.message || "?" }))}</div>`; return; }
-    }
-    try {
-      const res = await api("/api/ext/hooks/test", { method: "POST", body: JSON.stringify({ command: cmd, event: ev, matcher, timeout, input, dir: HK.data.dir }) });
-      if (res.ok === false) throw new Error(res.message);
-      hkShowResult(box, res, ev, cmd, matcher, timeout);
-    } catch (e) { box.innerHTML = `<div class="tiny warn">${esc(e.message)}</div>`; }
-  }
-
-  $("ext-hook-sec").addEventListener("click", async (e) => {
-    const chip = e.target.closest("[data-hscope]");
-    if (chip) { HK.scope = chip.dataset.hscope; localStorage.setItem("cc.hookScope", HK.scope); hkCloseForm(); return renderHooks(); }
-    const mc = e.target.closest("[data-chip]");
-    if (mc) {
-      const inp = $("hook-form").querySelector('[data-f="matcher"]');
-      const cur = inp.value.split("|").filter(Boolean);
-      for (const p of mc.dataset.chip.split("|")) if (!cur.includes(p)) cur.push(p);
-      inp.value = cur.join("|");
-      return;
-    }
-    const b = e.target.closest("[data-hk]");
-    if (!b || b.dataset.hk === "pause") return;
-    e.preventDefault();
-    const a = b.dataset.hk;
-    const items = hkFlat(hkScopeData());
-    const it = b.closest(".hk-item") ? items[+b.closest(".hk-item").dataset.i] : null;
-    if (a === "open-file") {
-      // 用户级 settings.json 在 home 里，按路径政策不能经 /api/file 读：走扩展自己的只读接口展示（195-J.1）
-      const sc = hkScopeData();
-      let r;
-      try { r = await api(`/api/ext/hooks/file?scope=${encodeURIComponent(HK.scope)}&dir=${encodeURIComponent(HK.data.dir)}`); }
-      catch (e) { return toast(e.message, true); }
-      let box = $("hk-file-view");
-      if (!box) { box = document.createElement("div"); box.id = "hk-file-view"; $("hook-bar").after(box); }
-      if (r.ok === false) { box.innerHTML = `<div class="tiny err">${esc(r.message || "?")}</div>`; return; }
-      box.innerHTML = `<div class="tiny">${esc(r.file || (sc && sc.file) || "")}${r.exists ? "" : "（" + esc(t("文件还不存在")) + "）"}</div>` +
-        `<pre class="hk-pre">${esc(r.text || "")}</pre>` +
-        `<div class="it-acts"><button class="btn ghost sm" data-hk="close-file">${t("关闭")}</button></div>`;
-      return;
-    }
-    if (a === "close-file") { $("hk-file-view")?.remove(); return; }
-    if (a === "test" && it) return hkRunTest(b.closest(".hk-item").querySelector(".hk-out"), it.ev, it.h.command, it.matcher, it.h.timeout);
-    if (a === "del" && it) {
-      if (!confirm(t("删除这条规则？"))) return;
-      const h = hkClone();
-      h[it.ev][it.gi].hooks.splice(it.hi, 1);
-      return hkSave(h);
-    }
-    if (a === "edit" && it) {
-      HK.edit = { ev: it.ev, gi: it.gi, hi: it.hi, scope: HK.scope, orig: JSON.stringify({ m: it.matcher || "", h: it.h }) };
-      HK.recipe = hkRecipeOf(it.ev, it.h) || null;
-      const param = HK.recipe && HK.recipe.back ? HK.recipe.back(shArgs(it.h.command)) : undefined;
-      return hkForm({ event: it.ev, matcher: it.matcher, command: it.h.command, timeout: it.h.timeout, param });
-    }
-    if (a === "recipe") {
-      HK.edit = null;
-      HK.recipe = HK_RECIPES.find((r) => r.id === b.dataset.id);
-      return hkForm({ event: HK.recipe.event, matcher: HK.recipe.matcher });
-    }
-    if (a === "f-cancel") return hkCloseForm();
-    if (a === "f-test") { const v = hkFormVal(); return hkRunTest($("hook-form").querySelector(".hk-out"), v.event, v.command, v.matcher, v.timeout); }
-    if (a === "f-save") {
-      const v = hkFormVal();
-      if (!v.command) return toast(t("命令是空的"), true);
-      // 内置脚本装不上就别保存规则：以前吞掉错误，界面提示“已保存”，实际这条规则永远跑不起来（197-2.9）
-      if (/\$HOME\/\.claude\/hooks\/cc-/.test(v.command)) {
-        let inst;
-        try { inst = await api("/api/ext/hooks/scripts", { method: "POST", body: "{}" }); }
-        catch (e) { return toast(t("内置脚本没装上：{msg}，规则没有保存", { msg: e.message }), true); }
-        if (inst.ok === false) return toast(t("内置脚本没装上：{msg}，规则没有保存", { msg: inst.message || "?" }), true);
-      }
-      const h = hkClone();
-      const entry = { type: "command", command: v.command };
-      if (v.timeout) entry.timeout = v.timeout;
-      if (HK.edit) {
-        // 编辑期间列表可能变了（删了前面一条、别处改了文件）：按下标找到的得还是原来那条，不是就在同一事件里按内容重新找；
-        // 都找不到就不存，不能把修改稿写到另一条规则上（#152-1）
-        const same = (g, x) => g && x && JSON.stringify({ m: g.matcher || "", h: x }) === HK.edit.orig;
-        let gi = HK.edit.gi, hi = HK.edit.hi;
-        if (HK.edit.scope !== HK.scope || !same(h[HK.edit.ev]?.[gi], h[HK.edit.ev]?.[gi]?.hooks?.[hi])) {
-          gi = hi = -1;
-          (h[HK.edit.ev] || []).some((g, a) => (g.hooks || []).some((x, b) => same(g, x) && ((gi = a), (hi = b), true)));
-        }
-        if (gi < 0 || HK.edit.scope !== HK.scope) { toast(t("这条规则在你编辑期间被改动或删掉了，重新打开它再改"), true); return hkCloseForm(); }
-        HK.edit.gi = gi; HK.edit.hi = hi;
-        const old = h[HK.edit.ev][HK.edit.gi];
-        const keep = old.hooks[HK.edit.hi];
-        // 事件、匹配都没变就原地换；变了就从原组里摘掉，按新的事件 / 匹配放
-        if (HK.edit.ev === v.event && (old.matcher || "") === v.matcher) { const nh = { ...keep, ...entry }; if (!v.timeout) delete nh.timeout; old.hooks[HK.edit.hi] = nh; }
-        else { old.hooks.splice(HK.edit.hi, 1); hkPut(h, v, entry); }
-      } else hkPut(h, v, entry);
-      if (await hkSave(h)) hkCloseForm();
-    }
-  });
-  $("ext-hook-sec").addEventListener("change", async (e) => {
-    if (e.target.dataset.hk !== "pause") return;
-    const on = e.target.checked;
-    // 暂停的是当前这一层（所有项目 / 本项目 / 本项目·只在本机）：以前固定只停用户级，项目里的照跑却显示成停了（#152-2）
-    const r = await api("/api/ext/hooks/save", { method: "POST", body: JSON.stringify({ scope: HK.scope, dir: HK.data.dir, disableAll: on }) });
-    if (r.ok === false) { e.target.checked = !on; return toast(t("保存失败：{msg}", { msg: r.message }), true); }
-    toast(on ? t("这一层的 hooks 已暂停") : t("hooks 已恢复"));
-    loadExtHooks();
-  });
-  /** 放进事件下匹配规则相同的那组（没有就新开一组） */
-  function hkPut(h, v, entry) {
-    const groups = h[v.event] || (h[v.event] = []);
-    let g = groups.find((x) => (x.matcher || "") === v.matcher);
-    if (!g) { g = v.matcher ? { matcher: v.matcher, hooks: [] } : { hooks: [] }; groups.push(g); }
-    g.hooks.push(entry);
-  }
 
   async function loadExtMcp() {
     const box = $("ext-mcp");
@@ -1344,13 +934,6 @@
         return loadComponents();
       }
       if (compRemoving.has(id)) return;
-      if (c === "configure") {
-        if (id !== "openai-bridge") return;
-        // agy 只有 Google 登录和 Gemini API Key 两家，upsertProvider 拒掉 custom-N：
-        // 桥的「接进聊天」映射存不下来，配置面板打开也只能保存失败——直接说明不支持，别让用户走到那一步。
-        // 组件本身仍可安装/停用/卸载（给其它工具当本地 OpenAI 兼容服务用），只是不能当聊天接口。
-        return toast(t("OpenAI 协议桥不能接进聊天（agycodroid 只有 Google 登录和 Gemini API Key 两家）"), true);
-      }
       const nm = (cb.closest(".item")?.querySelector(".it-title")?.textContent || id).trim();
       if (c === "install" && cb.dataset.unverified && !confirm(t("{name} 还没人在真机上验证过，可能装不上或用不了。仍然安装？", { name: nm }))) return;
       if (c === "remove" && cb.dataset.usedby) return toast(t("{names} 要用它，先卸载那些组件", { names: cb.dataset.usedby }), true);
@@ -1466,7 +1049,7 @@
   // 状态对账：组件 / 模块 / 包清单 / 自定义组件的记录和磁盘对一遍（网关启动后自动核过一次，这里看结果或再核）
   // 能自动修的条目带「修补」，顶部「全部修补」：网关按顺序重装组件 / 模块、等做完，工具包和 Antigravity CLI 交给应用，最后自动再核（用户 11-09）
   const fixWhat = (a) => ({ comp: t("重新安装这个组件（会重新下载）"), mod: t("重新安装这个工具包模块（会重新下载）"),
-    devkit: t("修复开发工具包：重新下载当前这一版并重装，装的时候暂停服务 1–2 分钟"), claude: t("重新安装 Antigravity CLI") }[a] || "");
+    devkit: t("修复开发工具包：重新下载当前这一版并重装，装的时候暂停服务 1–2 分钟"), agy: t("重新安装 Antigravity CLI") }[a] || "");
   let fixTimer = 0;
   function paintReconcile(r, always) {
     const box = $("reconcile-box"), bad = (r.findings || []).filter((f) => f.level !== "info");
@@ -1492,18 +1075,20 @@
       </div>`).join("") + (j.steps.some((s) => s.state === "handed") ? `<div class="tiny">${esc(t("交给应用的那几步在「设置 → 更新」里看进度，做完后再点「核对记录」。"))}</div>` : "");
     box.classList.remove("hidden");
   }
-  async function followFix() {
+  async function followFix(visit = setVisit, j) {
+    const live = () => setVisible("trouble", visit);
+    if (!live()) return;
     clearTimeout(fixTimer);
-    const j = await api("/api/reconcile/fix").catch(() => null);
-    if (!j || !j.ok) return;
+    j ||= await sameGet("/api/reconcile/fix").catch(() => null);
+    if (!live() || !j?.ok) return;
     paintFix(j);
-    if (j.running) { fixTimer = setTimeout(followFix, 1500); return; }
+    if (j.running) { fixTimer = setTimeout(() => followFix(visit), 1500); return; }
     const failed = j.steps.filter((s) => s.state === "fail").length;
     // 交给应用的还在做：网关没再核（核了也是旧结果），进度留在这里，不换回旧的核对结果（0.6.11 真机）
     if (j.steps.some((s) => s.state === "handed")) return toast(t("交给应用的步骤还在进行，做完后再点「核对记录」"), !!failed);
     toast(failed ? t("修补结束，有 {n} 步没成", { n: failed }) : t("修补结束"), !!failed);
     // 结果停留几秒给人看清，再换回最新的核对结果（网关已经自动再核过）
-    fixTimer = setTimeout(() => loadReconcile(false).then((r) => r && paintReconcile(r, true)), failed ? 8000 : 3000);
+    fixTimer = setTimeout(async () => { if (live()) { const r = await loadReconcile(false); if (r && live()) paintReconcile(r, true); } }, failed ? 8000 : 3000);
   }
   $("reconcile-box").addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-rcfix]");
@@ -1512,29 +1097,34 @@
     const list = all ? (box._fixable || []) : [{ msg: b.dataset.msg, act: b.dataset.act }];
     const plan = [...new Set(list.map((f) => "· " + f.msg + "\n   → " + fixWhat(f.act)))].join("\n");
     if (!confirm((all ? t("按下面的顺序修补，做完自动再核对一次：") : t("修补这一项：")) + "\n\n" + plan + "\n\n" + t("重装要联网下载；你自己的文件、会话和设置不受影响。继续？"))) return;
+    const visit = setVisit;
     b.disabled = true;
     const r = await post("/api/reconcile/fix", { keys: all ? "all" : [b.dataset.rcfix] }).catch((err) => ({ ok: false, message: err.message }));
     if (!r.ok) { b.disabled = false; return toast(r.message || t("失败"), true); }
-    paintFix(r);
-    fixTimer = setTimeout(followFix, 1000);
+    if (setVisible("trouble", visit)) { paintFix(r); fixTimer = setTimeout(() => followFix(visit), 1000); }
   });
   async function loadReconcile(run) {
+    const visit = setVisit, live = () => setVisible("trouble", visit);
+    if (!live()) return;
     const r = await api("/api/reconcile" + (run ? "?run=1" : "")).catch(() => null);
+    if (!live()) return;
     if (r) paintReconcile(r, run);
     // 修补还在跑（比如关掉设置再打开）：接着显示进度
-    if (r && r.supported) api("/api/reconcile/fix").then((j) => { if (j && j.ok && j.running) followFix(); }).catch(() => {});
+    if (r?.supported) sameGet("/api/reconcile/fix").then((j) => { if (j?.ok && j.running) followFix(visit, j); }).catch(() => {});
     return r;
   }
   $("btn-reconcile").addEventListener("click", async () => {
     // 按钮是「核对」：已有结果时点它也要重新核，不能第一次只把面板收起来（195-M.6）
+    const visit = setVisit;
     toast(t("正在核对…"));
     const r = await loadReconcile(true);
+    if (!setVisible("trouble", visit)) return;
     if (!r) toast(t("核对失败"), true);
     else if (!r.supported) toast(t("这里没有工具包，不用核对"));
   });
   // 本机自检（195-M.1）：看上次结果，点「重新自检」不等过期立刻重跑；跑着的时候每 5 秒刷新一次
   let envFactsTimer = 0;
-  function paintEnvFacts(r) {
+  function paintEnvFacts(r, visit) {
     $("envfacts-row").classList.toggle("hidden", !r.supported);
     const el = $("envfacts-state"), b = $("btn-envfacts");
     b.disabled = !!r.running;
@@ -1547,15 +1137,18 @@
     if (r.fail.length) lines.push(`<details><summary>${esc(t("失败项"))}</summary>${r.fail.map((f) => `<div><code>${esc(f)}</code></div>`).join("")}</details>`);
     el.innerHTML = lines.join("");
     clearTimeout(envFactsTimer);
-    if (r.running) envFactsTimer = setTimeout(() => { if (!$("set-ov").classList.contains("hidden")) loadEnvFacts(); }, 5000);
+    if (r.running) envFactsTimer = setTimeout(() => { if (setVisible("trouble", visit)) loadEnvFacts(); }, 5000);
   }
   async function loadEnvFacts() {
-    const r = await api("/api/env-facts").catch(() => null);
-    if (r) paintEnvFacts(r);
+    const visit = setVisit;
+    if (!setVisible("trouble", visit)) return;
+    const r = await sameGet("/api/env-facts").catch(() => null);
+    if (r && setVisible("trouble", visit)) paintEnvFacts(r, visit);
   }
   $("btn-envfacts").addEventListener("click", async () => {
+    const visit = setVisit;
     const r = await post("/api/env-facts/rerun").catch((e) => (toast(e.message, true), null));
-    if (r) paintEnvFacts(r);
+    if (r && setVisible("trouble", visit)) paintEnvFacts(r, visit);
   });
   const LEDGER_KIND = () => ({ verify: t("校验"), repair: t("修复"), install: t("安装"), uninstall: t("卸载"), recover: t("恢复"), "safe-mode": t("安全模式"), logs: t("日志") });
   $("btn-ledger").addEventListener("click", async () => {

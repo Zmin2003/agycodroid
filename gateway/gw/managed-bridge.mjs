@@ -9,10 +9,10 @@ import { sameFile as pathSame } from "./pathguard.mjs";
 
 const ID = "openai-bridge";
 const ENTRY = "lib/openai-bridge/component.cjs";
-const inFlight = new Map(), failures = new Map(), configuring = new Set();
+const inFlight = new Map(), failures = new Map();
 const SUCCESS_TTL = 20000, FAILURE_TTL = 60000, OUTPUT_LIMIT = 16384;
 const PROCESS_STARTED_AT = Date.now() - process.uptime() * 1000;
-let retiring = null, ready = null, configurationEpoch = 0;
+let retiring = null, ready = null;
 
 function fail(stage = "binding") {
   const removal = stage.startsWith("retire-");
@@ -161,9 +161,6 @@ async function withRegistryLock(fn) {
   }
 }
 
-// App 层修复只复用固定注册锁，不执行组件启动/停止，也不接受请求指定锁路径。
-export const withManagedBridgeRegistryLock = (fn) => withRegistryLock((file, recheck) => fn(recheck));
-
 function clearRegistration(file, expected, sameInstance) {
   try {
     const current = inspectRegistration(file);
@@ -218,11 +215,6 @@ function installedBinding(stored) {
   } catch { throw fail(); }
 }
 
-function providerEndpoint(p) {
-  // 在 streamfix 包装之前只认显式注册的本机端点；其他接口和登录令牌不碰。
-  return PREFIX && p?.custom && !p.login && !p.local ? endpointOf(p.baseUrl) : "";
-}
-
 function binding(endpoint) {
   let stored;
   try { stored = readRegistration(); }
@@ -231,7 +223,7 @@ function binding(endpoint) {
   return installedBinding(stored);
 }
 
-// HOME 在信任根这一层规范成真实路径，和 bridge-config 的归属检查一致（#66 第 4 项）
+// HOME 在信任根这一层规范成真实路径，和本模块的归属检查一致（#66 第 4 项）
 const componentEnv = () => { let home = CFG.home; try { home = fs.realpathSync(home); } catch {} return sharedComponentEnv(home, PREFIX); };
 
 function signalLauncher(child, signal) {
@@ -332,41 +324,13 @@ function waitFor(promise, signal) {
 }
 
 /**
- * GUI 写配置/重启前同步占闸，finally 调用返回的幂等 release。只清内存、不启动/停止服务。
- * 已有注册端点和配置期间新注册端点受保护；其他 provider 不被配置操作阻塞。
+ * 启动已注册的托管桥并等它就绪（20 秒内可复用）；失败进 60 秒冷却。
+ * 只有网关启动预热（warmManagedBridge）调它——轮次不再经桥接聊天。
+ * 返回 true = 固定入口确认就绪；抛错 = 未就绪（阶段见 fail()）。
  */
-export function beginManagedBridgeConfiguration() {
-  const scope = { endpoint: "" };
-  try {
-    const r = readRegistration().value;
-    if (object(r)) scope.endpoint = endpointOf(r.endpoint);
-  } catch {}
-  const invalidate = () => { ready = null; failures.clear(); configurationEpoch++; };
-  configuring.add(scope);
-  invalidate();
-  return () => {
-    if (!configuring.delete(scope)) return;
-    invalidate();
-  };
-}
-
-/** false = 非显式托管端点；true = 固定入口确认就绪（20 秒内可复用）。signal 只取消本次等待。 */
-export async function ensureManagedBridge(p, { signal } = {}) {
-  const endpoint = providerEndpoint(p);
-  if (!endpoint) return false;
+async function startBridge(r) {
   if (retiring) throw fail("retiring");
-  if ([...configuring].some((scope) => scope.endpoint === endpoint)) throw fail("configuring");
-  let r;
-  try { r = binding(endpoint); }
-  catch { ready = null; throw fail(); }
-  if (!r) { ready = null; return false; }
-  if (configuring.size) {
-    // 第一次配置可能此时才写出注册；后续短暂移除注册时也继续保护这个端点。
-    for (const scope of configuring) if (!scope.endpoint) scope.endpoint = endpoint;
-    throw fail("configuring");
-  }
-  if (signal?.aborted) throw signal.reason || new Error("aborted");
-  const epoch = configurationEpoch, key = epoch + ":" + r.key;
+  const key = r.key;
   if (ready?.key !== key) ready = null;
   if (ready && ready.until > Date.now()) return true;
   if ((failures.get(key) || 0) > Date.now()) throw fail("cooldown");
@@ -374,7 +338,6 @@ export async function ensureManagedBridge(p, { signal } = {}) {
     const task = launch(r, "ensure");
     const work = task.promise.then((out) => {
       if (retiring) throw fail("ensure-cancelled");
-      if (configuring.size || epoch !== configurationEpoch) throw fail("configuring");
       let result;
       try { result = JSON.parse(out.trim()); }
       catch { throw fail("ensure-result"); }
@@ -386,7 +349,7 @@ export async function ensureManagedBridge(p, { signal } = {}) {
       failures.delete(key);
       return true;
     }).catch((error) => {
-      if (!retiring && !configuring.size && epoch === configurationEpoch) {
+      if (!retiring) {
         if (failures.size >= 32) failures.delete(failures.keys().next().value);
         failures.set(key, Date.now() + FAILURE_TTL);
       }
@@ -397,7 +360,7 @@ export async function ensureManagedBridge(p, { signal } = {}) {
     inFlight.set(key, { promise: work, cancel: task.cancel });
     work.catch(() => {});
   }
-  return waitFor(inFlight.get(key).promise, signal);
+  return inFlight.get(key).promise;
 }
 
 /**
@@ -442,7 +405,7 @@ function clearStaleRecoveryLock(runtimeDir) {
 }
 
 export async function warmManagedBridge() {
-  if (retiring || configuring.size) return false;
+  if (retiring) return false;
   let stored;
   try { stored = readRegistration(); } catch { return false; }
   const endpoint = endpointOf(stored.value?.endpoint);
@@ -452,12 +415,12 @@ export async function warmManagedBridge() {
   if (!r) return false;
   try { if (fs.lstatSync(path.join(r.runtimeDir, "disabled"))) return false; }
   catch (error) { if (error.code !== "ENOENT") return false; }
-  // 提前发出的用户请求可能正因旧锁失败；等它收尾，避免旧失败在恢复后写回冷却缓存。
-  const epoch = configurationEpoch, key = epoch + ":" + r.key;
+  // 提前发出的启动可能正因旧锁失败；等它收尾，避免旧失败在恢复后写回冷却缓存。
+  const key = r.key;
   const pending = inFlight.get(key);
   if (pending) {
     try { await pending.promise; } catch {}
-    if (retiring || configuring.size || epoch !== configurationEpoch) return false;
+    if (retiring) return false;
     try { if (binding(endpoint)?.key !== r.key) return false; } catch { return false; }
     try { if (fs.lstatSync(path.join(r.runtimeDir, "disabled"))) return false; }
     catch (error) { if (error.code !== "ENOENT") return false; }
@@ -469,7 +432,7 @@ export async function warmManagedBridge() {
   // 清不掉（链接、权限不对、刚被本周期写下）就说明锁还在，不硬启。
   try { if (fs.lstatSync(path.join(state, "recovery.failed"))) return false; }
   catch (error) { if (error.code !== "ENOENT") return false; }
-  try { return await ensureManagedBridge({ custom: true, baseUrl: endpoint }); }
+  try { return await startBridge(r); }
   catch { return false; }
 }
 

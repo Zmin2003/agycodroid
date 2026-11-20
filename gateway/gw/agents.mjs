@@ -6,7 +6,7 @@ import { forEachLine } from "./bigfile.mjs";
 import { neutralizeMarkers } from "./integrity.mjs";
 
 // ── 子代理联络簿：状态外置 ───────────────────────────────────────────
-// 从 claude 的事件流里摘三类事——派出（task_started）、联络（SendMessage）、结束（task_notification / Agent 结果），
+// 从 agy 的事件流里摘三类事——派出（task_started）、联络（SendMessage）、结束（task_notification / Agent 结果），
 // 落盘到 <项目目录>/.agycodroid/agents/<会话前 8 位>/，再给界面推一条很短的 ag 事件。
 //   index.jsonl                  一行一件事（只有网关写）
 //   <序号>-<名字>-<id 前 6 位>/brief.md   交代：派出时的 prompt
@@ -19,7 +19,8 @@ import { neutralizeMarkers } from "./integrity.mjs";
 const LONG = 300;           // 消息正文超过这么多字，替它存成文件
 const WHY_MAX = 80;
 
-/** 给子代理统一追加的规矩（--append-subagent-system-prompt，只在 -p 下生效、会传到孙代理）。
+/** 给子代理统一追加的规矩（Claude 时代是 --append-subagent-system-prompt 旗标，只在 -p 下生效、会传到孙代理；
+ *  agy 没有这条旗标，实际做法是把规矩写进 system-reminder 文本，随用户消息发过去）。
  *  实测 Agent 工具没有名字参数，按名字发消息必失败——这条最要紧 */
 export const SUBAGENT_HINT = [
   "Messaging: SendMessage only reaches \"main\" (the main conversation) or an agent whose agentId you were given (it is in the result when that agent was launched); names do not work, and you cannot address your own parent unless it is main.",
@@ -38,7 +39,7 @@ const SHARED = /^\/(sdcard|storage|mnt)\//;
 const realCwd = (cwd) => { try { return fs.realpathSync(cwd); } catch { return path.resolve(cwd); } };
 export const onShared = (cwd) => SHARED.test(realCwd(cwd) + "/");
 const legacyDir = (cwd, sessionId) => path.join(cwd, ".agycodroid", "agents", String(sessionId).slice(0, 8));
-/** 共享存储上的项目，联络簿的私有根目录（run 把它 --add-dir 给 claude，读汇报不用再要授权） */
+/** 共享存储上的项目，联络簿的私有根目录（在项目目录里，读汇报不用再要授权） */
 const privateAgentsBase = (cwd) => path.join(CFG.home, ".agycodroid", "agents", crypto.createHash("sha256").update(realCwd(cwd)).digest("hex").slice(0, 12));
 export const agentsDir = (cwd, sessionId) => !onShared(cwd) ? legacyDir(cwd, sessionId) : path.join(privateAgentsBase(cwd), String(sessionId).slice(0, 8));
 
@@ -68,7 +69,7 @@ export function putAgentNote(cwd, sessionId, text) {
   try { let cur = ""; try { cur = fs.readFileSync(f, "utf8"); } catch {} fs.writeFileSync(f, text.trim() + "\n" + cur); } catch {}
 }
 
-/** 一轮 run 的联络簿。feed(ev) 吃 claude 的原始事件；emit 推界面 */
+/** 一轮 run 的联络簿。feed(ev) 吃 agy 的原始事件；emit 推界面 */
 export function agentBook(run, { emit }) {
   const byTask = new Map();     // agentId(task_id) → agent
   const byTool = new Map();     // Agent 工具调用 id → agent（子代理自己发的事件靠它认出是谁）
@@ -151,7 +152,7 @@ export function agentBook(run, { emit }) {
     const sum = write(path.join(dir, "summary.md"), `# Sub-agent summary\n\n${rows.join("\n")}\n`);
     book({ k: "summary", ids: all.map((a) => a.id), file: sum });
     // 名字来自事件流/模型给的 description，可能带冒充系统的标签：换全角后再作为下一轮的提醒（200-S-08）
-    try { fs.appendFileSync(path.join(dir, NOTE), `<agycodroid-agents>\nThe ${all.length} sub-agents of an earlier batch have finished. Their briefs and reports are saved as files; read them when you need details instead of digging through ~/.claude:\n${neutralizeMarkers(rows.join("\n"))}\nSummary: ${sum}\n</agycodroid-agents>\n`); } catch {}
+    try { fs.appendFileSync(path.join(dir, NOTE), `<agycodroid-agents>\nThe ${all.length} sub-agents of an earlier batch have finished. Their briefs and reports are saved as files; read them when you need details instead of digging through ~/agyapp-sessions:\n${neutralizeMarkers(rows.join("\n"))}\nSummary: ${sum}\n</agycodroid-agents>\n`); } catch {}
   };
 
   const feed = (ev) => {
@@ -213,7 +214,7 @@ export function agentBook(run, { emit }) {
       }
     }
   };
-  // claude 退出了（答完、被停、被杀）：子代理都在它进程里跑，一起没了。还标着在跑的补一条「已停止」，
+  // agy 退出了（答完、被停、被杀）：子代理都在它进程里跑，一起没了。还标着在跑的补一条「已停止」，
   // 不然联络簿里只有派出没有结束，重进会话翻历史时一直显示在跑
   const close = () => { for (const a of byTask.values()) if (a.status === "running") done(a, "stopped", ""); };
   return { feed, close, agents: byTask };
@@ -232,7 +233,7 @@ export function settleAgentRecs(recs, liveIds = new Set()) {
   return add.length ? [...recs, ...add] : recs;
 }
 
-/** 旧会话（没有联络簿的）：从 claude 自己的记录里推出同样格式的记录，只在内存里给界面看，不往项目里写文件。
+/** 旧会话（没有联络簿的）：从 agy 自己的记录里推出同样格式的记录，只在内存里给界面看，不往项目里写文件。
  *  派出 = subagents/agent-*.meta.json；联络 = 主会话和各子代理记录里的 SendMessage；结束 = meta.finished + 最后一段正文 */
 // 导入的 / 旧代理会话每次打开代理卡都要现推：按文件大小和改动时间记住结果，别回回全量扫（#72）
 const BACKFILL_CACHE = new Map(), BACKFILL_KEEP = 16;

@@ -140,6 +140,13 @@
       catch (e) { list.textContent = t("拉取模型清单失败：{msg}", { msg: e.message }); return false; }
       if (!m.isConnected || want !== browse) return false;
       info = r; ML = r.models || [];
+      // 清单来源如实标注：别让离线示例看起来像真清单
+      const sourceNote = (rr) => rr.sourceNote === "no_models_for_account" ? t("该账户没有可用模型配置。")
+        : rr.source === "live" ? t("清单来自 agy（已登录）。")
+        : rr.source === "stale" ? t("清单是旧缓存（上次拉取失败）。")
+        : t("离线清单：未登录 agy，只显示示例与手填模型。");
+      const noteEl = m.querySelector(".mp-note");
+      if (noteEl) noteEl.textContent = t("只改这个会话，从下一条消息起生效；没单独选过的会话跟着设置里的默认走。") + " " + sourceNote(r);
       if (r.providers) state.provList = r.providers;
       if (!browse) browse = r.provider;
       return true;
@@ -198,13 +205,19 @@
     // 接口：能用的（有 Key、走登录、本机）才列；只有一家就不显示这一行
     const provWrap = m.querySelector(".mp-provwrap"), provBox = m.querySelector(".mp-prov");
     const paintProv = () => {
-      // 正在用的、全局默认的、正在看的那家总要列出来：不然藏了自己在用的那家，用户看不到现在是谁
-      const ps = (state.provList || []).filter((p) => (p.usable && !p.hidden) || [curProv(), globalProv(), browse].includes(p.id));
-      provWrap.classList.toggle("hidden", ps.length < 2);
+      // 接口行不再因“<2 家可用”整个隐藏：只要有 ≥2 家接口就显示（含不可用的，灰掉 + 提示去设置里配好）；
+      // 只有 1 家时也显示一行说明。正在用的、全局默认的、正在看的那家总要列出来。
+      const visible = (state.provList || []).filter((p) => !p.hidden);
+      const ps = visible;
+      provWrap.classList.toggle("hidden", visible.length === 0);
+      if (visible.length <= 1) {
+        provBox.innerHTML = `<div class="tiny mp-provhint">${esc(t("只有一家接口。去设置 → 接口与型号可以再配另一家（Google 登录 / Gemini API Key）。"))}</div>`;
+        return;
+      }
       provBox.innerHTML = `<div class="seg mp-seg mp-provseg">${ps.map((p) =>
         `<button type="button" class="${p.id === browse ? "on" : ""}${p.id === curProv() ? " cur" : ""}${p.usable ? "" : " off"}" data-prov="${esc(p.id)}">${esc(provLabel(p.id))}</button>`).join("")}</div>` +
-        // 总要列出的那几家可能用不了（没登录的官方账户、没下模型的端侧）：灰掉，看它时说一句
-        (ps.some((p) => p.id === browse && !p.usable) ? `<div class="tiny mp-provhint">${esc(t("这一家还没就绪（没登录或没下模型），先到设置里配好"))}</div>` : "") +
+        // 灰掉的那家可能用不了（没登录的官方账户、没配 Key）：说一句去哪配
+        (ps.some((p) => !p.usable) ? `<div class="tiny mp-provhint">${esc(t("灰掉的接口还没就绪（没登录或没配 Key），先到设置 → 接口与型号配好"))}</div>` : "") +
         (browse !== curProv() ? `<div class="tiny mp-provhint">${esc(t("点一个模型，这个会话就换到「{name}」", { name: provLabel(browse) }))}</div>` : "");
       provBox.querySelector("button.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });   // 横滚里选中的那家露出来
     };
@@ -235,7 +248,7 @@
         if (rec.length) html += `<div class="mp-sec">${t("最近用过")}</div>` + rec.map((id) => row(id, meta(ML.find((md) => md.id === id)))).join("") + `<div class="mp-sec">${t("全部 {n} 个", { n: ML.length })}</div>`;
       }
       html += all.slice(0, 300).map((md) => row(md.id, meta(md))).join("");
-      if (!all.length) html += `<div class="tiny">${ML.length ? t("没有匹配的模型") : t("（该厂商不提供模型清单）")}</div>`;
+      if (!all.length) html += `<div class="tiny">${ML.length ? t("没有匹配的模型") : (info.sourceNote === "no_models_for_account" ? t("该账户没有可用模型配置") : t("（该厂商不提供模型清单）"))}</div>`;
       list.innerHTML = html;
     }
     paintList();
@@ -288,8 +301,8 @@
       const sel = $("set-model");
       // 模型是自由填写的 slug 文本框：只回填当前生效的 slug，空 = 默认（由 agy 决定）。不写假的模型清单。
       if (sel) sel.value = r.current || "";
-      // 没单独指定（current=null）的非原生厂商：实际跑的是它的默认型号，没有默认就是清单第一个（和网关同一套）
-      const curId = r.current || (!r.nativeModels && (r.defaultModel || MODELS[0]?.id)) || null;
+      // 没指定模型时别拿清单第一项冒充默认：那只是清单顺序，实际跑的是 agy 自己的默认模型
+      const curId = r.current || r.defaultModel || r.resolvedDefault || null;
       $("model-count").textContent = t("{n} 个", { n: MODELS.length });
       // 自动起名的型号：跟对话 / 关 / 全局这家清单里的某个（存的不在清单里也补一项，别显示成空白）
       const tsel = $("set-titlemodel"), tv = state.settings.titleModel || "";
@@ -309,9 +322,10 @@
         $("model-info").textContent =
                     t("上下文 {n} · 输出上限 {out} · 输入 {mods}", { n: k(cur.context_window), out: k(cur.max_output_tokens), mods: (cur.input_modalities || []).join(" / ") }) +
           t("｜这是默认值；单个会话在输入栏下面的模型标签里另选");
-      } else if (r.nativeModels) {
+      } else if (!r.current && !r.defaultModel) {
+        // 没指定模型 → agy 用自己的默认模型（不是清单里的第一个）；agy models 若标出默认项就写出来
         $("model-info").innerHTML =
-                    t("没指定模型 → <b>由 agy 自己决定</b>（当前默认 <code>{model}</code>）。", { model: esc(r.defaultModel || t("agy 内置默认")) }) +
+                    t("没指定模型 → <b>由 agy 自己决定</b>（当前默认 <code>{model}</code>）。", { model: esc(r.resolvedDefault || t("agy 内置默认")) }) +
           t("<br>在上面填模型 slug 即锁定。");
       } else if (!MODELS.length) {
         $("model-info").innerHTML =
@@ -376,13 +390,14 @@
       t("档位越高思考越久。这是默认值；单个会话在输入栏下面另选");
   }
 
-  async function loadSettings() {
+  async function loadSettings() { return refreshSettings(true); }
+  async function refreshSettings(lists) {
     try {
       // 读的时候有保存在排队 / 在路上，或者读的途中又点了保存：这份快照可能早于那次保存，
       // 拿它整份盖 state.settings 和控件，刚存上的值就在界面上退回去了。等保存排完再重读一次（UIFS-010 第二条）
       const busy = savePending > 0, gen = saveGen;
       const s = await api("/api/settings");
-      if (busy || gen !== saveGen) return saveQ.then(() => loadSettings());
+      if (busy || gen !== saveGen) return saveQ.then(() => refreshSettings(lists));
       state.settings = s;
       $("set-toolperm").value = state.settings.toolPermission || "request-review";
       $("set-agentmode").value = state.settings.agentMode || "";
@@ -397,18 +412,16 @@
       renderPermBar();
       renderDirs();
       fillMem();
-      await loadProviders();
+      if (lists) await loadProviders();
       // 清单拉成功时下拉框已经按网关算好的「实际生效」选上了；再拿原始设置盖一遍，
       // 存的值这家不支持（比如 high，这家只有 low/medium）就成了空白（审查 D-03）。拉失败才退回原始值
-      if ((await loadModels()) === false) {
+      if (lists && (await loadModels()) === false) {
         $("set-model").value = state.settings.model || "";
         $("set-effort").value = state.settings.effort || "";
       }
       const pe = $("set-parallel");
       if (pe && document.activeElement !== pe) { pe.max = state.settings.maxParallelCap || 16; pe.value = state.settings.maxParallel || 3; }
       $("set-workisland").checked = state.settings.workIsland === true;
-      loadWorkIsland();
-      loadExecMode();
     } catch {}
   }
 
@@ -499,8 +512,11 @@
   // 执行方式：存在 files/.exec-mode，重启网关生效（36 的包选「直接执行」网关会拒）
   let execPid = 0;
   async function loadExecMode() {
+    const visit = setVisit;
+    if (!setVisible("run", visit)) return;
     try {
       const r = await api("/api/exec-mode");
+      if (!setVisible("run", visit)) return;
       execPid = r.pid || 0;
       $("set-exec").value = r.pref;
       $("set-exec").querySelector('option[value="direct"]').disabled = !!r.must;
@@ -510,6 +526,7 @@
     } catch {}
   }
   $("set-exec").addEventListener("change", async (e) => {
+    const visit = setVisit;
     try {
       await api("/api/exec-mode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: e.target.value }) });
       if (confirm(t("执行方式已保存。现在重启网关让它生效吗？打开的终端会断开。"))) {
@@ -519,6 +536,7 @@
         const old = execPid;
         for (let i = 0; i < 40; i++) {
           await new Promise((r) => setTimeout(r, 750));
+          if (!setVisible("run", visit)) break;
           try { const r = await api("/api/exec-mode"); if (r.pid && r.pid !== old) break; } catch {}
         }
       }
@@ -529,9 +547,35 @@
   const extSync = () => { $("set-extimg").checked = uiGet("extImg") !== "auto"; };
   extSync(); document.addEventListener("cc:ui", (e) => { if (e.detail.key === "extImg" || e.detail.key == null) extSync(); });
   $("set-extimg").addEventListener("change", (e) => uiSet("extImg", e.target.checked ? null : "auto"));
+  // 紧凑底栏开关（W1↔W3 共享约定）：localStorage 键 agycodroid-compact-chat-bar，"1"/"0"，
+  // 默认 "0"（48px 大触控）。这里只负责开关本身：写键 + 实时给 documentElement 加/去 compact-bar 类；
+  // 读键与紧凑样式由 W3 在 01-core.js / style.css 里做。index.html 不动，这行由 JS 插在「外链图片」那行后面。
+  const COMPACT_BAR_KEY = "agycodroid-compact-chat-bar";
+  function paintCompactBar() {
+    let on = false;
+    try { on = localStorage.getItem(COMPACT_BAR_KEY) === "1"; } catch {}
+    document.documentElement.classList.toggle("compact-bar", on);
+    const sw = $("set-compact-bar"); if (sw) sw.checked = on;
+  }
+  (function () {
+    const anchor = $("set-extimg")?.closest(".srow");
+    if (!anchor || $("set-compact-bar")) return;
+    const row = document.createElement("div");
+    row.className = "srow";
+    row.innerHTML = `<div class="sl"><b>${esc(t("紧凑底栏"))}</b><p>${esc(t("聊天输入栏底下的按钮行收紧一点。默认关闭，按钮保持 48px 大触控。"))}</p></div><div class="sc"><input type="checkbox" class="sw" id="set-compact-bar"></div>`;
+    anchor.after(row);
+    row.querySelector("#set-compact-bar").addEventListener("change", (e) => {
+      try { localStorage.setItem(COMPACT_BAR_KEY, e.target.checked ? "1" : "0"); } catch {}
+      paintCompactBar();
+    });
+  })();
+  paintCompactBar();
   // 工作岛起没起来（195-P.4）：检测要几秒（pm 再加 am 探一次），开关 / 重试之后隔几秒再看
   async function loadWorkIsland() {
+    const visit = setVisit;
+    if (!setVisible("agy", visit)) return;
     const r = await api("/api/work-island").catch(() => null), box = $("wi-state");
+    if (!setVisible("agy", visit)) return;
     const show = !!(r && r.supported && r.wanted && !r.started && !r.detecting && r.error);
     box.classList.toggle("hidden", !show);
     if (!show) return;
@@ -539,7 +583,10 @@
       ? t("系统不允许本应用启动工作岛服务，所以没有显示。") + (r.error.detail ? "（" + r.error.detail + "）" : "")
       : t("没检测到「工作岛」应用：装好后点重试。");
   }
-  const wiLater = () => { for (const ms of [2000, 6000, 10000]) setTimeout(loadWorkIsland, ms); };
+  const wiLater = () => {
+    const visit = setVisit;
+    if (setVisible("agy", visit)) for (const ms of [2000, 6000, 10000]) setTimeout(() => { if (setVisible("agy", visit)) loadWorkIsland(); }, ms);
+  };
   $("wi-retry").addEventListener("click", async () => {
     await post("/api/work-island/retry").catch((e) => toast(e.message, true));
     $("wi-state").classList.add("hidden");
@@ -586,9 +633,7 @@
     } catch (e) {
       // 一次都没拿到过：说清楚读取失败、给重试，别只剩空标题（审查 F-008）
       state.capsErr = e.message || "?";
-      if (!state.caps) { renderCaps(); $("cap-tiles").innerHTML = `<div class="tile big"><span class="k">${esc(t("能力清单读取失败：{msg}", { msg: state.capsErr }))}</span><button class="btn sm ghost" id="caps-retry">${esc(t("重试"))}</button></div>`; }
-      // 读成过、这次刷新失败：旧清单照摆，顶上标明是上次的并给重试（审查 F-008 复测）
-      else renderCaps();
+      renderCaps();
     }
   }
 
@@ -620,6 +665,11 @@
   const capRows = (arr, fn, empty) => arr?.length ? arr.map(fn).join("") : '<div class="row"><span class="tiny">' + (empty || t("（暂无数据，先发一条消息即可从 CLI 获取）")) + "</span></div>";
 
   function renderCaps() {
+    if (!pageVisible("caps")) return;   // 聊天补全仍在启动时取得清单，只推迟整页 DOM。
+    if (!state.caps && state.capsErr) {
+      $("cap-tiles").innerHTML = `<div class="tile big"><span class="k">${esc(t("能力清单读取失败：{msg}", { msg: state.capsErr }))}</span><button class="btn sm ghost" id="caps-retry">${esc(t("重试"))}</button></div>`;
+      return;
+    }
     const c = state.caps || {};
     setPageSub("caps", c.version ? t("Antigravity CLI {ver} · 这一轮能用的", { ver: c.version }) : t("这一轮 Antigravity 能用的"));
     const cmds = c.slashCommands || [];

@@ -29,7 +29,7 @@
 //    preview     HTML 预览                              envfacts    本机实况
 //    terminal    应用内终端                             feedback    反馈（GitHub Issue 草稿）
 //    git         git 可视化                             extensions  插件 / 技能 / MCP / Hooks / 官方目录
-//    components  可选组件、gh 登录                      local       端侧小模型与模型下载
+//    components  可选组件、gh 登录                      local       端侧小模型与模型下载（E12 已全删：见 docs/download-sources.md）
 //    custom      自定义组件                             office      Office 文档
 //    modules     模块化工具包（加装 / 卸载单个模块）
 //
@@ -46,6 +46,7 @@ import { API_KEY, PROVIDER, routeProviders } from "./gw/providers.mjs";
 import { fetchModels, normEffort, routeModels } from "./gw/models.mjs";
 import { listSessions, routeSessions } from "./gw/sessions.mjs";
 import { killTree, reapOrphans, routeAntigravity } from "./gw/agy.mjs";
+import { routeGeminiStub } from "./gw/gemini-stub.mjs";   // E13 最小验证 (c)：本机 Gemini 桩端点
 import { expireTrash } from "./gw/sessionops.mjs";
 import { routeCaps, builtinCommands } from "./gw/caps.mjs";
 import { NEXT, sendJson, serveStatic } from "./gw/http.mjs";
@@ -65,7 +66,6 @@ import { routeLogin } from "./gw/login.mjs";
 import { routeRun } from "./gw/run.mjs";
 import { routeOffice } from "./gw/office.mjs";
 import { routePdfTools } from "./gw/pdf-tools.mjs";
-import { routeLocal } from "./gw/local.mjs";
 import { routeUsage } from "./gw/usage.mjs";
 import { routeDevside } from "./gw/devside.mjs";
 import { routeFeedback } from "./gw/feedback.mjs";
@@ -93,7 +93,7 @@ import { COOKIE, SESSION, UI_HOST, cookieHostOk, denyLog, denyReason, localAddr,
 import { startWorkIsland, stopWorkIslandSync } from "./gw/work-island.mjs";
 
 // 各模块的路由函数，按原来分支的先后排；返回 NEXT 表示不归它管
-const ROUTES = [routeAntigravity, routeFeedback, routeUsage, routeCaps, routeProviders, routeSettings, routeProjects, routeBookmarks, routeFonts, commandRoutes(builtinCommands), routeUi, routeSched, routeSessModel, routeBackfill, routeMerge, routeProfile, routeLineage, routeArchive, routeSessions, routeExtensions, routeModels, routeTerminal, routeComponents, routeModules, routeOrphans, routeStorage, routeCustom, routeGit, routeLocal, routeOffice, routePdfTools, routeArc, routeFiles, routePreview, routeBus, routeQueue, routeDevside, routeLogin, routeRun, routeNotices, routeReconcile];
+const ROUTES = [routeAntigravity, routeGeminiStub, routeFeedback, routeUsage, routeCaps, routeProviders, routeSettings, routeProjects, routeBookmarks, routeFonts, commandRoutes(builtinCommands), routeUi, routeSched, routeSessModel, routeBackfill, routeMerge, routeProfile, routeLineage, routeArchive, routeSessions, routeExtensions, routeModels, routeTerminal, routeComponents, routeModules, routeOrphans, routeStorage, routeCustom, routeGit, routeOffice, routePdfTools, routeArc, routeFiles, routePreview, routeBus, routeQueue, routeDevside, routeLogin, routeRun, routeNotices, routeReconcile];
 
 // ── 路由 ──────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -164,8 +164,8 @@ syncGitSafe(PROJECTS.map((p) => p.path));
 try { fs.mkdirSync(CFG.home, { recursive: true }); } catch {}
 try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
 // streamfix 已死（M5）：它修的是 Anthropic /v1/messages SSE，agy 不走 ANTHROPIC_BASE_URL，
-// 聊天路径上再也不会有它要修的流——启动时不再挂。streamfix.mjs 本身留着（测试还在直接测它），
-// run.mjs 里那行 SWALLOW_HOOKS 注册也留着（stab2-h-run-pad 测试依赖，钩子本身无害）。
+// 聊天路径上再也不会有它要修的流——启动时不再挂。streamfix.mjs 已删（只测它的测试随之删了），
+// run.mjs 里那行 SWALLOW_HOOKS 注册也已删（stab2-h-run-pad 测试随之删了）。
 
 // 界面专用地址：同一个处理函数再听一份。听不上（被别的应用抢先占了）App 核身份时会发现不是真网关、不交凭据；
 // 这里每 2 秒再试，对方一放手就接回来（核身份绑了监听地址，对方转发到 127.0.0.1 也过不了，见 access.mjs 的 proof）

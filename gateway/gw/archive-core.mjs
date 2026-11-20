@@ -1,5 +1,5 @@
 // 建档 · 纯逻辑（不碰网关配置，方便单测）：题名校验、章节划分、交档落在哪一章。
-// 规划见 claude-workspace/session-lineage-plan.md §9；规范原文在 gateway/archive/spec.<语言>.md。
+// 规范原文在 gateway/archive/spec.<语言>.md。
 //
 // 章节：会话从头到第 1 次压缩是第 1 章，第 k 次压缩到第 k+1 次压缩是第 k+1 章；最后一章还在进行。
 // 压缩的位置来自脉络索引（lineage-core 的 compacts：压缩摘要那条消息的 uuid / 时间 / 字节位置）。

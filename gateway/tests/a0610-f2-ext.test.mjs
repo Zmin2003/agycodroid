@@ -45,9 +45,12 @@ test("J.1（agy）：钩子是 Claude Code 专属，/api/ext/hooks/file 直接 4
   assert.match(r.body.error, /钩子是 Claude Code 专属，Antigravity CLI 没有/);
   const bad = await go.get("/api/ext/hooks/file?scope=project&dir=" + encodeURIComponent("/tmp/not-the-workspace"));
   assert.equal(bad.status, 400, "项目范围也不再接受——钩子整个不支持");
-  // 前端那套钩子界面留着没删（只是不再调用），引用还在
+  // 前端那套旧钩子界面已删（集成轮删了 08-extensions.js 里留着的 HK/renderHooks/hkForm 等约 335 行，
+  // 只留 loadExtHooks 写明不支持）：引用不在了，改断言“已删 + 不支持文案还在”
   const src = fs.readFileSync(path.join(APP, "08-extensions.js"), "utf8");
-  assert.match(src, /\/api\/ext\/hooks\/file\?scope=/);
+  assert.doesNotMatch(src, /\/api\/ext\/hooks\/file\?scope=/);
+  assert.doesNotMatch(src, /renderHooks|hkForm|HK_EV/);
+  assert.match(src, /Hooks 是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持/);
 });
 
 test("J.10（agy）：技能不支持——列表与删除都 400，孤儿目录留在盘上", async () => {
@@ -123,9 +126,10 @@ test("197-2.9（agy）：内置 hook 脚本装不上——钩子路由整个 400
   assert.equal(r.status, 400);
   assert.equal(r.body.ok, false);
   assert.match(r.body.error, /钩子是 Claude Code 专属，Antigravity CLI 没有/);
-  // 前端钩子界面的旧提示串还在（界面留着没删，只是不再调用）
+  // 前端钩子界面的旧提示串已随旧界面一起删了（见 J.1）
   const src = fs.readFileSync(path.join(APP, "08-extensions.js"), "utf8");
-  assert.match(src, /内置脚本没装上：\{msg\}，规则没有保存/);
+  assert.doesNotMatch(src, /内置脚本没装上：\{msg\}，规则没有保存/);
+  assert.match(src, /Hooks 是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持/);
 });
 
 test("前端扩展域源码断言（J.9/J.11/M.6/N.4-custom/X.2；J.2/J.12/N.4-market/N.4-skills 已随插件市场与技能界面撤掉，改断言 agy 的新形态）", () => {
@@ -141,5 +145,5 @@ test("前端扩展域源码断言（J.9/J.11/M.6/N.4-custom/X.2；J.2/J.12/N.4-m
   assert.match(s, /自定义组件列表读取失败：\{msg\}/, "N.4 自定义读失败仍隐藏");
   // N.4-market 旧断言已删：市场不读了；N.4-skills 旧断言已删：技能列表直接写不支持，不调接口
   assert.match(s, /技能是 Claude Code 专属，Antigravity CLI 没有，agycodroid 不支持/, "N.4-skills 技能列表直接写不支持");
-  assert.ok((s.match(/r\.ok === false/g) || []).length >= 3, "X.2 200+{ok:false} 未按失败处理");
+  assert.ok((s.match(/r\.ok === false/g) || []).length >= 2, "X.2 200+{ok:false} 未按失败处理（旧 hooks 界面删后剩 2 处）");
 });

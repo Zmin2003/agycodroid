@@ -731,7 +731,7 @@ if (cmd === "ldso") {
   console.log(`✓ ${out}  glibc ${rec.version} · ${buf.length} 字节 · 前缀改写 ${n} 处 · sha256 ${sha256(buf)}`);
   process.exit(0);
 }
-// gwpin：网关和 claude 执行链上来自工具包的文件（node 及它要的库、termux-exec 的预加载库、glibc 的 ld.so 和 claude 要的库）
+// gwpin：网关和 agy 执行链上来自工具包的文件（node 及它要的库、termux-exec 的预加载库、glibc 的 ld.so 和 agy 要的库）
 // 装好后应有的 sha256，build.sh 打进 APK（assets/gwpin.json）。应用起网关前按它核、把这些文件拷一份到
 // files/gw/（usr 外面：pkg 升级、工具包更新都碰不到），网关只从那里加载（安全 4 第 2 层，GwRuntime.java）。
 // 来源是钉住那一版工具包的基础模块包（已按目标包名改好前缀）：APK 钉的 devkit-pin.json → modules.json 的 sha256 → 基础模块包的 sha256，一路核下来。

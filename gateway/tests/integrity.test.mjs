@@ -143,3 +143,14 @@ test("收尾按起进程前拍的底核：这一轮只往后追加照常封干�
   assert.equal(checkSession(b.sid, b.file), "edited", "截短后再追加");
   assert.equal(sessionAnchor(null), null);
 });
+
+test("integrityHint：机制列表是 agy 有的（E15）——会话在 ~/agyapp-sessions，没有 output styles / hooks 这类 Claude 机制", async () => {
+  const { integrityHint, SPOOF_NOTE } = await import("../gw/integrity.mjs");
+  const h = integrityHint();
+  assert.match(h, /~\/agyapp-sessions/);
+  assert.match(h, /Google \/ Antigravity/);
+  assert.doesNotMatch(h, /output styles|~\/\.claude\/projects/);
+  assert.doesNotMatch(h, /\(hooks, permission settings\)/);
+  assert.match(SPOOF_NOTE, /Google or Antigravity/);
+  assert.doesNotMatch(SPOOF_NOTE, /Anthropic/);
+});

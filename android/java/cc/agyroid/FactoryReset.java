@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
  * 用户级 Antigravity CLI 配置、agycodroid 设置、shell 启动文件这些「每轮自动生效的东西」整体挪走，应用文件按安装包重铺，网关重启。
  *
  * 不删：挪走的都放进 ~/.agyapp-reset/<时间>/，按原来的相对路径摆，要找回就照路径拷回去。
- * 不动：会话记录（~/.claude/projects 下的 .jsonl）、工作区、开发工具包和组件、ssh、git 配置、导出的东西。
+ * 不动：会话记录（~/agyapp-sessions 下的 .jsonl）、工作区、开发工具包和组件、ssh、git 配置、导出的东西。
  * 厂商配置和密钥（agyapp-providers.json、Antigravity 登录凭据）默认保留，对话框里勾上才一起挪走。
  *
  * 只由原生对话框触发（MainActivity.askFactoryReset）：网关、脚本只能请求弹框，不能直接执行。
@@ -24,9 +24,10 @@ import java.nio.charset.StandardCharsets;
 final class FactoryReset {
     private static final String TAG = "agycodroid-reset";
 
-    /** home 下整个挪走的（文件或目录）。shell 启动文件同 guard/cc-guard.mjs 认的那一组 */
+    /** home 下整个挪走的（文件或目录）。shell 启动文件是常规的那一组（bash/zsh 启动文件） */
     private static final String[] MOVE = {
         "agyapp-settings.json", "agyapp-userconf.json", ".agyapp-userconf", ".agycodroid",
+        ".gemini/antigravity-cli/settings.json",
         ".claude/CLAUDE.md", ".claude/CLAUDE.local.md", ".claude/rules", ".claude/skills", ".claude/plugins", ".claude/commands",
         ".claude/agents", ".claude/output-styles", ".claude/settings.json", ".claude/settings.local.json", ".claude/keybindings.json",
         ".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zprofile", ".zshenv", ".inputrc",

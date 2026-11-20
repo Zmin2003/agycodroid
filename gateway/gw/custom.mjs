@@ -17,8 +17,9 @@ import { loadState, writeAtomic } from "./statefile.mjs";
 // 放在 ~/.agycodroid/custom/<id>/（app/ 原样解开的程序，deps/ 自动补的 glibc 库），不进 $PREFIX：换工具包不会被冲掉。
 // 入口包装在 ~/.agycodroid/bin（agyEnv 的 PATH 里，排在工具包 bin 之后，所以不许和工具包的命令重名）；
 // 技能在 ~/.claude/skills/custom-<id>/，Antigravity 由此知道有这个程序、怎么跑起来的。
-// 适配按 ELF 的解释器分：glibc（经本应用的 ld-linux + seccomp 垫片）、bionic（安卓原生，设库路径）、
-// 静态（套 seccomp 监督器）；x86 / 32 位 / musl 跑不了，分析时如实说。缺的 glibc 库从 Termux 的 glibc 仓库补。
+// 适配按 ELF 的解释器分：glibc（经本应用的 ld-linux + exec-shim/nodump 预加载，不是 seccomp 垫片）、
+// bionic（安卓原生，设库路径）、静态（没有自动的 seccomp 兜底，撞上 seccomp 手动套 enosys-run）；
+// x86 / 32 位 / musl 跑不了，分析时如实说。缺的 glibc 库从 Termux 的 glibc 仓库补。
 const CUSTOM_DIR = PREFIX ? path.join(CFG.home, ".agycodroid", "custom") : "";
 const CUSTOM_BIN = PREFIX ? path.join(CFG.home, ".agycodroid", "bin") : "";
 const CUSTOM_REC = "agycodroid-custom.json";
@@ -479,12 +480,12 @@ ${lines.join("\n")}
 
 - 入口是 \`~/.agycodroid/bin/<命令>\` 的包装脚本（在 PATH 里），程序文件在 \`${rec.dir}/app/\`${rec.readme ? "，自带说明 `" + path.join(rec.dir, "app", rec.readme) + "`" : ""}。
 - glibc 程序的库按这个顺序找：${rec.libs.map((l) => "`" + l + "`").join(" → ")}。${rec.deps.length ? "\n- 从 Termux glibc 仓库补进来的库（在 deps/）：" + rec.deps.map((d) => `${d.soname}（${d.pkg} ${d.version}）`).join("、") + "。" : ""}
-- 包装脚本会摘掉 termux-exec 的 LD_PRELOAD，并套上 seccomp 垫片（安卓会拦一些系统调用，垫片把它们改成返回 ENOSYS）。
+- 包装脚本会摘掉 termux-exec 的 LD_PRELOAD；glibc 程序经加载器启动时还会套上 \`--preload\`（exec-shim + nodump，不是 seccomp 垫片）。静态二进制没有自动的 seccomp 兜底，撞上 seccomp 要手动套 \`enosys-run\`（见「出错时」）。
 
 ## 出错时
 
 - \`error while loading shared libraries: libXXX.so\`：缺库。告诉用户缺哪个；Termux glibc 仓库有的，可以在扩展页删掉这个组件后重新导入（导入时会自动补）。
-- \`Bad system call\` 或直接被杀：撞了安卓的 seccomp。确认设置里「静态程序兼容」开着。
+- \`Bad system call\` 或直接被杀：撞了安卓的 seccomp。静态程序手动套一层再跑：\`enosys-run <程序> [参数...]\`（\`-f\` 连它拉起的子进程一起罩住）；glibc / bionic 程序一般不受这事影响。
 - 程序找不到自己的数据文件：有的程序按 /proc/self/exe 找自己的位置，经加载器启动时那会指向加载器。可以在扩展页对这个组件改用 patchelf 方式重装。
 - 程序要图形界面（X11 / Wayland）：这里没有桌面，跑不了界面，只能用它的命令行功能。
 - 不要改 \`${rec.dir}\` 里的文件，也不要往 \`~/.agycodroid/bin\` 里手写脚本；要改就让用户在扩展页重新导入。

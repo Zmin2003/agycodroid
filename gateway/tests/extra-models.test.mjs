@@ -1,5 +1,6 @@
 // Gemini 接口卡另加型号（11-07 群友：第三方端口加好之后只有默认那一个型号，想再加几个）
-// agy 的模型清单是静态的：文档示例 gemini-3.8-flash-medium + 接口卡里用户自己加的 extraModels，
+// agy 的模型清单第一来源是 `agy models`（已登录时拉取，见 models.mjs）；未登录 / 拉取失败时
+// 回静态兜底：文档示例 gemini-3.8-flash-medium + 接口卡里用户自己加的 extraModels，
 // defaultModel 不自动进清单；agyEnv 不再下发 ANTHROPIC_MODEL / CLAUDE_CODE_MAX_CONTEXT_TOKENS。
 import "../gw/config.mjs";   // 放最前：没走 scripts/test.mjs（没有临时 home）就在这里拦下，下面一行都不跑
 import { test } from "node:test";

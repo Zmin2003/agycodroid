@@ -1,5 +1,7 @@
 // F5（11-09）：扩展「停用 / 启用」——技能走 skillOverrides（发行版打包时跳过关掉的）、
-// 用户级 MCP 停用 = 定义存进名单再 claude mcp remove，启用 = add-json 加回；组件 / 模块只记名单
+// 用户级 MCP 停用 = 定义存进名单再 agy mcp remove，启用 = add-json 加回；组件 / 模块只记名单。
+// E08（V3 未验证）：~/.claude.json 不再是定义来源，停用须有可验证的定义；
+// listMcp 解析不上的输出带 raw 回来，不再静默空列表。
 import { PATHS, CFG } from "../gw/config.mjs";
 import "./fixtures/uc-baseline.mjs";
 import { test, after } from "node:test";
@@ -9,15 +11,15 @@ import path from "node:path";
 import { _setSealed } from "../gw/edition.mjs";
 
 const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "f5-"));
-const cli = path.join(root, "fake-cli.sh"), argLog = path.join(root, "argv.log");
+const cli = path.join(root, "fake-cli.sh"), argLog = path.join(root, "argv.log"), listOutFile = path.join(root, "list-out.txt");
 const sh = fs.existsSync("/system/bin/sh") ? "/system/bin/sh" : "/bin/sh";
 let exitCode = 0;
-const writeCli = () => fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done > '${argLog}'\nprintf '\\n' >> '${argLog}'\nexit ${exitCode}\n`, { mode: 0o700 });
+const writeCli = () => fs.writeFileSync(cli, `#!${sh}\nfor a in "$@"; do printf '%s\\n' "$a"; done > '${argLog}'\nprintf '\\n' >> '${argLog}'\nif [ "$1" = "mcp" ] && [ "$2" = "list" ] && [ -f '${listOutFile}' ]; then cat '${listOutFile}'; fi\nexit ${exitCode}\n`, { mode: 0o700 });
 const prev = { agy: PATHS.agy };
 PATHS.agy = cli;
 const { _extForTest, SKILLS_DIR } = await import("../gw/extensions.mjs");
 const { sealPrepare, sealCleanup } = await import("../gw/seal.mjs");
-const { extOff, EXT_OFF_FILE } = await import("../gw/extoff.mjs");
+const { extOff, saveExtOff, EXT_OFF_FILE } = await import("../gw/extoff.mjs");
 const X = _extForTest;
 const H = (r) => path.join(CFG.home, r);
 const put = (f, s) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s); };
@@ -58,32 +60,50 @@ test("发行版：只认开 / 关；关掉的技能不打进 user 插件", async
   await X.setSkillMode("f5a", "on");
 });
 
-test("MCP 停用：定义先进名单（0600）再 mcp remove -s user；启用用 add-json 加回、出名单；remove 失败名单退回", async () => {
+test("MCP 停用 / 启用：.claude.json 里的定义不再认（E08）；停用名单里的启用用 add-json 加回、出名单", async () => {
   _setSealed(false);
   const def = { command: "node", args: ["srv.mjs"], env: { K: "v" } };
+  // .claude.json 里有定义也不给停：agy 不读它，拿它当“用户级”证据是错的
   put(H(".claude.json"), JSON.stringify({ mcpServers: { f5m: def } }));
   exitCode = 0; writeCli();
-  assert.equal((await X.disableMcp("f5m")).ok, true);
-  assert.deepEqual(lastArgv(), ["mcp", "remove", "-s", "user", "f5m"]);
-  assert.deepEqual(extOff().mcp.f5m, def);
+  assert.equal((await X.disableMcp("f5m")).ok, false);
+  assert.equal(extOff().mcp.f5m, undefined);
+  // 定义放进停用名单（可验证的来源），再走启用
+  const off = extOff(); off.mcp.f5m = def;
+  assert.equal(saveExtOff(off), true);
   assert.equal(fs.statSync(EXT_OFF_FILE).mode & 0o777, 0o600);
   // 名单里的条目在列表里出现成「已停用」（假 CLI 的 mcp list 什么也不输出）
-  const li = (await X.listMcp()).find((m) => m.name === "f5m");
+  const li = (await X.listMcp()).items.find((m) => m.name === "f5m");
   assert.equal(li.disabled, true); assert.equal(li.target, "node srv.mjs [env: K]", "环境变量只亮名字，不亮值");
   assert.equal((await X.enableMcp("f5m")).ok, true);
   const a = lastArgv();
   assert.deepEqual(a.slice(0, 5), ["mcp", "add-json", "-s", "user", "f5m"]);
   assert.deepEqual(JSON.parse(a[5]), def);
   assert.equal(extOff().mcp.f5m, undefined);
-  // remove 失败：名单退回，不留「停了却没停」的条目
-  exitCode = 1; writeCli();
-  assert.equal((await X.disableMcp("f5m")).ok, false);
-  assert.equal(extOff().mcp.f5m, undefined);
-  // 不是用户级的（.claude.json 里没有）不给停；名字乱填拒绝
+  // 没有可验证定义的（.claude.json 里没有、也不在名单里）不给停；名字乱填拒绝
   assert.equal((await X.disableMcp("nope")).ok, false);
   assert.equal((await X.disableMcp("-rf")).ok, false);
   assert.equal((await X.enableMcp("nope")).ok, false);
   exitCode = 0; writeCli();
+});
+
+test("listMcp：解析不上的输出带 raw 回来，不再静默空列表；解析出的条目 user 是 null（未知）", async () => {
+  exitCode = 0; writeCli();
+  fs.writeFileSync(listOutFile, "not a real mcp list\nsecond line\n");
+  const bad = await X.listMcp();
+  assert.deepEqual(bad.items, []);
+  assert.match(bad.raw, /not a real mcp list/);
+  fs.writeFileSync(listOutFile, "myserver: npx foo - ✔ Connected\n");
+  const good = await X.listMcp();
+  assert.equal(good.items.length, 1);
+  assert.equal(good.items[0].name, "myserver");
+  assert.equal(good.items[0].ok, true);
+  assert.equal(good.items[0].user, null, "来源未验证，不知道是不是用户加的，不误判成 false");
+  assert.equal(good.raw, null);
+  fs.rmSync(listOutFile, { force: true });
+  const empty = await X.listMcp();
+  assert.deepEqual(empty.items, []);
+  assert.equal(empty.raw, null, "本来就没输出时 raw 也是空，不瞎报");
 });
 
 test("组件 / 模块：没装的组件、不认识的模块、乱填的 kind 都拒绝，名单不动", async () => {

@@ -53,7 +53,7 @@ final class Updater {
 
     final Context ctx;
     final Env env;
-    private final Item app = new Item("app", "agycodroid"), devkit = new Item("devkit", "开发工具包"), claude = new Item("claude", "Antigravity CLI");
+    private final Item app = new Item("app", "agycodroid"), devkit = new Item("devkit", "开发工具包"), agy = new Item("agy", "Antigravity CLI");
     private volatile boolean checking;
     private volatile String lastError = "";
     /** APK 已下好但因为工具包在忙而推迟安装；user=用户点的（走系统确认），否则静默规则 */
@@ -184,11 +184,11 @@ final class Updater {
     // 换渠道 / 固定版本在等用户确认降级时：新设置只放在内存里（见 set），确认了才写盘。
     // 拒绝、出错、进程被杀，盘上都还是原来的设置（10-31 六轮核验：先写盘再回滚，挡不住并发请求和杀进程）
     private volatile String ovCh, ovPin;
-    String latestAntigravity() { return claude.latest; }
-    // claude.latest 是哪个渠道查出来的：拿 latest 判降级时，得是同一个渠道的结果才作数
+    String latestAntigravity() { return agy.latest; }
+    // agy.latest 是哪个渠道查出来的：拿 latest 判降级时，得是同一个渠道的结果才作数
     private volatile String latestCh = "";
     boolean switchingNow() { return switching.get(); }
-    boolean claudeInstalled() { refreshCurrent(); return !claude.current.isEmpty(); }
+    boolean agyInstalled() { refreshCurrent(); return !agy.current.isEmpty(); }
     boolean pinned() { return "pinned".equals(channel()) && !pinVer().isEmpty(); }
 
     // ── 安装包方案：targetSdk 28（默认，兼容最好）/ 36（系统不让装 28 时用）。同一包名、同一钥匙、同一版本号，互相覆盖安装数据都在 ──
@@ -222,9 +222,9 @@ final class Updater {
     JSONObject status() throws Exception {
         refreshCurrent();
         // 结果只在内存里：进程重启后第一次有人来看（打开设置页）就顺手查一次（只查，不自动装）
-        if (!checking && "unknown".equals(app.state) && "unknown".equals(claude.state)) checkAsync(true);
+        if (!checking && "unknown".equals(app.state) && "unknown".equals(agy.state)) checkAsync(true);
         JSONArray a = new JSONArray();
-        for (Item i : new Item[]{app, devkit, claude}) a.put(i.json());
+        for (Item i : new Item[]{app, devkit, agy}) a.put(i.json());
         return new JSONObject().put("ok", true).put("auto", auto()).put("channel", channel()).put("pin", pinVer())
             .put("flavor", flavor()).put("flavorPref", flavorPref()).put("only36", only36()).put("wantFlavor", wantFlavor())
             .put("lastCheck", prefs().getLong("lastCheck", 0)).put("checking", checking).put("error", lastError).put("items", a)
@@ -272,7 +272,7 @@ final class Updater {
             try {
                 ovPin = toPin; ovCh = toCh;
                 checkAgy();
-                String to = claude.latest;
+                String to = agy.latest;
                 // 只按版本判，不看状态：「安装中」时状态不更新，以前借这个跳过确认直接写盘（10-31 七轮核验）
                 boolean down = agyDowngrade(to);
                 // 换渠道 / 固定版本落到比已装的旧：和 upd_apply 指定旧版本一样要用户点头（10-31 四轮复核：这是降级的另一条路）
@@ -282,12 +282,12 @@ final class Updater {
                     prefs().edit().putString("channel", toCh).putString("pin", toPin).commit();
                     keep = true;
                     ovCh = null; ovPin = null;
-                    if ("available".equals(claude.state)) apply("claude", true, to);   // 装的就是确认过的这一版
+                    if ("available".equals(agy.state)) apply("agy", true, to);   // 装的就是确认过的这一版
                 }
             } catch (Exception ex) {
                 // 查不到版本（断网）：latest 的选择照样记下（比已装的旧时 agyOlder 会挡住自动更新）；固定版本不查网，到不了这里
                 if (!"pinned".equals(toCh)) { prefs().edit().putString("channel", toCh).commit(); keep = true; }
-                claude.set("error", Tr.t("连不上官方 manifest：") + ex.getMessage());
+                agy.set("error", Tr.t("连不上官方 manifest：") + ex.getMessage());
             } finally {
                 ovCh = null; ovPin = null;
                 if (!keep) { try { checkAgy(); } catch (Exception ignored) {} }
@@ -300,8 +300,8 @@ final class Updater {
         try { app.current = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0).versionName; } catch (Exception ignored) {}
         String b = installedDevkitBase();
         devkit.current = !b.isEmpty() ? tagOf(b) : !installedDevkitSha().isEmpty() ? Tr.t("本地安装") : env.devkitReady() ? Tr.t("未知") : "";
-        try { claude.current = new File(Os.readlink(new File(env.home, ".local/share/agycodroid/agy/current").getPath())).getName(); }
-        catch (Exception e) { claude.current = ""; }
+        try { agy.current = new File(Os.readlink(new File(env.home, ".local/share/agycodroid/agy/current").getPath())).getName(); }
+        catch (Exception e) { agy.current = ""; }
     }
 
     /**
@@ -478,7 +478,7 @@ final class Updater {
             }
             else try { checkDevkit(rels); } catch (Exception e) { devkit.set("error", e.getMessage()); }
         }
-        try { checkAgy(); } catch (Exception e) { claude.set("error", Tr.t("连不上官方 manifest：") + e.getMessage()); }
+        try { checkAgy(); } catch (Exception e) { agy.set("error", Tr.t("连不上官方 manifest：") + e.getMessage()); }
         // 检查失败（连不上 GitHub，rels == null）时不更新 lastCheck：循环 30 分钟后就重试，别让一次失败锁死 6 小时（M6）
         if (rels != null) prefs().edit().putLong("lastCheck", System.currentTimeMillis()).apply();
         if (auto() && !manual && env.devkitReady()) autoApply();      // 首装期间不自动装任何东西，Antigravity CLI 也由首装流程来装
@@ -727,33 +727,33 @@ final class Updater {
             // 钉的版本比已装的旧：不自动装回去（10-31 八轮核验：钉住当前版本不用确认，之后一升级，自动更新就会悄悄退回来）。
             // 用户确认过的降级在确认时当场就装了；之后要退回钉的版本，点安装会走降级确认
             refreshCurrent();
-            agyOlder = !claude.current.isEmpty() && cmpVer(pin, claude.current) < 0;
-            claude.latest = pin; latestCh = "pinned";
-            if (env.agyOff() && !env.agyReady()) { if (!"installing".equals(claude.state)) claude.set("missing", ""); return; }
-            if (!"installing".equals(claude.state)) {
+            agyOlder = !agy.current.isEmpty() && cmpVer(pin, agy.current) < 0;
+            agy.latest = pin; latestCh = "pinned";
+            if (env.agyOff() && !env.agyReady()) { if (!"installing".equals(agy.state)) agy.set("missing", ""); return; }
+            if (!"installing".equals(agy.state)) {
                 String info = v != null && cmpVer(v, pin) != 0 ? Tr.f("已固定 {0} · latest 已到 {1}", pin, v) : Tr.f("已固定 {0}", pin);
-                if (pin.equals(claude.current)) claude.set("uptodate", info);
-                else claude.set("available", Tr.f("固定到 {0}", pin));
+                if (pin.equals(agy.current)) agy.set("uptodate", info);
+                else agy.set("available", Tr.f("固定到 {0}", pin));
             }
             return;
         }
         if (v == null) throw new IOException(why);
-        claude.latest = v; latestCh = ch;
+        agy.latest = v; latestCh = ch;
         // 用户在设置里卸了：只报「未安装」，不当成「有更新」（那样自动更新、换渠道都会把它装回去）
-        if (env.agyOff() && !env.agyReady()) { if (!"installing".equals(claude.state)) claude.set("missing", ""); return; }
+        if (env.agyOff() && !env.agyReady()) { if (!"installing".equals(agy.state)) agy.set("missing", ""); return; }
         // 已装的版本要和所选渠道的版本「一致」，而不只是「不比它旧」：
         // manifest 的版本比已装的小（官方回滚）时，判成「有更新」会悄悄降级，这里先按渠道切换处理，等用户自己点
-        if (!"installing".equals(claude.state)) {
-            int c = cmpVer(v, claude.current);
-            agyOlder = c < 0 && !claude.current.isEmpty();
+        if (!"installing".equals(agy.state)) {
+            int c = cmpVer(v, agy.current);
+            agyOlder = c < 0 && !agy.current.isEmpty();
             String tag = channel().equals("latest") ? Tr.t("latest 渠道") : "";
-            if (c == 0) claude.set("uptodate", tag);
-            else if (c > 0 || claude.current.isEmpty()) claude.set("available", tag);
-            else claude.set("available", Tr.f("切回 {0} 渠道：将换成 {1}（比当前的 {2} 旧）", channel(), v, claude.current));
+            if (c == 0) agy.set("uptodate", tag);
+            else if (c > 0 || agy.current.isEmpty()) agy.set("available", tag);
+            else agy.set("available", Tr.f("切回 {0} 渠道：将换成 {1}（比当前的 {2} 旧）", channel(), v, agy.current));
             // 维护者标成「有已知问题」的版本：先不自动装，写明原因；用户自己点更新照样装
             String bad = c != 0 ? knownBad(v) : null;
             agyHeld = bad != null;
-            if (bad != null) claude.set("available", Tr.f("{0} 有已知问题，没有自动更新：{1}", v, bad));
+            if (bad != null) agy.set("available", Tr.f("{0} 有已知问题，没有自动更新：{1}", v, bad));
         }
     }
 
@@ -796,10 +796,10 @@ final class Updater {
         if (!loopOn) return;
         ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
         boolean unmetered = cm != null && !cm.isActiveNetworkMetered();
-        if ("available".equals(claude.state) && unmetered && !agyHeld && !agyOlder && !switching.get()) {
+        if ("available".equals(agy.state) && unmetered && !agyHeld && !agyOlder && !switching.get()) {
             // 版本只读一次，装之前再按已装的现读比一遍：几个字段可能是两次检查交错写的，别凭拼起来的状态装回旧版（10-31 八轮核验）
-            String v = claude.latest;
-            if (!v.isEmpty() && !agyDowngrade(v)) apply("claude", false, v);
+            String v = agy.latest;
+            if (!v.isEmpty() && !agyDowngrade(v)) apply("agy", false, v);
         }
         if ("available".equals(app.state)) apply("app", false);              // 几 MB，什么网都下
         else if ("ready".equals(app.state)) maybeSilentInstallApp();
@@ -839,28 +839,37 @@ final class Updater {
         String v = version == null ? "" : version.trim();
         // 渠道名（latest）：换到别的渠道、或者认不出这个渠道现在是哪一版，都按可能降级处理
         if (v.equals("latest"))
-            return !claude.current.isEmpty() && (!v.equals(channel()) || !v.equals(latestCh) || claude.latest.isEmpty() || agyDowngrade(claude.latest));
-        return v.matches("\\d+\\.\\d+\\.\\d+[\\w.+-]*") && !claude.current.isEmpty() && cmpVer(v, claude.current) < 0;
+            return !agy.current.isEmpty() && (!v.equals(channel()) || !v.equals(latestCh) || agy.latest.isEmpty() || agyDowngrade(agy.latest));
+        return v.matches("\\d+\\.\\d+\\.\\d+[\\w.+-]*") && !agy.current.isEmpty() && cmpVer(v, agy.current) < 0;
+    }
+
+    /** 更新项 id：Antigravity CLI 的内部 id 是 "agy"。
+     *  旧 id "claude" 只作入境兼容：网关（devside.mjs / reconcile.mjs）与设置页（10-settings-device.js）
+     *  还没改名时仍发 "claude"，这里归一化后继续走；网关侧改名完成后这个别名即可删掉（R1）。
+     *  出境（status() 的 items[].id、日志里的 "agy → …"）一律是 "agy"。 */
+    static String normalizeItemId(String id) {
+        return "claude".equals(id) ? "agy" : id;
     }
 
     // synchronized + 起线程前先把状态占上（审查 #105 05-007）：每个 Priv 连接一条线程，两次请求挨得近时，
     // 以前都只看到旧状态、各起一份下载/安装，共用 .part 与临时目录互相踩
     synchronized JSONObject apply(String id, boolean user, String version) {
-        Item it = "app".equals(id) ? app : "devkit".equals(id) ? devkit : "claude".equals(id) ? claude : null;
+        id = normalizeItemId(id);
+        Item it = "app".equals(id) ? app : "devkit".equals(id) ? devkit : "agy".equals(id) ? agy : null;
         JSONObject r = new JSONObject();
         try {
             if (it == null) return r.put("ok", false).put("message", Tr.t("未知项 ") + id);
             if ("downloading".equals(it.state) || "installing".equals(it.state)) return r.put("ok", true).put("message", Tr.t("进行中"));
-            if (it == claude) {
+            if (it == agy) {
                 String ver = version == null ? "" : version.trim();
                 if (!ver.isEmpty() && !ver.matches("latest|\\d+\\.\\d+\\.\\d+[\\w.+-]*"))
                     return r.put("ok", false).put("message", Tr.f("版本号不对：{0}（填 latest 或 2.1.100 这样的版本号）", ver));
-                if (ver.isEmpty()) ver = claude.latest;
+                if (ver.isEmpty()) ver = agy.latest;
                 if (ver.isEmpty()) return r.put("ok", false).put("message", Tr.t("先检查更新"));
                 final String v = ver;
-                claude.set("installing", "");
+                agy.set("installing", "");
                 new Thread(() -> installAgy(v), "upd-agy").start();
-                return r.put("ok", true).put("message", claude.current.isEmpty() ? Tr.f("开始安装 Antigravity CLI {0}", v) : Tr.t("开始更新 Antigravity CLI"));
+                return r.put("ok", true).put("message", agy.current.isEmpty() ? Tr.f("开始安装 Antigravity CLI {0}", v) : Tr.t("开始更新 Antigravity CLI"));
             }
             // 工具包「出错」时的「重试」一律重新检查：清单的签名在检查里核，不能拿出错前留下的地址直接下（审查 A5）
             if (it == devkit && "error".equals(it.state)) { checkAsync(true); return r.put("ok", true).put("message", Tr.t("正在重新检查更新")); }
@@ -1056,18 +1065,24 @@ final class Updater {
     }
 
     /** 卸载之后（MainActivity.uninstallUi）：状态改成「未安装」 */
-    void agyRemoved() { refreshCurrent(); claude.set("missing", ""); }
+    void agyRemoved() { refreshCurrent(); agy.set("missing", ""); }
 
     private void installAgy(String ver) {
-        claude.set("installing", "");
-        claude.done = 0; claude.total = 0;
+        agy.set("installing", "");
+        agy.done = 0; agy.total = 0;
+        // 设置页触发的安装走这条 upd-agy 线程：先确保前台服务在，安装全程别在后台被系统杀掉（R1-a）。
+        // 首装走 MainActivity.boot，那边起服务在先。服务拉不起来也照装，但记一笔
+        if (!GatewayService.start(ctx)) Log.w(TAG, "upd-agy：前台服务没拉起来，安装时请保持应用在前台");
         try {
-            int rc = installer(claude).run(env.bin("bash").getPath(), new File(env.app, "scripts/install-agy.sh").getPath(), ver);
+            // 安装输出落盘 files/install-agy.log（和首装的 Installer.installAgy 同一份）：失败时诊断包里有过程可查
+            int rc = installer(agy).run(Installer.RUN_TIMEOUT_MS, new File(env.files, Installer.AGY_INSTALL_LOG_FILE),
+                env.bin("bash").getPath(), new File(env.app, "scripts/install-agy.sh").getPath(), ver);
             refreshCurrent();
-            if (rc != 0) throw new IOException(Tr.t("install-agy.sh 返回 ") + rc);
+            if (rc != 0) throw new IOException(Tr.t("install-agy.sh 返回 ") + rc
+                + (rc == 137 ? Tr.t("（安装进程被系统结束；重试前保持应用在前台，安装日志见 install-agy.log）") : ""));
             env.agyOffFlag().delete();        // 装上了：以后照常跟着更新走
-            claude.set("uptodate", Tr.f("已更新到 {0}（下一轮对话起生效）", claude.current));
-        } catch (Exception e) { claude.set("error", e.getMessage()); }
+            agy.set("uptodate", Tr.f("已更新到 {0}（下一轮对话起生效）", agy.current));
+        } catch (Exception e) { agy.set("error", e.getMessage()); }
     }
 
     // ── 工具包替换 ───────────────────────────────────────────────────────

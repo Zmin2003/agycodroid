@@ -1,11 +1,12 @@
-// 发行版白名单回填：封口（edition.mjs）之后 claude 自己什么配置都不读，这里把用户要的那些检查过、经官方旗标交回去。
+// 发行版白名单回填（目前是死代码：没有任何运行时调用方，只有测试在直接测它）。
 //
-//   CLAUDE.md / CLAUDE.local.md / .claude/rules（用户级 + 工作目录往上各级，@ 引用展开）→ 拼成一个文件 --append-system-prompt-file
-//   用户级与项目的 skill / 斜杠命令 / 子代理 / 输出风格 → 拷进私有目录合成插件「user」→ --plugin-dir（名字带 user: 前缀）
-//   扩展页装的插件（user 范围、已启用）→ 拷一份、去掉钩子与设置 → --plugin-dir
-//   MCP（.claude.json 全局与本项目的）→ --mcp-config；项目 .mcp.json 不回填
-//   用户设置里的权限规则、几个无害键 → 并进网关那份 --settings
-//   自动记忆：用 autoMemoryDirectory 钉住目录，起进程前把整个目录查一遍（claude 要往里写，没法拷副本）
+// 本文件原先的设想是：封口（edition.mjs）之后 claude 自己什么配置都不读，这里把用户要的那些检查过、
+// 经官方旗标交回去（--append-system-prompt-file / --plugin-dir / --mcp-config / --settings）。
+// 但 agy 是否接受这些旗标从未在真机上验证过（V2），而 edition.mjs 的结论是封口就是“起之前重写
+// settings.json”这一件事（writeAgySettings），不再拼 argv。所以 sealPrepare 拼出来的 args
+// 现在谁也不消费：不要在未验证 V2 的情况下把它接回运行路径，也不要删本文件（测试钉着它的扫描与回填逻辑，
+// 待 V2 验证后由用户决定是恢复调用还是删除）。
+// 终端里的 agy 同样不在此列：终端会话目前不走 writeAgySettings，处于未封口状态（见 W2 报告）。
 //
 // 进上下文的文字都过 breach.mjs，命中整轮不跑、列出文件与行，不给「保留」。
 // 钩子一概不回填：钩子是任意命令，输出能直接进上下文，内容检查管不住（用户拍板 11-05：只认签名组件带的，目前组件都不带钩子）。
@@ -96,7 +97,7 @@ function projectChain(cwd) {
   return i >= 0 ? all.slice(i) : all.slice(-1);
 }
 /** 登记过的项目目录。直接读 agyapp-projects.json，不 import projects.mjs：
- *  终端里的 agy 经 guard/cc-seal.mjs 也走这里，那边不该拉起会话、终端那一整套模块 */
+ *  （原先终端里的 agy 经 guard/cc-seal.mjs 也走这里；cc-seal.mjs 已删，终端那一整套模块同样不该拉起会话） */
 function registeredRoots() {
   try {
     const j = JSON.parse(readSmallFile(path.join(home(), "agyapp-projects.json"), 4 << 20) || "[]");
@@ -458,11 +459,12 @@ function scanMemory(dir) {
 }
 
 /**
- * 起一轮前准备回填。返回 { args, settings, block, memDir, memFp, notes }
+ * 起一轮前准备回填（目前无运行时调用方，见文件头）。返回 { args, settings, block, memDir, memFp, notes }
  *   block：{ found } —— 有说明文件 / skill / 记忆命中，整轮不跑
- *   args：要加给 claude 的旗标；settings：并进 --settings 的键（sealArgv 会把几份合成一份）
+ *   args：原先要加给 claude 的旗标（--append-system-prompt-file / --plugin-dir / --mcp-config）；
+ *     agy 是否接受这些旗标未验证（V2），目前不拼给任何进程
  */
-// claude 2.1.311 自带的输出风格（名字不分大小写）
+// Claude Code 2.1.311 时代的内置输出风格名（名字不分大小写；agy 是否认这些名字未验证）
 const BUILTIN_STYLES = new Set(["default", "concise", "explanatory", "learning", "proactive"]);
 export function sealPrepare({ cwd, runId, outputStyle = "" }) {
   if (!sealed()) return { args: [], settings: null, block: null };
@@ -543,7 +545,7 @@ export function sealRecheck(prep) {
   return mem.found.length ? { found: mem.found } : null;
 }
 
-/** 清旧东西：一天前的单轮文件（终端起的 claude 没有「结束」可挂）、七天没用过的插件副本 */
+/** 清旧东西：一天前的单轮文件（终端起的 agy 没有「结束」可挂）、七天没用过的插件副本 */
 let lastPrune = 0;
 function prune() {
   const now = Date.now();

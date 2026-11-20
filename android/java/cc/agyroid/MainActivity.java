@@ -208,7 +208,8 @@ public class MainActivity extends Activity {
         }
         // 先起前台服务再干活：安装要下载几百 MB，期间用户一切走，
         // 没有前台服务的进程几秒内就会被冻结/回收（实测切一下前台下载就断了）。
-        GatewayService.start(this);
+        // 拉不起来也照装，但提醒一句：这时安装没保护，务必保持应用在前台（R1-a）
+        if (!GatewayService.start(this)) say(Tr.t("（前台服务没拉起来，安装时请别切走，系统可能在后台杀掉安装进程）"));
         new Thread(() -> {
             try {
                 Installer ins = new Installer(env, new Installer.Progress() {
@@ -317,6 +318,10 @@ public class MainActivity extends Activity {
                 return Tr.t("下载的文件没通过校验（可能被网络或代理改了内容），坏的那份已经删掉。点「重试」会重新下载。");
             if (m.contains("HTTP 403") || m.contains("HTTP 429"))
                 return Tr.f("下载服务器暂时拒绝了请求（{0}），多半是访问太频繁。过几分钟再点「重试」。", m);
+            // rc=137：安装进程被系统结束（SIGKILL），不是超时（超时是 124），也不是下载本身失败。
+            // 可能原因：切后台被系统/厂商清理杀掉、内存不足、或网关清理误杀（后者 R1 已修）。重试会断点续传
+            if (m.contains("rc=137"))
+                return Tr.t("安装进程被系统结束了（rc=137）：可能是在后台被系统或厂商清理杀掉，或内存不足。重试前请保持 agycodroid 在前台、关掉不用的应用释放内存；已下载的部分会断点续传，不用从头下。");
         }
         return raw;
     }
@@ -543,7 +548,7 @@ public class MainActivity extends Activity {
         if (id == null) return;
         boolean clip = Tr.t("设备工具：读取剪贴板").equals(cmd);
         // 发起方是按对方进程的环境变量认的，对方能伪造：只作参考
-        String by = "claude".equals(who) ? "Antigravity" : "terminal".equals(who) ? Tr.t("终端") : "cc-mem".equals(who) ? "cc-mem" : "gateway".equals(who) ? Tr.t("agycodroid 网关接口（Antigravity 也能调用）") : Tr.t("不明程序");
+        String by = "agy".equals(who) ? "Antigravity" : "terminal".equals(who) ? Tr.t("终端") : "cc-mem".equals(who) ? "cc-mem" : "gateway".equals(who) ? Tr.t("agycodroid 网关接口（Antigravity 也能调用）") : Tr.t("不明程序");
         // 设置页打开「特权命令免确认」：整段是免责说明，标题和按钮换成对应的说法。按 Priv 给的来路认，不看正文（审查 0601 高-2）；
         // 也写上是谁要打开的 —— 设置页之外的程序也能发这个请求，用户没在设置里点就该拒（低-8）
         String noAskHead = Tr.t("特权命令不再逐条确认（风险自负）");
@@ -1261,7 +1266,7 @@ public class MainActivity extends Activity {
                 public void step(String m) { say(m); }
                 public void bytes(long d, long t) { progress(d, t); }
             });
-            if ("claude".equals(item)) {
+            if ("agy".equals(Updater.normalizeItemId(item))) {
                 try {
                     ins.uninstallAgy();
                     Ledger.add(env, "uninstall", true, Tr.t("卸载 Antigravity CLI"), null);
@@ -1957,9 +1962,9 @@ public class MainActivity extends Activity {
             @android.webkit.JavascriptInterface public void pickDevkit(String k) { if (!Env.bridgeOk(k)) return;
                 ui.post(() -> { pickWait = null; try { startActivityForResult(devkitPickIntent(), REQ_DEVKIT); } catch (Exception ignored) {} });
             }
-            /** 设置页「卸载」：devkit / claude。确认框在页面里弹过了 */
+            /** 设置页「卸载」：devkit / agy（旧设置页仍发 "claude"，归一化后继续走）。确认框在页面里弹过了 */
             @android.webkit.JavascriptInterface public void uninstall(String k, String item) { if (!Env.bridgeOk(k)) return;
-                if ("devkit".equals(item) || "claude".equals(item)) uninstallUi(item);
+                if ("devkit".equals(item) || "agy".equals(Updater.normalizeItemId(item))) uninstallUi(item);
             }
             /** 界面连不上网关（事件流一直断着）：服务被停掉了就拉起来 */
             @android.webkit.JavascriptInterface public void ensureGateway(String k) { if (!Env.bridgeOk(k)) return; ui.post(() -> recoverGateway(false)); }
