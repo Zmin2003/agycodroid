@@ -1,6 +1,6 @@
 {
  "target": "cc.agyroid",
- "key": "gwpin3:devkit-2026.11.19:17fa7047fed6eda72da2e96a1ae6f935246f7f66041811c10d97a3d3b99860a3",
+ "key": "gwpin3:devkit-2026.11.20:06fd1ee5b3fcef17ae4e79a8607c0827220d73c5d7ebefc51ca30b26ab7e549a",
  "gw": {
   "node": {
    "src": "bin/node",

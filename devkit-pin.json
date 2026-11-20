@@ -1,26 +1,26 @@
 {
- "tag": "devkit-2026.11.19",
- "base": "https://github.com/Zmin2003/agycodroid/releases/download/devkit-2026.11.19/",
+ "tag": "devkit-2026.11.20",
+ "base": "https://github.com/Zmin2003/agycodroid/releases/download/devkit-2026.11.20/",
  "target": "cc.agyroid",
  "compat": 1,
  "gz": {
   "file": "devkit-cc.agyroid.tar.gz",
-  "sha256": "95eb720c42b6225033a1907148c7212d212c8128f85d52fdca073636a312165a",
-  "bytes": 689166803
+  "sha256": "d6fe1ed7f3ecd5a9207046473d932f0cf9be42f2ce585ebc52b3ebaa538c3ddb",
+  "bytes": 689177360
  },
  "tar": {
   "file": "devkit-cc.agyroid.tar",
-  "sha256": "aa23ebfec15698adbdfdc89db5a4356e3879114db889b0a052500e03ce35d175",
-  "bytes": 1903267328
+  "sha256": "5ab367a6cf7c3890ad3a071c41326157c63be85c231c904a392a6462290a81db",
+  "bytes": 1903276544
  },
  "lock": {
   "file": "devkit.lock.json",
-  "sha256": "8d6dc705f18fe39d3daf4f8fad97aa89a35a3458c0877023cad2cc1684be7eec",
+  "sha256": "a87b7604dbc12c0fb0050d5fff7dab2668181f4b884d5eeff3f02eb1733ca6b2",
   "bytes": 113605
  },
  "modules": {
   "file": "modules.json",
-  "sha256": "17fa7047fed6eda72da2e96a1ae6f935246f7f66041811c10d97a3d3b99860a3",
-  "bytes": 72903
+  "sha256": "06fd1ee5b3fcef17ae4e79a8607c0827220d73c5d7ebefc51ca30b26ab7e549a",
+  "bytes": 72905
  }
 }
