@@ -318,6 +318,10 @@ final class Updater {
         } catch (Exception e) { return null; }
     }
 
+    /** APK 内置钉子的 target（期望装给哪个包名）与 tag（期望的工具包版本），取不到为空串 */
+    private String pinTarget() { JSONObject p = devkitPin(ctx); return p == null ? "" : p.optString("target"); }
+    private String pinTag() { JSONObject p = devkitPin(ctx); return p == null ? "" : p.optString("tag"); }
+
     /**
      * 本地工具包文件是哪一版：拿它的 sha256（gz 或 tar 都行）对已知清单 —— 本 APK 自带的钉子、刚查到的最新版、
      * GitHub 上最近几个 devkit-* 的 devkit.lock.json。认出来返回 {tag, base, target, compat, sha256(gz), tarSha256}；
@@ -467,7 +471,11 @@ final class Updater {
             catch (Exception e) { app.set("error", e.getMessage()); }
             // 首装还没完成（工具包没装好）就别查工具包：那时读不到已装的模块，planModules 会按「整包用户」规划成全部模块，
             // 自动更新在 Wi‑Fi 下把它们全下好，首装刚按勾选装完，启动流程又把这份「已下载的更新」装上 —— 勾了两个、装了八个（群友 10-24）
-            if (!env.devkitReady()) devkit.set("uptodate", Tr.t("首次安装进行中"));
+            if (!env.devkitReady()) {
+                // M2：进行中与失败是两种状态——first-run 失败标记在就说明失败了（附原因），别再写成“首次安装进行中”
+                String[] st = devkitStateFor(env.firstrunFailedText(), env.devkitProblem());
+                devkit.set(st[0], st[1]);
+            }
             else try { checkDevkit(rels); } catch (Exception e) { devkit.set("error", e.getMessage()); }
         }
         try { checkAgy(); } catch (Exception e) { claude.set("error", Tr.t("连不上官方 manifest：") + e.getMessage()); }
@@ -1159,6 +1167,28 @@ final class Updater {
         }
     }
 
+    /** devkit 没就绪时该显示的状态（M2，纯逻辑）：first-run 失败标记在 = 失败（附标记里的包名与原因）；
+     *  没标记 = 还在首次安装进行中 */
+    static String[] devkitStateFor(String firstrunMarker, String problem) {
+        String m = firstrunMarker == null ? "" : firstrunMarker.trim();
+        if (!m.isEmpty()) {
+            String reason = problem == null || problem.isEmpty() ? Tr.t("首次配置没跑完，请在设置里修复工具包") : problem;
+            return new String[] { "error", Tr.f("首次安装失败：{0}；{1}", m.replace("\n", "、"), reason) };
+        }
+        return new String[] { "uptodate", Tr.t("首次安装进行中") };
+    }
+
+    /** verify 失败账本的 detail（M2）：期望 target、实际 target、来源、期望/实际版本与缺 / 改动数。
+     *  两条校验线（这里的开发工具包文件校验、GatewayService 的网关运行库清单校验）各记各的 detail，别混成一条 */
+    static JSONObject verifyLedgerDetail(String expectedTarget, String actualTarget, String source,
+            String expectedBase, String installedBase, int total, int missing, int changed, JSONArray samples) {
+        try {
+            return new JSONObject().put("expectedTarget", expectedTarget).put("actualTarget", actualTarget)
+                .put("source", source).put("expectedBase", expectedBase).put("installedBase", installedBase)
+                .put("total", total).put("missing", missing).put("changed", changed).put("samples", samples);
+        } catch (Exception e) { return new JSONObject(); }
+    }
+
     // ── 校验与修复 ─────────────────────────────────────────────────────────
     /** 后台核对已装工具包。full=false：只看文件在不在（启动时自动跑）；full=true：逐个算哈希（用户点的） */
     /** 检查更新时工具包正在校验、被跳过了：校验一结束就补查一次，不然它会一直显示「未检查」 */
@@ -1193,8 +1223,9 @@ final class Updater {
                             (full ? Tr.t("完整校验") : Tr.t("快速自检")) + Tr.t("：") + (!v.optBoolean("manifest") ? Tr.t("没有文件清单，无法核对")
                                 : nBad == 0 ? Tr.f("{0} 个文件完好", v.optInt("total"))
                                 : Tr.f("缺 {0} 个、内容不对 {1} 个", v.optInt("missing"), v.optInt("changed"))),
-                            new JSONObject().put("installed", tagOf(installedDevkitBase())).put("total", v.optInt("total"))
-                                .put("missing", v.optInt("missing")).put("changed", v.optInt("changed")).put("samples", v.optJSONArray("samples")));
+                            verifyLedgerDetail(pinTarget(), ctx.getPackageName(), Tr.t("devkit-pin.json（APK 内置）"),
+                                pinTag(), tagOf(installedDevkitBase()), v.optInt("total"), v.optInt("missing"),
+                                v.optInt("changed"), v.optJSONArray("samples")));
                     if (!v.optBoolean("manifest")) {
                         // B10 补漏：快速核对也别把核对期间探活刚记的 damaged 写回旧状态（同下 bad==0 分支）
                         boolean probeHit = !full && "damaged".equals(devkit.state);

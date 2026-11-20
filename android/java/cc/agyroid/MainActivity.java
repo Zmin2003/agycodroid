@@ -219,6 +219,9 @@ public class MainActivity extends Activity {
                 // 只在真有残局时才停网关：界面被系统回收后重新打开也会走到这里，那时网关可能正在跑任务，
                 // 无条件停一下就把用户的任务杀了。正在替换工具包（另一个界面实例发起的）时也别插手
                 Updater upd0 = Updater.get(this);
+                // BLOCKER：recover() 在重跑磁盘上旧的 first-run.sh，旧脚本确定性失败时 boot 别直接 abort——
+                // APK 钉的已是新版工具包的话，继续往下走装新版；否则重试按钮只是死循环
+                boolean skipDoomedRecover = false;
                 if (!upd0.devkitMoving() && ins.needsRecovery()) {
                     GatewayService.pause(true);
                     try {
@@ -228,20 +231,38 @@ public class MainActivity extends Activity {
                         }
                     } catch (Exception e) {
                         Ledger.add(env, "recover", false, Tr.t("启动时恢复失败：") + e.getMessage(), null);
-                        throw e;
+                        org.json.JSONObject pin = Updater.devkitPin(this);
+                        if (Installer.shouldSkipDoomedFirstRunRetry(env.usr,
+                                pin == null ? null : pin.optString("tag", null),
+                                pin == null ? null : pin.optString("base", null),
+                                ins.firstRunFailed.containsKey(Installer.BASE_MODULE_ID))) {
+                            skipDoomedRecover = true;
+                            say(Tr.t("上次的首次配置失败了，但新版开发工具包已经有了，跳过重跑旧版，直接装新版…"));
+                        } else throw e;
                     } finally { GatewayService.pause(false); }
                 }
                 Updater.get(this).dropStagedIfInstalled();
                 ins.dropTrash();                  // 卸载删到一半被打断的残骸
                 // 界面与网关先部署：0.6.7 起 first-run 的 bash 预加载的 exec-shim-bionic 在 APK 原生库目录里，不再依赖这一步；先部署照旧无害
                 deployAssets();
-                if (!env.devkitReady()) {
-                    installFirstDevkit(ins);
+                // H5：boot 首次配置分支经 Installer.bootDevkitAction 决策（纯函数，见 InstallerFirstRunTest）：
+                // 仅模块失败时 devkitReady() 为 false（失败标记在），必须先判模块失败，否则会全量重装
+                String devkitAction = Installer.bootDevkitAction(env.devkitReady(), ins.moduleOnlyFirstRunFailure(), ins.firstRunMissed());
+                if ("install".equals(devkitAction)) {
+                    if (skipDoomedRecover && upd0.devkitStaged()) {
+                        // BLOCKER：新版工具包已经下好了，直接装，不再重新下载
+                        upd0.applyDevkit(ins);
+                        say(Tr.t("✓ 开发工具包已更新"));
+                    } else installFirstDevkit(ins);
                     say(Tr.t("✓ 开发工具包就绪"));
                     Ledger.add(env, "install", true, Tr.t("首次安装开发工具包"), null);
                     // 旧版在首装期间可能已经按「全部模块」下好了一份同版本的更新：装好以后它就是多余的，别在下面被当成更新装上
                     Updater.get(this).dropStagedIfInstalled();
-                } else if (ins.firstRunMissed()) {
+                } else if ("repair-modules".equals(devkitAction)) {
+                    // H5：只有模块 first-run 失败（基础块已就绪）：补跑失败的模块，不全量重装
+                    try { ins.repairFirstRun(); Ledger.add(env, "repair", true, Tr.t("补跑了首次配置失败的模块"), null); }
+                    catch (Exception e) { Ledger.add(env, "repair", false, Tr.t("补跑首次配置失败：") + e.getMessage(), null); }
+                } else if ("repair-missed".equals(devkitAction)) {
                     // 0.4.17 及以前首装 36 的包时 first-run 没跑成（见 Installer.firstRunMissed）：补跑一次
                     try { ins.repairFirstRun(); Ledger.add(env, "repair", true, Tr.t("补跑了首次安装时没跑成的首次配置"), null); }
                     catch (Exception e) { Ledger.add(env, "repair", false, Tr.t("补跑首次配置失败：") + e.getMessage(), null); }
@@ -272,7 +293,9 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 android.util.Log.e("agycodroid-setup", "安装失败", e);
                 say("✗ " + humanize(e));
-                say(Tr.t("（下载过的部分都留着。处理好之后点「重试」，会从这一步接着来）"));
+                // H5：这句原来是“会从这一步接着来”，两种路径下都不成立（基础块失败重跑全部 first-run，
+                // 仅模块失败则全量重装）。现在：下载续传、配好的块跳过，只从没配完的块接着来
+                say(Tr.t("（下载过的部分都留着，已配好的模块不会重配。处理好之后点「重试」，会从没配完的模块接着来）"));
                 ui.post(() -> { retry.setVisibility(View.VISIBLE); stuck.setVisibility(View.VISIBLE); });
             }
         }, "boot").start();

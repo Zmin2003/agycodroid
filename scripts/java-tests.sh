@@ -5,7 +5,7 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${TMPDIR:-$HOME/.cache}/agycodroid-java-tests
 rm -rf "$OUT"; mkdir -p "$OUT"
-javac -nowarn -d "$OUT" "$ROOT/android/tests/stub/android/util/Base64.java" "$ROOT/android/java/cc/agyroid/Ed25519.java" "$ROOT/android/tests/cc/codroid/Ed25519Vectors.java"
+javac -nowarn -d "$OUT" "$ROOT/android/tests/stub/android/util/Base64.java" "$ROOT/android/tests/stub/org/json/JSONObject.java" "$ROOT/android/tests/stub/org/json/JSONArray.java" "$ROOT/android/tests/stub/org/json/JSONException.java" "$ROOT/android/java/cc/agyroid/Ed25519.java" "$ROOT/android/tests/cc/codroid/Ed25519Vectors.java"
 java -cp "$OUT" cc.agyroid.Ed25519Vectors
 javac -nowarn -d "$OUT" "$ROOT/android/java/cc/agyroid/PrivRules.java" "$ROOT/android/tests/cc/codroid/PrivRulesTest.java"
 java -cp "$OUT" cc.agyroid.PrivRulesTest
@@ -22,6 +22,9 @@ if [ -f "$AJAR" ]; then
   # 05-工具包重装丢组件：同一版重装时组件自己 dpkg 包清单里的文件要跟着搬（只造 MANIFEST，不碰 org.json）
   javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/InstallerCarryTest.java"
   java -cp "$OUT:$AJAR" cc.agyroid.InstallerCarryTest
+  # H3/H4/H5/M1/M7 + BLOCKER/H2：first-run 失败记录、超时、断点续跑、卡住设备的新版救砖路由（不碰 org.json：android.jar 的是桩）
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/InstallerFirstRunTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.InstallerFirstRunTest
   # 网关取回：put(swap) 流式改前缀（GwRuntime.swapCopy），不整文件读内存
   javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/GwRuntimeSwapTest.java"
   java -cp "$OUT:$AJAR" cc.agyroid.GwRuntimeSwapTest
@@ -32,4 +35,17 @@ if [ -f "$AJAR" ]; then
   java -cp "$OUT:$AJAR" cc.agyroid.UpdaterCmpVerTest
   javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/ShareScrubTest.java"
   java -cp "$OUT:$AJAR" cc.agyroid.ShareScrubTest
+  # 1.0.2 探测与诊断修复（H6 / M2 / M3 / M5）：纯逻辑 + 真 socket / 真进程 / 真文件，不碰安卓运行时
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/EnvHostProbeTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.EnvHostProbeTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/EnvProbeTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.EnvProbeTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/GwRuntimeClassifyTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.GwRuntimeClassifyTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/UpdaterDevkitStateTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.UpdaterDevkitStateTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/ShareDiagTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.ShareDiagTest
+  javac -nowarn -d "$OUT" -cp "$OUT:$AJAR" "$ROOT/android/tests/cc/codroid/GatewayServiceGwBlockedTest.java"
+  java -cp "$OUT:$AJAR" cc.agyroid.GatewayServiceGwBlockedTest
 else echo "跳过 WhatsNewPickTest（没有 android.jar）"; fi

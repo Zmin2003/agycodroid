@@ -207,6 +207,7 @@ public final class Share extends ContentProvider {
         Tr.t("包里有：\n") +
         Tr.t("· 版本与设备：agycodroid / Android 版本、机型、芯片、剩余空间\n") +
         Tr.t("· 开发工具包：装的是哪一版（校验哈希）、更新与自检状态\n") +
+        Tr.t("· 首次配置失败原因与 first-run 日志尾部（有的话）\n") +
         Tr.t("· 最近的日志：本应用的系统日志、网关日志的最后一段\n") +
         Tr.t("· 修复账本：安装、校验、修复做过哪些、成没成\n") +
         Tr.t("· 网络：开没开 VPN，应用连不连得上几个下载源（只记结果）\n") +
@@ -260,15 +261,143 @@ public final class Share extends ContentProvider {
             sb.append("SoC ").append(Build.VERSION.SDK_INT >= 31 ? Build.SOC_MODEL : "?").append("  内核 ").append(System.getProperty("os.version")).append('\n');
             StatFs st = new StatFs(env.files.getPath());
             sb.append("私有目录剩余 ").append(st.getAvailableBytes() >> 20).append(" MB\n");
-            sb.append("开发工具包就绪 ").append(env.devkitReady()).append("  agy 就绪 ").append(env.agyReady()).append('\n');
+            boolean ready = env.devkitReady();
+            sb.append("开发工具包就绪 ").append(ready).append("  agy 就绪 ").append(env.agyReady()).append('\n');
+            if (!ready) sb.append("开发工具包没就绪的原因：").append(env.devkitProblem()).append('\n');
+            String firstrun = env.firstrunFailedText();
+            if (!firstrun.isEmpty()) sb.append("首次配置失败标记 .devkit-firstrun-failed：\n").append(formatFirstrunMarker(firstrun));
+            // 内存里的更新状态可能还停在“首次安装进行中”：这里按标记文件实时推断，不只信它
+            sb.append("开发工具包状态（按标记文件实时推断）：")
+              .append(!firstrun.isEmpty() ? "失败" : ready ? "就绪" : "首次安装进行中").append('\n');
+            // 127.0.0.2 探测结论（H6）：回退了还是没执行，一眼看出来
+            sb.append("界面地址 ").append(Env.HOST).append("（探测：").append(Env.hostProbe());
+            if (!Env.hostProbeDetail().isEmpty()) sb.append("，").append(Env.hostProbeDetail());
+            sb.append("）\n");
             File ok = new File(env.usr, ".devkit-ok");
             if (ok.isFile()) sb.append(".devkit-ok ").append(new String(java.nio.file.Files.readAllBytes(ok.toPath()), StandardCharsets.UTF_8).trim()).append('\n');
             sb.append("安全模式 ").append(new File(env.home, ".agyapp-safe-mode").exists()).append('\n');
             sb.append("\n更新状态\n").append(Updater.get(c).status().toString(1)).append('\n');
         } catch (Exception e) { sb.append("（诊断信息不全：").append(e).append("）\n"); }
         envFails(env, sb);
+        firstRunSection(env, sb);
+        verifySection(env, sb);
         netProbe(c, env, sb);
         return scrub(sb.toString());
+    }
+
+    /** first-run 失败标记的写法：包名每行一个，前面加圆点；空标记返回 "" */
+    static String formatFirstrunMarker(String content) {
+        if (content == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String l : content.split("\n")) {
+            String t = l.trim();
+            if (!t.isEmpty()) sb.append("  · ").append(t).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** 文件的最后 N 行（没有 / 读不了返回 ""）；只读文件尾部 64 KB，不把整个日志读进来 */
+    static String tailLines(File f, int lines) {
+        if (f == null || lines <= 0) return "";
+        try {
+            String tail = tail(f, 65536);
+            String[] all = tail.split("\n");
+            int from = Math.max(0, all.length - lines);
+            StringBuilder sb = new StringBuilder();
+            for (int i = from; i < all.length; i++) sb.append(all[i]).append('\n');
+            return sb.toString();
+        } catch (Exception e) { return ""; }
+    }
+
+    /** 首次配置（first-run）一节：标记内容 + 账本里最近的首次配置失败记录 + 最近一次 first-run 日志文件的尾部。
+     *  first-run 输出落在 files/first-run-<包名>.log（Installer.firstRunLogFileName）；没有这些文件
+     *  （旧版装的）就退回网关日志尾部，并如实标明 */
+    private static void firstRunSection(Env env, StringBuilder sb) {
+        try {
+            sb.append("\n首次配置（first-run）\n");
+            String marker = env.firstrunFailedText();
+            sb.append("失败标记：").append(marker.isEmpty() ? "无\n" : "\n" + formatFirstrunMarker(marker));
+            File led = Ledger.file(env);
+            String recs = "";
+            if (led.isFile()) recs = ledgerFirstRunLines(new String(java.nio.file.Files.readAllBytes(led.toPath()), StandardCharsets.UTF_8), 3);
+            sb.append("账本里的首次配置记录：\n").append(recs);
+            String tails = firstRunLogTails(env.files, marker, 50);
+            if (!tails.isEmpty()) sb.append("最近一次 first-run 日志尾部（每块一个文件，files/first-run-<包名>.log，各取最后 50 行）：\n").append(tails);
+            else sb.append("（没有 first-run 日志文件，first-run 输出没落盘）\n");
+            sb.append("网关日志尾部 50 行：\n");
+            String t = tailLines(env.log, 50);
+            sb.append(t.isEmpty() ? "（没有网关日志）\n" : t);
+        } catch (Exception e) { sb.append("（读不了首次配置记录：").append(e.getMessage()).append("）\n"); }
+    }
+
+    /** 标记里的每个失败包名对应一个 first-run 日志文件（files/first-run-<包名>.log），各取最后 lines 行；
+     *  一个文件都没有返回 ""（调用方退回网关日志）。包名只认 [A-Za-z0-9_.-]，防标记内容被利用拼路径 */
+    static String firstRunLogTails(File filesDir, String markerText, int lines) {
+        if (filesDir == null || markerText == null || markerText.trim().isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String raw : markerText.split("\n")) {
+            // 标记行可能是新格式 `包名 rc=N step=失败步骤`（Installer.formatFirstRunFailedMarker）：
+            // 只取第一个空白分隔 token 当包名，其余照旧过白名单，../ 照样拼不出路径
+            String id = raw.trim().split("\\s+")[0];
+            if (id.isEmpty() || !id.matches("[A-Za-z0-9_.-]+")) continue;
+            File log = new File(filesDir, "first-run-" + id + ".log");
+            String tail = tailLines(log, lines);
+            if (tail.isEmpty()) continue;
+            sb.append("── first-run-").append(id).append(".log 最后 ").append(lines).append(" 行 ──\n").append(tail);
+        }
+        return sb.toString();
+    }
+
+    /** 账本 JSONL 文本里关于首次配置失败的记录（最近 max 条）；没有返回“（没有记录）” */
+    static String ledgerFirstRunLines(String ledgerText, int max) {
+        if (ledgerText == null || ledgerText.isEmpty()) return "（没有记录）\n";
+        java.util.List<String> hits = new java.util.ArrayList<>();
+        for (String l : ledgerText.split("\n")) {
+            if (!l.contains("首次配置")) continue;
+            try {
+                JSONObject j = new JSONObject(l);
+                hits.add("  · " + new java.util.Date(j.optLong("at")) + " " + j.optString("msg") + "\n");
+            } catch (Exception ignored) { hits.add("  · " + l + "\n"); }
+        }
+        if (hits.isEmpty()) return "（没有记录）\n";
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(0, hits.size() - max); i < hits.size(); i++) sb.append(hits.get(i));
+        return sb.toString();
+    }
+
+    /** 校验一节：两条校验线的结果聚合在这里，并标明它们是两个不同的检查——
+     *  开发工具包文件校验（Updater.verifyAsync，核 MANIFEST 里的文件）与网关运行库清单校验
+     *  （GatewayService/GwRuntime.ensure，核 gwpin.json 钉的文件）。更新状态里的 "verify": null 不是“没问题”，
+     *  是还没校验过（verifyAsync 在没装好时直接返回，不设 lastVerify） */
+    private static void verifySection(Env env, StringBuilder sb) {
+        try {
+            File led = Ledger.file(env);
+            String text = led.isFile() ? new String(java.nio.file.Files.readAllBytes(led.toPath()), StandardCharsets.UTF_8) : "";
+            sb.append("\n校验\n").append(verifySummary(text));
+        } catch (Exception e) { sb.append("\n校验（读不了账本：").append(e.getMessage()).append("）\n"); }
+    }
+
+    /** 账本 JSONL 文本里最近的两条校验线结果（纯逻辑，测试直接调）。
+     *  开发工具包文件校验：msg 是“完整校验 / 快速自检 / 校验失败”开头的 verify 记录；
+     *  网关运行库清单校验：msg 以“网关运行库”开头的 verify 记录。哪条没有就明说没有记录 */
+    static String verifySummary(String ledgerText) {
+        String devkit = null, gw = null;
+        if (ledgerText != null && !ledgerText.isEmpty()) {
+            for (String l : ledgerText.split("\n")) {
+                JSONObject j;
+                try { j = new JSONObject(l); } catch (Exception e) { continue; }
+                if (!"verify".equals(j.optString("kind"))) continue;
+                String msg = j.optString("msg");
+                String line = "  · " + (j.optBoolean("ok") ? "通过" : "失败") + " " + msg + "\n";
+                if (msg.startsWith("网关运行库")) gw = line;
+                else devkit = line;
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("（开发工具包文件校验与网关运行库清单校验是两个不同的检查）\n");
+        sb.append("开发工具包文件校验（Updater.verifyAsync）：").append(devkit == null ? "没有记录（还没校验过）\n" : "\n" + devkit);
+        sb.append("网关运行库清单校验（GatewayService/GwRuntime.ensure）：").append(gw == null ? "没有记录（还没校验过）\n" : "\n" + gw);
+        return sb.toString();
     }
 
     /** 本机自检没过的项（网关跑完写在 ~/.agycodroid-env.json；以前诊断包只看得到「失败 10 项」） */

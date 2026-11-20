@@ -31,6 +31,7 @@ import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { execFileSync, execFile } from "node:child_process";
 import * as xzNs from "./vendor/xz-decompress/dist/package/xz-decompress.js";
+import { buildFirstRunScript } from "./first-run.mjs";
 const xz = xzNs.default ?? xzNs;
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -1312,19 +1313,16 @@ if (cmd === "build" || cmd === "component") {
     const text = fs.readFileSync(src, "utf8").replaceAll("{{PREFIX}}", R.to + "files/usr");
     tw.add({ name: p, type: "0", mode: parseInt(f.mode || "644", 8), mtime: 0, data: Buffer.from(text) });
   }
-  // 首次运行脚本：App 解包后跑一次（参数与 dpkg 一致：configure）
-  const fr = ["#!" + R.to + "files/usr/bin/sh", "# devkit 首次运行：各包 postinst 里除 alternatives 外的步骤", "cd \"$HOME\" 2>/dev/null"];
+  // 首次运行脚本：App 解包后跑一次（参数与 dpkg 一致：configure）。
+  // 生成逻辑在 ./first-run.mjs（纯函数、可单测）；postinst 文件本身仍在这里写进 tar。
   for (const f of firstRun) {
     const p = `${LX}/postinst/${f.pkg}`;
     // py3compile 要靠 termux-setup-package-manager + dpkg -L 列包内文件，我们两样都没带 ——
     // 原样跑会刷一屏 "cannot determine system package manager"。换成末尾统一 compileall。
     const script = f.script.replace(/^.*\/py3compile" -p .*$/gm, ": # py3compile → 由 first-run.sh 末尾的 compileall 统一做");
     tw.add({ name: p, type: "0", mode: 0o755, mtime: 0, data: Buffer.from(script) });
-    fr.push(`echo "▸ ${f.pkg}"; "${R.to}files/${p}" configure || echo "  （${f.pkg} 的 postinst 失败，rc=$?）"`);
   }
-  const py = R.to + "files/usr/bin/python3";
-  if (EXTRAS) fr.push(`if [ -x "${py}" ]; then echo "▸ 预编译 Python 标准库与 site-packages"; LD_PRELOAD= "${py}" -m compileall -q -j 0 "$(LD_PRELOAD= "${py}" -c "import sysconfig; print(sysconfig.get_path(\x27stdlib\x27))")" >/dev/null 2>&1; fi`);
-  tw.add({ name: `${LX}/first-run.sh`, type: "0", mode: 0o755, mtime: 0, data: Buffer.from(fr.join("\n") + "\n") });
+  tw.add({ name: `${LX}/first-run.sh`, type: "0", mode: 0o755, mtime: 0, data: Buffer.from(buildFirstRunScript({ prefix: R.to, libexec: LX, pkgs: firstRun.map((f) => f.pkg), extras: EXTRAS })) });
   const manText = [...manifest].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([p, [h, n]]) => `${h} ${n} ${p}`).join("\n") + "\n";
   twAdd({ name: `${LX}/MANIFEST`, type: "0", mode: 0o644, mtime: 0, data: Buffer.from(manText) });
   if (BLOCK) {

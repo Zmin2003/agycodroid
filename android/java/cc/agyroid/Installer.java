@@ -677,12 +677,498 @@ final class Installer {
 
     /** 基础块在 modules.json 里的 id（devkit.json 里 required 的那个模块） */
     static final String BASE_MODULE_ID = "base";
-    /** 最近一次 firstRuns 里失败的包：包名 → 返回码。B10：记入修复账本，基础块失败时 finish() 不写 .devkit-ok */
-    final java.util.Map<String, Integer> firstRunFailed = new java.util.LinkedHashMap<>();
-    /** .devkit-ok 旁边的 first-run 失败标记（J2 的 devkitReady 读它）：内容是失败的包名，每行一个 */
+    /** 最近一次 firstRuns 里失败的包：包名 → 结构化失败记录（H3）。B10：记入修复账本，基础块失败时 finish() 不写 .devkit-ok */
+    final java.util.Map<String, FirstRunFailure> firstRunFailed = new java.util.LinkedHashMap<>();
+    /** .devkit-ok 旁边的 first-run 失败标记（J2 的 devkitReady 读它）：每行一个失败，`包名 rc=返回码 step=失败步骤名` */
     static final String FIRSTRUN_FAILED = ".devkit-firstrun-failed";
+    /** first-run 成功的检查点（H5）：usr 根下的 JSON，包名 → 跑通的那份 first-run.sh 的 sha256。重试时脚本没变就跳过 */
+    static final String FIRSTRUN_DONE = ".devkit-firstrun-done";
+    /** 单步超时（H4）：first-run 这类长步骤 10 分钟没跑完就杀掉，不再无限 waitFor */
+    static final long RUN_TIMEOUT_MS = 10 * 60 * 1000L;
+    /** 超时时 run() 的返回码（timeout(1) 的 124，first-run.sh 自己不会返回它） */
+    static final int TIMEOUT_RC = 124;
+    /** 失败记录里留的输出尾部：最后 20 行、最多 4000 字 */
+    static final int TAIL_LINES = 20, TAIL_MAX_CHARS = 4000;
 
-    /** 基础块和给出的各模块依次跑 first-run，再按 first-run 前后的快照剔除本机校验基线（见 pruneManifest）。返回各模块的目录 */
+    /** 一次 first-run 失败的全部信息（H3）：步骤名是输出里最后一条 `▸ …` 行或 `first-run-summary:` 行，
+     *  tail 是输出尾部，log 是落盘的完整输出，summaryLog / compileLog 是新版 first-run.sh 在 $PREFIX/tmp/ 留的汇总与 compileall 日志 */
+    static final class FirstRunFailure {
+        final String module; final int rc; final String step; final String tail; final String log;
+        final String summaryLog; final String compileLog;
+        final boolean timedOut; final long ms;
+        FirstRunFailure(String module, int rc, String step, String tail, String log,
+                String summaryLog, String compileLog, boolean timedOut, long ms) {
+            this.module = module; this.rc = rc; this.step = step == null ? "" : step;
+            this.tail = tail == null ? "" : tail; this.log = log == null ? "" : log;
+            this.summaryLog = summaryLog == null ? "" : summaryLog;
+            this.compileLog = compileLog == null ? "" : compileLog;
+            this.timedOut = timedOut; this.ms = ms;
+        }
+        /** Ledger detail 用的 JSON 文本（手写，不用 org.json：测试跑的是 android.jar 的桩，new JSONObject() 会抛 Stub!） */
+        String toJsonString() {
+            return "{\"module\":" + jsonQuote(module) + ",\"rc\":" + rc + ",\"step\":" + jsonQuote(step)
+                + ",\"tail\":" + jsonQuote(tail) + ",\"log\":" + jsonQuote(log)
+                + ",\"summaryLog\":" + jsonQuote(summaryLog) + ",\"compileLog\":" + jsonQuote(compileLog)
+                + ",\"timedOut\":" + timedOut + ",\"ms\":" + ms + "}";
+        }
+    }
+
+    /** JSON 字符串引用的最小转义（配合上面的手写 JSON） */
+    static String jsonQuote(String s) {
+        if (s == null) return "\"\"";
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+            }
+        }
+        return sb.append('"').toString();
+    }
+
+    /** 输出里最后一条 `▸ …` 行去掉前缀就是正在跑的步骤（first-run.sh 每步先 echo 一个） */
+    static String lastStepLine(java.util.List<String> lines) {
+        String step = "";
+        for (String l : lines) if (l != null && l.startsWith("▸ ")) step = l.substring(2).trim();
+        return step;
+    }
+
+    /** 输出尾部：最后 maxLines 行、最多留 maxChars 字（超了从前面截，留一个 …） */
+    static String tailText(java.util.List<String> lines, int maxLines, int maxChars) {
+        int from = Math.max(0, lines.size() - maxLines);
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < lines.size(); i++) { if (sb.length() > 0) sb.append('\n'); sb.append(lines.get(i)); }
+        String t = sb.toString();
+        if (t.length() > maxChars) t = "…" + t.substring(t.length() - maxChars);
+        return t;
+    }
+
+    /** 失败记录的 Ledger detail（H3）：第一条失败平铺在顶层，全部失败另放 failures 数组。返回 JSON 文本，
+     *  调用方再包成 JSONObject（Ledger.add 要 JSONObject；这里返回文本是为测试能跑——android.jar 的 org.json 是桩） */
+    static String firstRunDetailJson(java.util.Collection<FirstRunFailure> failures) {
+        StringBuilder sb = new StringBuilder("{");
+        FirstRunFailure first = null;
+        StringBuilder arr = new StringBuilder("[");
+        boolean firstArr = true;
+        for (FirstRunFailure f : failures) {
+            if (first == null) first = f;
+            if (!firstArr) arr.append(',');
+            firstArr = false;
+            arr.append(f.toJsonString());
+        }
+        arr.append(']');
+        if (first != null) {
+            sb.append("\"module\":").append(jsonQuote(first.module))
+                .append(",\"rc\":").append(first.rc)
+                .append(",\"step\":").append(jsonQuote(first.step))
+                .append(",\"tail\":").append(jsonQuote(first.tail))
+                .append(",\"log\":").append(jsonQuote(first.log))
+                .append(",\"summaryLog\":").append(jsonQuote(first.summaryLog))
+                .append(",\"compileLog\":").append(jsonQuote(first.compileLog))
+                .append(",\"timedOut\":").append(first.timedOut)
+                .append(",\"ms\":").append(first.ms).append(',');
+        }
+        sb.append("\"count\":").append(failures.size()).append(",\"failures\":").append(arr).append('}');
+        return sb.toString();
+    }
+
+    /** Ledger detail：firstRunDetailJson 包成 JSONObject；包不出来就 null（账本不为此丢整行） */
+    private static JSONObject detailOrNull(java.util.Collection<FirstRunFailure> failures) {
+        try { return new JSONObject(firstRunDetailJson(failures)); } catch (Exception e) { return null; }
+    }
+
+    /** 失败标记的一行：`包名 rc=返回码 step=失败步骤名`（步骤名可含空格，取行尾全部） */
+    static String formatFirstRunFailedMarker(java.util.Map<String, FirstRunFailure> failed) {
+        StringBuilder sb = new StringBuilder();
+        for (FirstRunFailure f : failed.values())
+            sb.append(f.module).append(" rc=").append(f.rc).append(" step=").append(f.step).append('\n');
+        return sb.toString();
+    }
+
+    /** 解析失败标记：新格式按上，旧格式（每行只有一个包名）也认，rc 记 -1、步骤空 */
+    static java.util.Map<String, FirstRunFailure> parseFirstRunFailedMarker(String text) {
+        java.util.Map<String, FirstRunFailure> r = new java.util.LinkedHashMap<>();
+        if (text == null) return r;
+        for (String line : text.split("\n")) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            String id = line, step = "";
+            int rc = -1;
+            int sp = line.indexOf(' ');
+            if (sp > 0) {
+                id = line.substring(0, sp);
+                int ri = line.indexOf(" rc=", sp);
+                if (ri >= 0) {
+                    int end = line.indexOf(" step=", ri);
+                    try { rc = Integer.parseInt(line.substring(ri + 4, end < 0 ? line.length() : end).trim()); }
+                    catch (NumberFormatException ignored) {}
+                    if (end >= 0) step = line.substring(end + 6);
+                }
+            }
+            r.put(id, new FirstRunFailure(id, rc, step, "", "", "", "", false, 0));
+        }
+        return r;
+    }
+
+    /** 某块 first-run 输出的落盘文件（files/ 下，诊断包能带上） */
+    static String firstRunLogFileName(String moduleId) { return "first-run-" + moduleId + ".log"; }
+
+    /** 读 first-run 成功检查点：没有 / 坏了都当成空（宁可重跑，别跳过没跑过的） */
+    static java.util.Map<String, String> readFirstRunDone(File usr) {
+        return readFlatStringMap(new File(usr, FIRSTRUN_DONE));
+    }
+
+    /** 写检查点（firstRuns 末尾，成功的那几块） */
+    static void writeFirstRunDone(File usr, java.util.Map<String, String> done) {
+        try {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (java.util.Map.Entry<String, String> e : done.entrySet()) {
+                if (!first) sb.append(',');
+                first = false;
+                sb.append(jsonQuote(e.getKey())).append(':').append(jsonQuote(e.getValue()));
+            }
+            write(new File(usr, FIRSTRUN_DONE), sb.append("}\n").toString());
+        } catch (Exception ignored) {}
+    }
+
+    /** 读只有一层字符串值的 JSON 对象（检查点、.devkit-pending 都是这种）；文件没有 / 坏了都当成空。
+     *  手写解析：测试跑的是 android.jar 的桩，org.json 在 JVM 里是 Stub。非字符串值（数组、对象、数字）跳过 */
+    static java.util.Map<String, String> readFlatStringMap(File f) {
+        java.util.Map<String, String> r = new java.util.LinkedHashMap<>();
+        String text;
+        try { text = new String(java.nio.file.Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8); }
+        catch (Exception e) { return r; }
+        int n = text.length(), i = 0;
+        while (i < n) {
+            int q = text.indexOf('"', i);
+            if (q < 0) break;
+            int[] end = new int[1];
+            String key = parseJsonString(text, q, end);
+            if (key == null) break;
+            i = end[0];
+            while (i < n && Character.isWhitespace(text.charAt(i))) i++;
+            if (i >= n || text.charAt(i) != ':') continue;
+            i++;
+            while (i < n && Character.isWhitespace(text.charAt(i))) i++;
+            if (i < n && text.charAt(i) == '"') {
+                String val = parseJsonString(text, i, end);
+                if (val == null) break;
+                r.put(key, val);
+                i = end[0];
+            } else {
+                i = skipJsonValue(text, i);
+            }
+        }
+        return r;
+    }
+
+    private static String parseJsonString(String text, int start, int[] end) {
+        StringBuilder sb = new StringBuilder();
+        int i = start + 1, n = text.length();
+        while (i < n) {
+            char c = text.charAt(i);
+            if (c == '"') { end[0] = i + 1; return sb.toString(); }
+            if (c == '\\' && i + 1 < n) {
+                char e = text.charAt(i + 1);
+                switch (e) {
+                    case '"': sb.append('"'); i += 2; continue;
+                    case '\\': sb.append('\\'); i += 2; continue;
+                    case '/': sb.append('/'); i += 2; continue;
+                    case 'n': sb.append('\n'); i += 2; continue;
+                    case 'r': sb.append('\r'); i += 2; continue;
+                    case 't': sb.append('\t'); i += 2; continue;
+                    case 'u':
+                        if (i + 5 < n) {
+                            try { sb.append((char) Integer.parseInt(text.substring(i + 2, i + 6), 16)); i += 6; continue; }
+                            catch (NumberFormatException ignored) {}
+                        }
+                        i += 2; continue;
+                    default: sb.append(e); i += 2; continue;
+                }
+            }
+            sb.append(c);
+            i++;
+        }
+        return null;
+    }
+
+    private static int skipJsonValue(String text, int i) {
+        int n = text.length(), depth = 0;
+        boolean inStr = false;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (inStr) {
+                if (c == '\\') i++;
+                else if (c == '"') inStr = false;
+            } else if (c == '"') inStr = true;
+            else if (c == '[' || c == '{') depth++;
+            else if (c == ']' || c == '}') {
+                if (depth == 0) return i;
+                depth--;
+                if (depth == 0) return i + 1;
+            } else if (c == ',' && depth == 0) return i + 1;
+            i++;
+        }
+        return n;
+    }
+
+    /** 这块的 first-run.sh 跑通过、且和现在盘上的同一份（sha 对得上）→ 重试时跳过（H5）。
+     *  脚本不存在 / 变了（新 devkit）→ 不跳过：新版脚本必须跑一次 */
+    static boolean firstRunDone(java.util.Map<String, String> done, String id, File script) {
+        if (done == null || script == null || !script.isFile()) return false;
+        String want = done.get(id);
+        if (want == null || want.isEmpty()) return false;
+        try { return want.equals(sha256(script)); } catch (IOException e) { return false; }
+    }
+
+    /** 仅可选模块的 first-run 失败（.devkit-ok 在、标记里没有 base）：补跑 first-run 就够，别全量重装（H5） */
+    boolean moduleOnlyFirstRunFailure() { return moduleOnlyFirstRunFailure(env.usr); }
+    static boolean moduleOnlyFirstRunFailure(File usr) {
+        if (!new File(usr, ".devkit-ok").isFile()) return false;
+        File f = new File(usr, FIRSTRUN_FAILED);
+        if (!f.isFile()) return false;
+        try {
+            java.util.Map<String, FirstRunFailure> m = parseFirstRunFailedMarker(
+                new String(java.nio.file.Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+            return !m.isEmpty() && !m.containsKey(BASE_MODULE_ID);
+        } catch (Exception e) { return false; }
+    }
+
+    /** H5：boot() 首次配置分支决策（纯函数，供 JVM 测试）：仅模块失败 → "repair-modules"；
+     *  未就绪 → "install"；漏跑 → "repair-missed"；否则 "none"。顺序重要：模块失败时
+     *  devkitReady() 为 false（失败标记在），必须先判模块失败，否则会全量重装。 */
+    static String bootDevkitAction(boolean devkitReady, boolean moduleOnly, boolean firstRunMissed) {
+        if (moduleOnly) return "repair-modules";
+        if (!devkitReady) return "install";
+        if (firstRunMissed) return "repair-missed";
+        return "none";
+    }
+
+    /** 补跑 first-run 的模块：modules.json 里除基础块外、目录还在的（H5）。
+     *  以前只认写了 .ok 的——first-run 失败的模块恰恰没写 .ok，补跑时就被漏掉了 */
+    static java.util.List<JSONObject> repairModuleList(JSONObject mj, File usr) {
+        java.util.List<JSONObject> r = new java.util.ArrayList<>();
+        org.json.JSONArray all = mj == null ? null : mj.optJSONArray("modules");
+        if (all == null) return r;
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject m = all.optJSONObject(i);
+            if (m == null) continue;
+            if (repairModuleIncluded(m.optString("kind"), m.optString("dir"), usr)) r.add(m);
+        }
+        return r;
+    }
+
+    /** 补跑的入选规则（纯逻辑，repairModuleList 的实体）：非基础块、且目录还在 */
+    static boolean repairModuleIncluded(String kind, String dir, File usr) {
+        return !"base".equals(kind) && dir != null && !dir.isEmpty() && new File(usr, dir).isDirectory();
+    }
+
+    /** 卡住的这份工具包（.devkit-pending 里的 base）比 APK 钉的旧：重跑磁盘上的旧脚本注定再失败（BLOCKER）。
+     *  比的是 Release（base URL 里带的 tag，devkit-YYYY.MM.DD）；base 对不上又比不出新旧时也算旧——
+     *  钉的版本就是 APK 带来的那版，装它不会比卡住更糟，装之前用户还要在来源页点一下 */
+    static boolean pendingDevkitOlderThanPin(File usr, String pinTag, String pinBase) {
+        if (pinTag == null && pinBase == null) return false;
+        java.util.Map<String, String> pend = readFlatStringMap(new File(usr, PENDING));
+        String haveBase = pend.get("base");
+        if (haveBase == null || haveBase.isEmpty()) return false;
+        String haveTag = Updater.tagOf(haveBase);
+        if (pinTag != null && pinTag.startsWith("devkit-") && haveTag != null && haveTag.startsWith("devkit-"))
+            return Updater.cmpVer(pinTag.substring(7), haveTag.substring(7)) > 0;
+        return pinBase != null && !pinBase.isEmpty() && !pinBase.equals(haveBase);
+    }
+
+    /** recover() 在重跑旧 first-run.sh 时失败，但 APK 钉的已是新版工具包：这轮重跑注定失败，跳过它走更新安装（BLOCKER） */
+    static boolean shouldSkipDoomedFirstRunRetry(File usr, String pinTag, String pinBase, boolean baseFirstRunFailed) {
+        return baseFirstRunFailed && pendingDevkitOlderThanPin(usr, pinTag, pinBase);
+    }
+
+    /** 新版 first-run.sh 在 $PREFIX/tmp/ 留的汇总与 compileall 日志（有才记，没有是旧脚本，不强求；汇总是追加的） */
+    static String firstRunSummaryLog(File usr) {
+        File f = new File(usr, "tmp/first-run-summary.txt");
+        return f.isFile() ? f.getPath() : "";
+    }
+    static String firstRunCompileLog(File usr) {
+        File f = new File(usr, "tmp/first-run-compileall.log");
+        return f.isFile() ? f.getPath() : "";
+    }
+
+    /** `first-run-summary: <包>=<返回码>,<包>=<返回码>,…`（devkit/first-run.mjs 生成的新版
+     *  first-run.sh 在末尾回的一行，各 postinst 的 rc 逗号分隔；没 postinst 时是 `（无）`）：
+     *  第一个 rc≠0 的包就是真失败的步骤。旧脚本没有这种行，返回 ""，调用方回落到最后一条 ▸ 行。
+     *  注意：新脚本跑完所有步骤才 exit FR_RC，最后一条 ▸ 行可能是后头成功的步骤，不能拿它当失败步骤。
+     *  兼容旧写法（解析器先落地时 devkit 侧还没定格式）：`first-run-summary: <步骤> rc=<n>` 与
+     *  `first-run-summary: step=<步骤> rc=<n>`，同样取第一个 rc≠0 的。 */
+    static String failedStepFromSummary(java.util.List<String> lines) {
+        for (String l : lines) {
+            if (l == null || !l.startsWith("first-run-summary:")) continue;
+            String rest = l.substring("first-run-summary:".length()).trim();
+            if (rest.isEmpty() || "（无）".equals(rest)) continue;
+            // 新格式：android-tools=0,npm=1,openssh=0,…——第一个 rc≠0 的包
+            String hit = firstNonZeroPkgEq(rest);
+            if (hit != null) return hit;
+            if (looksLikePkgEqSummary(rest)) continue; // 全是 rc=0：这行没失败，继续看别的行
+            int rcIdx = rest.indexOf("rc=");
+            if (rcIdx < 0) continue;
+            int rc = -1;
+            try {
+                int e = rcIdx + 3;
+                while (e < rest.length() && Character.isDigit(rest.charAt(e))) e++;
+                rc = Integer.parseInt(rest.substring(rcIdx + 3, e));
+            } catch (NumberFormatException ignored) { continue; }
+            if (rc == 0) continue;
+            int stIdx = rest.indexOf("step=");
+            if (stIdx >= 0) {
+                int e = stIdx + 5;
+                while (e < rest.length() && !Character.isWhitespace(rest.charAt(e))) e++;
+                return rest.substring(stIdx + 5, e);
+            }
+            String step = rest.substring(0, rcIdx).trim();
+            while (!step.isEmpty() && " :—–-".indexOf(step.charAt(step.length() - 1)) >= 0)
+                step = step.substring(0, step.length() - 1).trim();
+            return step;
+        }
+        return "";
+    }
+
+    /** `包=返回码,包=返回码,…` 里的第一个 rc≠0 的包；没有非零的返回 null（全零与“不是这格式”都返回 null，
+     *  由 looksLikePkgEqSummary 区分）。包名不含 `=`、`,`、空白，rc 是十进制数。 */
+    static String firstNonZeroPkgEq(String rest) {
+        for (String tok : rest.split(",")) {
+            String t = tok.trim();
+            int eq = t.lastIndexOf('=');
+            if (eq <= 0) return null;
+            String name = t.substring(0, eq).trim();
+            String num = t.substring(eq + 1).trim();
+            if (name.isEmpty() || num.isEmpty() || name.indexOf(' ') >= 0) return null;
+            int rc;
+            try { rc = Integer.parseInt(num); } catch (NumberFormatException e) { return null; }
+            if (rc != 0) return name;
+        }
+        return null;
+    }
+
+    /** 整行是否就是 `包=返回码,包=返回码,…` 的新格式（哪怕全是 0） */
+    static boolean looksLikePkgEqSummary(String rest) {
+        String[] toks = rest.split(",");
+        if (toks.length == 0) return false;
+        for (String tok : toks) {
+            String t = tok.trim();
+            int eq = t.lastIndexOf('=');
+            if (eq <= 0) return false;
+            String name = t.substring(0, eq).trim();
+            String num = t.substring(eq + 1).trim();
+            if (name.isEmpty() || num.isEmpty() || name.indexOf(' ') >= 0) return false;
+            try { Integer.parseInt(num); } catch (NumberFormatException e) { return false; }
+        }
+        return true;
+    }
+
+    /** 非关键的 first-run 步骤（H2）：失败了也记下来、报出来，但不挡住进软件。
+     *  devkit 侧已核查：base 的 6 个 postinst（android-tools、npm、openssh、python、python-pip、termux-exec）
+     *  没有一个对“进到可用状态”是关键的；末尾的 compileall 也一样（Python 没 .pyc 照样跑，只是首次 import 慢）。
+     *  判定靠失败步骤名（新脚本的 first-run-summary 行 / 旧脚本的最后一条 ▸ 行）；
+     *  超时、或步骤名认不出来时一律按关键处理（fail closed） */
+    static final java.util.Set<String> NON_CRITICAL_FIRST_RUN_STEPS = new java.util.HashSet<>(java.util.Arrays.asList(
+        "android-tools", "npm", "openssh", "python", "python-pip", "termux-exec",
+        "预编译 Python 标准库与 site-packages"));
+    static boolean nonCriticalFirstRunFailure(String step, boolean timedOut) {
+        return !timedOut && step != null && NON_CRITICAL_FIRST_RUN_STEPS.contains(step);
+    }
+
+    /** Guile 缓存 touch 的命令（M1）：失败要看得见——不吞 stderr、不拿 `; true` 把返回码抹成 0 */
+    static String guileTouchCommand() {
+        return "find \"$PREFIX/lib/guile\" -name '*.go' -exec touch {} +";
+    }
+
+    /** touch 后抽查：lib/guile 下 *.go 里 mtime 还停在 touchedAfterMs 之前的个数（M1：包里 mtime 都是 0，碰过的就是现在） */
+    static int countStaleGuileCache(File usr, long touchedAfterMs) {
+        int[] n = new int[1];
+        countStaleGuileCache(new File(usr, "lib/guile"), touchedAfterMs, n);
+        return n[0];
+    }
+    private static void countStaleGuileCache(File dir, long touchedAfterMs, int[] n) {
+        File[] kids = dir == null ? null : dir.listFiles();
+        if (kids == null) return;
+        for (File k : kids) {
+            if (k.isDirectory()) countStaleGuileCache(k, touchedAfterMs, n);
+            else if (k.getName().endsWith(".go") && k.lastModified() < touchedAfterMs) n[0]++;
+        }
+    }
+
+    /** 一次 run() 的结果：返回码、是否超时、耗时、最后跑到的步骤、输出尾部、汇总行认出的真失败步骤 */
+    static final class RunOutcome {
+        int rc = -1; boolean timedOut; long ms; String step = ""; String tail = ""; String failedStep = "";
+    }
+
+    /**
+     * 跑一条命令：输出逐行报给界面（`▸ …` 的行记成当前步骤）、同时落盘到 logFile（H3）、
+     * 攒最后 TAIL_LINES 行当尾部；timeoutMs 内没跑完就杀掉进程、返回 TIMEOUT_RC（H4）。
+     * timeoutMs <= 0 = 不设超时（installAgy 下 CLI 用，网慢也可能超过 10 分钟）。
+     * 读输出在单独的线程里：主线程只等退出，进程挂住不出输出时超时才掐得住。
+     */
+    static int runProcess(ProcessBuilder pb, Progress ui, long timeoutMs, File logFile, RunOutcome out) throws IOException {
+        long t0 = System.currentTimeMillis();
+        Process p = pb.start();
+        java.util.List<String> lines = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.io.OutputStream logOut = null;
+        if (logFile != null) {
+            if (logFile.getParentFile() != null) logFile.getParentFile().mkdirs();
+            logOut = new java.io.FileOutputStream(logFile, false);
+        }
+        final java.io.OutputStream log = logOut;
+        Thread reader = new Thread(() -> {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                for (String l; (l = r.readLine()) != null; ) {
+                    lines.add(l);
+                    if (log != null) { try { log.write((l + "\n").getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) {} }
+                    if (l.startsWith("@progress ")) {
+                        String[] p2 = l.split(" ");
+                        try { ui.bytes(Long.parseLong(p2[1]), Long.parseLong(p2[2])); } catch (Exception ignored) {}
+                        continue;
+                    }
+                    ui.step(l);
+                }
+            } catch (IOException ignored) {}
+            finally { if (log != null) try { log.close(); } catch (IOException ignored) {} }
+        }, "installer-run-reader");
+        reader.setDaemon(true);
+        reader.start();
+        boolean finished;
+        try {
+            if (timeoutMs > 0) finished = p.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            else { p.waitFor(); finished = true; }
+        } catch (InterruptedException e) { throw new IOException(e); }
+        if (!finished) {
+            p.destroyForcibly();
+            try { p.waitFor(); } catch (InterruptedException e) { throw new IOException(e); }
+            out.timedOut = true;
+        }
+        try { reader.join(5000); } catch (InterruptedException e) { throw new IOException(e); }
+        out.ms = System.currentTimeMillis() - t0;
+        out.step = lastStepLine(lines);
+        out.tail = tailText(lines, TAIL_LINES, TAIL_MAX_CHARS);
+        out.failedStep = failedStepFromSummary(lines);
+        if (logFile != null) {
+            try (java.io.OutputStream o = new java.io.FileOutputStream(logFile, true)) {
+                o.write(("# rc=" + (out.timedOut ? TIMEOUT_RC : p.exitValue()) + " ms=" + out.ms
+                    + (out.timedOut ? " TIMEOUT" : "") + "\n").getBytes(StandardCharsets.UTF_8));
+            } catch (IOException ignored) {}
+        }
+        out.rc = out.timedOut ? TIMEOUT_RC : p.exitValue();
+        return out.rc;
+    }
+
+    /** 基础块和给出的各模块依次跑 first-run，再按 first-run 前后的快照剔除本机校验基线（见 pruneManifest）。返回各模块的目录。
+     *  H5：上次跑通的块（检查点里 first-run.sh 的 sha 对得上）跳过，失败的块重跑——不是「没进失败记录就跳过」：
+     *  中途被杀时后头的块既没成功也没失败，只认成功检查点才不会漏跑 */
     private java.util.List<File> firstRuns(java.util.List<JSONObject> modList, String ledgerKind) throws IOException {
         // L3：不用时间窗口了 —— first-run 之前先给各份清单里的文件拍个快照（mtime + 大小），跑完按快照比对，
         // 改过的文件才重算哈希记进基线。时钟跳变、时间戳粒度粗都不会再漏记或误记
@@ -690,51 +1176,130 @@ final class Installer {
         java.util.Map<String, java.util.Map<String, long[]>> snapMods = new java.util.HashMap<>();
         for (JSONObject m : modList) snapMods.put(m.optString("id"), snapshotManifest(new File(new File(env.usr, m.optString("dir")), "MANIFEST")));
         firstRunFailed.clear();
+        java.util.Map<String, String> done = readFirstRunDone(env.usr);
+        java.util.Map<String, String> doneNow = new java.util.LinkedHashMap<>(done);
         ui.step(Tr.t("首次运行配置…"));
-        int rc = run(env.bin("bash").getPath(), new File(env.usr, "libexec/devkit/first-run.sh").getPath());
-        if (rc != 0) { firstRunFailed.put(BASE_MODULE_ID, rc); ui.step(Tr.f("（基础块首次配置失败，返回 {0}）", rc)); }
+        File baseScript = new File(env.usr, "libexec/devkit/first-run.sh");
+        File baseLog = new File(env.files, firstRunLogFileName(BASE_MODULE_ID));
+        if (firstRunDone(done, BASE_MODULE_ID, baseScript)) {
+            ui.step(Tr.t("（基础块首次配置已完成，跳过）"));
+        } else {
+            int rc = run(RUN_TIMEOUT_MS, baseLog, env.bin("bash").getPath(), baseScript.getPath());
+            if (rc != 0) {
+                // 失败步骤：汇总行（新脚本）优先——它认的是真失败的那步；没有汇总行（旧脚本）才用最后一条 ▸ 行
+                String failedStep = !lastOutcome.failedStep.isEmpty() ? lastOutcome.failedStep : lastOutcome.step;
+                recordFirstRunFailure(new FirstRunFailure(BASE_MODULE_ID, rc, failedStep,
+                    lastOutcome.tail, baseLog.getPath(), firstRunSummaryLog(env.usr), firstRunCompileLog(env.usr),
+                    lastOutcome.timedOut, lastOutcome.ms), Tr.t("基础块"), ledgerKind, doneNow, baseScript);
+            } else {
+                try { doneNow.put(BASE_MODULE_ID, sha256(baseScript)); } catch (IOException ignored) {}
+            }
+        }
         java.util.List<File> modDirs = new java.util.ArrayList<>();
         for (JSONObject m : modList) {
             File dir = new File(env.usr, m.optString("dir"));
             modDirs.add(dir);
             File fr = new File(dir, "first-run.sh");
-            if (fr.isFile()) {
-                ui.step(Tr.f("「{0}」首次配置…", moduleName(m)));
-                int r2 = run(env.bin("bash").getPath(), fr.getPath());
-                if (r2 != 0) { firstRunFailed.put(m.optString("id"), r2); ui.step(Tr.f("（「{0}」首次配置失败，返回 {1}）", moduleName(m), r2)); }
+            if (!fr.isFile()) continue;
+            String id = m.optString("id");
+            File modLog = new File(env.files, firstRunLogFileName(id));
+            if (firstRunDone(done, id, fr)) {
+                ui.step(Tr.f("（「{0}」首次配置已完成，跳过）", moduleName(m)));
+                continue;
+            }
+            ui.step(Tr.f("「{0}」首次配置…", moduleName(m)));
+            int r2 = run(RUN_TIMEOUT_MS, modLog, env.bin("bash").getPath(), fr.getPath());
+            if (r2 != 0) {
+                String failedStep = !lastOutcome.failedStep.isEmpty() ? lastOutcome.failedStep : lastOutcome.step;
+                // 汇总与 compileall 日志是基础块 first-run.sh 写的，只给基础块的失败记（模块脚本没写这两个文件）
+                recordFirstRunFailure(new FirstRunFailure(id, r2, failedStep,
+                    lastOutcome.tail, modLog.getPath(), "", "",
+                    lastOutcome.timedOut, lastOutcome.ms), "「" + moduleName(m) + "」", ledgerKind, doneNow, fr);
+            } else {
+                try { doneNow.put(id, sha256(fr)); } catch (IOException ignored) {}
             }
         }
         // Guile 的编译缓存必须比源码新（哪怕包里两者同一秒），否则 gdb 启动时陷入重编译死循环
-        run(env.bin("bash").getPath(), "-c", "find \"$PREFIX/lib/guile\" -name '*.go' -exec touch {} + 2>/dev/null; true");
-        pruneManifest(new File(env.usr, MANIFEST), new File(env.usr, LOCAL_MANIFEST), snapBase);
+        // M1：失败要看得见——不吞 stderr、不拿 `; true` 抹返回码；跑完再抽查一遍 mtime
+        long touchT0 = System.currentTimeMillis();
+        int touchRc = run(env.bin("bash").getPath(), "-c", guileTouchCommand());
+        int stale = countStaleGuileCache(env.usr, touchT0);
+        if (touchRc != 0 || stale > 0) {
+            ui.step(Tr.f("（警告：Guile 编译缓存没碰全（返回 {0}，{1} 个文件还是旧时间），gdb 第一次启动可能要重编译一次）", touchRc, stale));
+            android.util.Log.w("Installer", "Guile 缓存 touch 返回 " + touchRc + "，还有 " + stale + " 个 .go 没碰到");
+        }
+        // M7：只给跑通了的块重定基线；失败的块不按半成品记，.local 原样不动
+        pruneManifest(env.usr, new File(env.usr, MANIFEST), new File(env.usr, LOCAL_MANIFEST), snapBase, ui,
+            !firstRunFailed.containsKey(BASE_MODULE_ID));
         for (JSONObject m : modList) {
             File dir = new File(env.usr, m.optString("dir"));
-            pruneManifest(new File(dir, "MANIFEST"), new File(dir, "MANIFEST.local"), snapMods.get(m.optString("id")));
+            pruneManifest(env.usr, new File(dir, "MANIFEST"), new File(dir, "MANIFEST.local"), snapMods.get(m.optString("id")), ui,
+                !firstRunFailed.containsKey(m.optString("id")));
         }
+        // H5：跑通的块写检查点（脚本 sha）；下次重试时脚本没变就跳过。失败的块不写（非关键步骤例外，见 recordFirstRunFailure）
+        writeFirstRunDone(env.usr, doneNow);
         if (!firstRunFailed.isEmpty())
-            Ledger.add(env, ledgerKind, false, Tr.f("首次配置失败：{0}", firstRunFailedText()), null);
+            Ledger.add(env, ledgerKind, false, Tr.f("首次配置失败：{0}", firstRunFailedText()), detailOrNull(firstRunFailed.values()));
         return modDirs;
     }
 
-    /** firstRunFailed 的账本写法：包名（rc=返回码），用顿号隔开 */
+    /** 记一次 first-run 失败（H2/H3）：关键失败进 firstRunFailed（挡住就绪）；非关键步骤只记账本 + 报出来，
+     *  不挡住、不写失败标记，检查点照写（这份脚本跑完了，确定性失败重跑也没用；新版脚本 sha 变了会重跑）。
+     *  瞒报与卡死都不取：非关键失败的账本行照样是 ok=false、带完整 detail，界面也报一行警告 */
+    private void recordFirstRunFailure(FirstRunFailure f, String who, String ledgerKind,
+            java.util.Map<String, String> doneNow, File script) {
+        if (nonCriticalFirstRunFailure(f.step, f.timedOut)) {
+            Ledger.add(env, ledgerKind, false,
+                Tr.f("首次配置非关键步骤失败（不影响使用，下次工具包更新时会重跑）：{0}", firstRunFailedTextOne(f)),
+                detailOrNull(java.util.Collections.singletonList(f)));
+            ui.step(Tr.f("（{0}首次配置里「{1}」这步失败了，但不影响使用）", who, f.step));
+            try { doneNow.put(f.module, sha256(script)); } catch (IOException ignored) {}
+            return;
+        }
+        firstRunFailed.put(f.module, f);
+        ui.step(f.timedOut
+            ? Tr.f("（{0}首次配置超时（{1} 分钟没跑完），已终止）", who, RUN_TIMEOUT_MS / 60000)
+            : Tr.f("（{0}首次配置失败，返回 {1}）", who, f.rc));
+    }
+
+    /** 一条失败的人话写法：包名（rc=返回码，步骤：…，日志：…）。日志优先指汇总文件（最易读），没有再指完整输出 */
+    private static String firstRunFailedTextOne(FirstRunFailure f) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(f.module).append("（rc=").append(f.rc);
+        if (f.timedOut) sb.append("，超时");
+        if (!f.step.isEmpty()) sb.append("，步骤：").append(f.step);
+        String log = !f.summaryLog.isEmpty() ? f.summaryLog : f.log;
+        if (!log.isEmpty()) sb.append("，日志：").append(log);
+        sb.append("）");
+        return sb.toString();
+    }
+
+    /** firstRunFailed 的账本写法：一条条 firstRunFailedTextOne，用顿号隔开 */
     private String firstRunFailedText() {
         StringBuilder sb = new StringBuilder();
-        for (java.util.Map.Entry<String, Integer> e : firstRunFailed.entrySet()) {
+        for (FirstRunFailure f : firstRunFailed.values()) {
             if (sb.length() > 0) sb.append("、");
-            sb.append(e.getKey()).append("（rc=").append(e.getValue()).append("）");
+            sb.append(firstRunFailedTextOne(f));
         }
         return sb.toString();
     }
 
-    /** 同步 first-run 失败标记（.devkit-ok 同目录）：有失败就写上包名，没失败就清掉旧的 */
+    /** 给界面 / 异常用的失败摘要（第一条），没有失败时为空 */
+    String firstRunFailureSummary() {
+        if (firstRunFailed.isEmpty()) return "";
+        FirstRunFailure f = firstRunFailed.values().iterator().next();
+        String log = !f.summaryLog.isEmpty() ? f.summaryLog : f.log;
+        return f.module + "（rc=" + f.rc + (f.timedOut ? "，超时" : "")
+            + (f.step.isEmpty() ? "" : "，步骤：" + f.step)
+            + (log.isEmpty() ? "" : "，日志：" + log) + "）";
+    }
+
+    /** 同步 first-run 失败标记（.devkit-ok 同目录）：有失败就写上包名 + rc + 步骤，没失败就清掉旧的 */
     void syncFirstRunFailedMarker() {
         File f = new File(env.usr, FIRSTRUN_FAILED);
         if (firstRunFailed.isEmpty()) { f.delete(); return; }
-        try {
-            StringBuilder sb = new StringBuilder();
-            for (String id : firstRunFailed.keySet()) sb.append(id).append('\n');
-            write(f, sb.toString());
-        } catch (Exception ignored) {}
+        try { write(f, formatFirstRunFailedMarker(firstRunFailed)); }
+        catch (Exception ignored) {}
     }
 
     /** 清单里每个文件的 first-run 前快照（mtime + 大小）：pruneManifest 靠它认出 first-run 改过的文件，不再用时间窗口（L3） */
@@ -760,19 +1325,12 @@ final class Installer {
         File[] k = new File(env.usr, "etc/ssh").listFiles((d, n) -> n.startsWith("ssh_host_") && n.endsWith("_key"));
         return k == null || k.length == 0;
     }
-    /** 补跑一次：基础块 + 已装好的各模块（有 .ok 的） */
+    /** 补跑一次：基础块 + 已装好的各模块（目录还在的——失败的模块没写 .ok，不能只认 .ok，见 repairModuleList） */
     void repairFirstRun() throws IOException {
-        java.util.List<JSONObject> modList = new java.util.ArrayList<>();
-        JSONObject mj = readModules();
-        org.json.JSONArray all = mj == null ? null : mj.optJSONArray("modules");
-        if (all != null) for (int i = 0; i < all.length(); i++) {
-            JSONObject m = all.optJSONObject(i);
-            if (m != null && !"base".equals(m.optString("kind")) && new File(new File(env.usr, m.optString("dir")), ".ok").isFile()) modList.add(m);
-        }
-        firstRuns(modList, "repair");
+        firstRuns(repairModuleList(readModules(), env.usr), "repair");
         syncFirstRunFailedMarker();
         if (firstRunFailed.containsKey(BASE_MODULE_ID))
-            throw new IOException(Tr.f("首次配置失败（{0}），下次启动会重跑", firstRunFailedText()));
+            throw new IOException(Tr.f("首次配置失败（{0}），下次启动会从没跑完的块接着重跑", firstRunFailedText()));
     }
 
     /** 换名之后的几步。可重入：中途被打断，下次启动 recover() 会再跑一遍 */
@@ -797,13 +1355,18 @@ final class Installer {
             if (m != null && !"base".equals(m.optString("kind"))) modList.add(m);
         }
         java.util.List<File> modDirs = firstRuns(modList, "install");
-        // B10：基础块首次配置失败时不写 .devkit-ok、不删 .devkit-pending，下次启动 recover() 重跑；只留失败标记
+        // B10：基础块首次配置失败时不写 .devkit-ok、不删 .devkit-pending，下次启动 recover() 重跑；只留失败标记。
+        // H5：重试时已配好的块按检查点跳过，从没跑完的块接着来
         if (firstRunFailed.containsKey(BASE_MODULE_ID)) {
             syncFirstRunFailedMarker();
-            throw new IOException(Tr.f("开发工具包首次配置失败（{0}），下次启动会重跑", firstRunFailedText()));
+            throw new IOException(Tr.f("开发工具包首次配置失败（{0}），下次启动会从没跑完的块接着重跑（已配好的块会跳过）", firstRunFailedText()));
         }
         writeResolvConf();
-        for (File dir : modDirs) write(new File(dir, ".ok"), "{\"at\":" + System.currentTimeMillis() + "}\n");
+        for (int i = 0; i < modList.size(); i++) {
+            // H5：first-run 失败的模块不写 .ok——写了就看着像装好了，repair 时还会按 .ok 漏掉它
+            if (firstRunFailed.containsKey(modList.get(i).optString("id"))) continue;
+            write(new File(modDirs.get(i), ".ok"), "{\"at\":" + System.currentTimeMillis() + "}\n");
+        }
         try { p.put("at", System.currentTimeMillis()); } catch (org.json.JSONException ignored) {}
         // 这一版的 carryOver 已经按相对路径认主了：告诉网关别对这份工具包做「旧版残留」清理（见 gw/orphans.mjs）
         write(new File(env.files, ".orphans-v1"), "{\"by\":\"installer\",\"at\":" + System.currentTimeMillis() + "}\n");
@@ -933,8 +1496,11 @@ final class Installer {
      * 本机校验基线：包里的清单 + first-run 的改动。postinst 会删掉个别文件（剔除），也会现场重写一些
      * （例如 git-delta 重新生成补全脚本 —— 按 first-run 前后的快照认出来，按实际内容重记）。
      * 只看 mtime + 大小，不逐个算哈希：没动过的文件不碰；动过的再算一次哈希二次确认（L3）。
+     * M7：ok=false（这块的 first-run 失败了）时不重定基线——半成品不配当基线，.local 原样不动，
+     * 核对时回落到包里原清单，不会把失败的产物洗成「正常」。
      */
-    private void pruneManifest(File man, File out, java.util.Map<String, long[]> snap) {
+    static void pruneManifest(File usrRoot, File man, File out, java.util.Map<String, long[]> snap, Progress ui, boolean ok) {
+        if (!ok) { if (ui != null) ui.step(Tr.t("（这块首次配置失败，校验基线不按失败的产物记）")); return; }
         if (!man.isFile()) return;
         try {
             StringBuilder sb = new StringBuilder();
@@ -942,7 +1508,7 @@ final class Installer {
             for (String l : java.nio.file.Files.readAllLines(man.toPath(), StandardCharsets.UTF_8)) {
                 String[] f = l.split(" ", 3);
                 if (f.length != 3) continue;
-                File file = new File(env.usr, f[2]);
+                File file = new File(usrRoot, f[2]);
                 if (!file.isFile()) { dropped++; continue; }
                 // 快照里没有（first-run 新建的）或 mtime/大小变了，才是 first-run 动过的文件：重算哈希二次确认，内容没变就不改行
                 long[] s = snap == null ? null : snap.get(f[2]);
@@ -954,8 +1520,8 @@ final class Installer {
                 sb.append(l).append('\n');
             }
             write(out, sb.toString());
-            if (dropped + rebased > 0) ui.step(Tr.f("（首次配置删掉 {0} 个、改写 {1} 个文件，校验基线已按实际情况记下）", dropped, rebased));
-        } catch (IOException e) { ui.step(Tr.f("（校验基线没写成：{0}）", e.getMessage())); }
+            if (dropped + rebased > 0 && ui != null) ui.step(Tr.f("（首次配置删掉 {0} 个、改写 {1} 个文件，校验基线已按实际情况记下）", dropped, rebased));
+        } catch (IOException e) { if (ui != null) ui.step(Tr.f("（校验基线没写成：{0}）", e.getMessage())); }
     }
 
     /** modules.json 里 kind=="base" 的那块的 gz sha256（按块装时的工具包身份，见 Updater L1）；没有返回 null */
@@ -1223,8 +1789,10 @@ final class Installer {
         for (File k : kids) {
             String rel = relDir.isEmpty() ? k.getName() : relDir + "/" + k.getName();
             // 安装器自己的东西：tmp、完成标记、清单，以及各模块的 .ok / MANIFEST.local（新版 first-run 会重写；
-            // 搬过去会让没装的模块看着像装好了）。dpkg 数据库也不搬：里面的包清单只用来认主
+            // 搬过去会让没装的模块看着像装好了）。dpkg 数据库也不搬：里面的包清单只用来认主。
+            // first-run 检查点与失败标记也是旧版的：搬进新版会让新版跳过没跑过的步骤（H5），或把旧失败当成新版的
             if (rel.equals("tmp") || rel.equals(".devkit-ok") || rel.equals(".devkit-manifest") || rel.equals(".devkit-relocated")
+                || rel.equals(FIRSTRUN_DONE) || rel.equals(FIRSTRUN_FAILED)
                 || rel.equals("var/lib/dpkg") || rel.equals("libexec/devkit/modules.json")
                 || (rel.startsWith("libexec/devkit/modules/") && (rel.endsWith("/.ok") || rel.endsWith("/MANIFEST.local")))) continue;
             // 解释器小版本变了：编译过的扩展搬过去也加载不了，整棵 lib/python3.X 不动（和以前的 site-packages 口径一致）
@@ -1255,27 +1823,28 @@ final class Installer {
     /** ver：latest / 具体版本号 —— 按设置里选的装，别先装个最新版再让自动更新换掉（白下一次） */
     void installAgy(File script, String ver) throws IOException {
         ui.step(Tr.t("从官方渠道下载 Antigravity CLI…"));
-        int rc = run(env.bin("bash").getPath(), script.getPath(), ver);
+        // 下载 CLI 可能超过 10 分钟（网慢）：这里不设单步超时，超时只掐 first-run 这类本地步骤
+        int rc = run(0, null, env.bin("bash").getPath(), script.getPath(), ver);
         if (rc != 0 || !env.agyReady()) throw new IOException(Tr.f("Antigravity CLI 安装失败（rc={0}）", rc));
     }
 
+    /** 最近一次 run() 的结果（步骤 / 尾部 / 是否超时），给 firstRuns 记结构化失败用 */
+    RunOutcome lastOutcome = new RunOutcome();
+
     int run(String... cmd) throws IOException {
+        return run(RUN_TIMEOUT_MS, null, cmd);
+    }
+
+    /** timeoutMs <= 0 = 不设超时；logFile 非空时输出全文落盘（H3）。超时杀掉进程、返回 TIMEOUT_RC（H4） */
+    int run(long timeoutMs, File logFile, String... cmd) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(env.cmd(cmd));
         env.apply(pb.environment());
         pb.directory(env.home);
         pb.redirectErrorStream(true);
-        Process p = pb.start();
-        BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
-        for (String l; (l = r.readLine()) != null; ) {
-            // 脚本用 "@progress 已下 总量" 报进度：画进度条，不进日志
-            if (l.startsWith("@progress ")) {
-                String[] p2 = l.split(" ");
-                try { ui.bytes(Long.parseLong(p2[1]), Long.parseLong(p2[2])); } catch (Exception ignored) {}
-                continue;
-            }
-            ui.step(l);
-        }
-        try { return p.waitFor(); } catch (InterruptedException e) { throw new IOException(e); }
+        RunOutcome o = new RunOutcome();
+        int rc = runProcess(pb, ui, timeoutMs, logFile, o);
+        lastOutcome = o;
+        return rc;
     }
 
     // ── tar（ustar + GNU 长名 + pax）────────────────────────────────────

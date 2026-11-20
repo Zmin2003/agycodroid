@@ -13,6 +13,8 @@ import android.os.PowerManager;
 import android.util.Log;
 import java.io.File;
 
+import org.json.JSONObject;
+
 /**
  * 网关的宿主。为什么要它：
  *   普通应用一进后台，几分钟内就会被冻结或回收，跑到一半的 claude 跟着没了。
@@ -278,6 +280,16 @@ public class GatewayService extends Service {
         Thread t = s.supervisor;
         if (t != null) t.interrupt();
     }
+
+    /** 网关运行库对不上、没起网关时说明页的文案（M3，纯逻辑）：按失败类型写，别把校验 / 读盘问题
+     *  说成“联网后会自动再试”。kind 为 null / network 时按网络问题写 */
+    static String gwBlockedText(String kind, String reason) {
+        String head = Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n", reason);
+        if ("nospace".equals(kind)) return head + Tr.t("清理出空间后会自动再试（已下载的部分会保留）；一直不行请重装 agycodroid");
+        if ("verify".equals(kind)) return head + Tr.t("取回的文件和安装包钉的对不上，不是网络问题：请检查更新（或重装），网关会在 10 分钟后再次尝试取回；一直不行请重装 agycodroid");
+        if ("io".equals(kind)) return head + Tr.t("本地文件读不出来：请检查存储空间，网关会在 10 分钟后再次尝试取回；一直不行请重装 agycodroid");
+        return head + Tr.t("联网后会自动再试；一直不行请重装 agycodroid");
+    }
     /** 起网关前正在联网取回网关运行库（GwRuntime.fetchBase）：当前这一步和下载字节数。启动页据此显示进度、不按 60 秒超时切走。
      *  11-09 群友：移动数据下 122 MB 的基础模块包下了好几分钟，启动页只写「等待网关…」、进度只在通知栏里，以为卡死，划掉重开了六次 */
     static volatile String gwFetchStep;
@@ -318,9 +330,7 @@ public class GatewayService extends Service {
                 continue;
             } catch (GwUnavailable e) {
                 Log.e(TAG, "网关运行库对不上，不起网关：" + e.getMessage());
-                gwBlocked = "nospace".equals(gwFetchFailKind)
-                    ? Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n清理出空间后会自动再试（已下载的部分会保留）；一直不行请重装 agycodroid", e.getMessage())
-                    : Tr.f("网关自己的运行库和安装包对不上，为了安全没有启动网关：{0}\n\n联网后会自动再试；一直不行请重装 agycodroid", e.getMessage());
+                gwBlocked = gwBlockedText(gwFetchFailKind, e.getMessage());
                 Runnable cb = onSquat;
                 if (cb != null) cb.run();
                 if (stopping) break;
@@ -394,14 +404,32 @@ public class GatewayService extends Service {
         gwFetchFailKind = gw.fetchFailKind;   // 供下面的 GwUnavailable 分支写说明页文案
         if (gwErr != null && gw.fetchAttempted && gw.fetchFailKind != null) {
             if ("nospace".equals(gw.fetchFailKind)) { gwFetchFails = 0; gwFetchNotBefore = 0; }
-            else {
+            else if ("verify".equals(gw.fetchFailKind) || "io".equals(gw.fetchFailKind)) {
+                // M3：校验 / 读盘类失败不走网络退避（再下一次还是对不上 / 读不出来），也不计入网络连续失败；
+                // 但取回本身要节流 10 分钟，别每轮 supervise 都重下一遍基础模块包
+                gwFetchFails = 0; gwFetchNotBefore = nowMs + 10 * 60_000L;
+                Log.w(TAG, "网关运行库取回失败（" + gw.fetchFailKind + "），10 分钟内不再联网取（不是网络退避）");
+            } else {
                 gwFetchFails++;
                 long fb = gwFetchFails <= 1 ? 60_000L : gwFetchFails == 2 ? 120_000L : 300_000L;
                 gwFetchNotBefore = nowMs + fb;
                 Log.w(TAG, "网关运行库取回失败（" + gw.fetchFailKind + "），" + (fb / 60000) + " 分钟内不再联网取");
             }
         } else if (gwErr == null) { gwFetchFails = 0; gwFetchNotBefore = 0; }
-        if (gwErr != null && !gwErr.equals(gwLastErr)) Ledger.add(env, "verify", false, Tr.t("网关运行库：") + gwErr, null);
+        if (gwErr != null && !gwErr.equals(gwLastErr)) {
+            // M2：网关运行库清单校验（verify 的另一条线，见 Updater.verifyAsync 的开发工具包文件校验）失败账本带 detail：
+            // 期望 target、实际 target、来源、失败类型与缺 / 对不上的文件
+            JSONObject detail = new JSONObject();
+            try {
+                JSONObject pin = GwRuntime.pin(this);
+                detail.put("expectedTarget", pin == null ? "" : pin.optString("target"));
+                detail.put("actualTarget", getPackageName());
+                detail.put("source", "gwpin.json（APK 内置）");
+                detail.put("fetchFailKind", gw.fetchFailKind == null ? "" : gw.fetchFailKind);
+                if (gw.fetchFailDetail != null) detail.put("files", gw.fetchFailDetail);
+            } catch (Exception ignored) {}
+            Ledger.add(env, "verify", false, Tr.t("网关运行库：") + gwErr, detail);
+        }
         gwLastErr = gwErr;
         if (gwErr != null && GwRuntime.sealed(this)) throw new GwUnavailable(gwErr);
         if (gwErr != null) Log.w(TAG, "开发版：网关运行库凑不齐，退回 $PREFIX 的 node：" + gwErr);
@@ -458,6 +486,7 @@ public class GatewayService extends Service {
         for (byte x : kb) ks.append(String.format("%02x", x));
         pb.environment().put("AGAPP_SPAWN_KEY", "stdin");
         // 界面地址探测的结果（见 Env.checkHost）：回退设备上让网关把界面地址并进主地址（gateway/gw/access.mjs 的 UI_HOST）
+        Env.probeHostNow();   // H6：后台线程，等探测结论落定再告诉网关；主线程上没跑成的探测在这里补跑一次
         pb.environment().put("AGAPP_UI_HOST", Env.HOST);
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         pb.directory(env.app);

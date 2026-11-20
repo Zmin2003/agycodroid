@@ -30,31 +30,57 @@ function sha256(f) {
   return h.digest("hex");
 }
 
-/** 按一份钉子核一个目录：对不上的文件名列表。
- *  skipDir：这组目录里要放过的子目录名（gw 组要放过 glibc 子目录，它是另一组的地方，Java 的 prune 也一样放过它） */
-function pinBad(pin, dir, skipDir) {
+/** 按一份钉子核一个目录：对不上的文件全量（文件名、期望哈希、实际哈希、原因）。
+ *  reason：missing 缺失、not-file 不是普通文件（软链也算）、mismatch 内容不对、extra 多出来的、unreadable 目录读不了。
+ *  以前 pinBad 只返回名字、gwRuntimeBlocked 只记前 6 个：坏了几个、期望/实际哈希都没留下（M4） */
+export function pinBadDetail(pin, dir, skipDir) {
   const bad = [];
   for (const [name, want] of Object.entries(pin)) {
     const f = path.join(dir, name);
     try {
       const st = fs.lstatSync(f);
-      if (!st.isFile()) { bad.push(name); continue; }
+      if (!st.isFile()) { bad.push({ name, want, got: null, reason: "not-file" }); continue; }
       const fp = `${st.size}:${st.mtimeMs}:${st.ctimeMs}:${st.ino}`;
       const c = seen.get(f);
       // 刚改过的不信缓存：时间戳有粒度，同一刻里写两遍、大小不变，指纹就一样
       const got = c && c[0] === fp && Date.now() - st.ctimeMs > 2000 ? c[1] : sha256(f);
       seen.set(f, [fp, got]);
-      if (got !== want) bad.push(name);
-    } catch { bad.push(name); }
+      if (got !== want) bad.push({ name, want, got, reason: "mismatch" });
+    } catch { bad.push({ name, want, got: null, reason: "missing" }); }
   }
   // 多出来的也算：ld.so 按 --library-path 找库，往这里塞一个钉子里没有的同名库就能被加载
   try {
     for (const n of fs.readdirSync(dir)) {
       if (skipDir && n === skipDir) { try { if (fs.lstatSync(path.join(dir, n)).isDirectory()) continue; } catch {} }
-      if (!Object.hasOwn(pin, n)) bad.push(n);
+      if (!Object.hasOwn(pin, n)) {
+        let got = null;
+        try { const st = fs.lstatSync(path.join(dir, n)); if (st.isFile()) got = sha256(path.join(dir, n)); } catch {}
+        bad.push({ name: n, want: null, got, reason: "extra" });
+      }
     }
-  } catch { bad.push("."); }
+  } catch { bad.push({ name: ".", want: null, got: null, reason: "unreadable" }); }
   return bad;
+}
+
+/** 按一份钉子核一个目录：对不上的文件名列表。
+ *  skipDir：这组目录里要放过的子目录名（gw 组要放过 glibc 子目录，它是另一组的地方，Java 的 prune 也一样放过它） */
+function pinBad(pin, dir, skipDir) {
+  return pinBadDetail(pin, dir, skipDir).map((d) => d.name);
+}
+
+/** 哈希缩写（日志用，全量哈希进账本 detail）：没有为“无” */
+const shortHash = (h) => h ? h.slice(0, 12) : "无";
+
+/** 坏文件全量进修复账本（与 gw/agy.mjs 的 ledger 同一行 JSONL 格式；这里不从 agy.mjs 引 ledger，
+ *  那边正引着 gwpin.mjs，循环引用没必要）。msg 以“网关运行库”开头，诊断包按它认出这是网关清单校验线 */
+function ledgerGwBad(group, bad) {
+  const f = process.env.AGAPP_LEDGER;
+  if (!f) return;
+  try {
+    fs.appendFileSync(f, JSON.stringify({ at: Date.now(), kind: "verify", ok: false,
+      msg: `网关运行库清单校验：${group} 组 ${bad.length} 个文件和安装包对不上`,
+      detail: { group, source: "gwpin.json（APK 内置）", bad } }) + "\n");
+  } catch {}
 }
 
 /** 对不上的文件名列表；没有钉子（开发布局、开发版退回 $PREFIX 时）返回 [] */
@@ -69,6 +95,18 @@ export function gwGwBad({ pin = GWPIN, dir = GWDIR } = {}) {
   return pinBad(pin, dir, "glibc");
 }
 
+/** 对不上的文件全量（glibc 组）；没有钉子（开发布局、开发版退回 $PREFIX 时）返回 [] */
+export function gwGlibcBadDetail({ pin = PIN, dir = DIR } = {}) {
+  if (!pin || !dir || PATHS.gwGlibcLib !== dir) return [];
+  return pinBadDetail(pin, dir);
+}
+
+/** gw 组（files/gw 下的 node、libz 等）对不上的文件全量；没有钉子返回 [] */
+export function gwGwBadDetail({ pin = GWPIN, dir = GWDIR } = {}) {
+  if (!pin || !dir) return [];
+  return pinBadDetail(pin, dir, "glibc");
+}
+
 /** 起 claude 前调：对不上返回给人看的原因（这一轮别起），并要求空闲时重启网关、由应用重新写好；能起返回 "" */
 export function gwRuntimeBlocked() {
   // gateway L2：应用布局（DIR 有值）却没有有效钉子：fail-closed，拒绝启动 agy。
@@ -80,11 +118,12 @@ export function gwRuntimeBlocked() {
     log(`⚠️ [网关运行库] 应用布局下没有有效的 glibc 钉子（AGAPP_GW_GLIBC_PIN 没传或解析失败），这一轮不起 Antigravity CLI`);
     return tz("网关自己的运行库没有有效的安装包钉子，这一轮没有启动 Antigravity CLI。请重启应用（或重装）后再试。");
   }
-  const bad = gwGlibcBad();
+  const bad = gwGlibcBadDetail();
   if (bad.length) {
-    log(`⚠️ [网关运行库] files/gw/glibc 和安装包对不上：${bad.slice(0, 6).join(", ")}`);
-    APP?.restart(`gw/glibc/${bad[0]}（网关运行库和安装包对不上）`);
-    return tz("网关自己的运行库被改过，这一轮没有启动 Antigravity CLI。网关会在空闲时重启、按安装包还原，稍后再发送。");
+    log(`⚠️ [网关运行库] files/gw/glibc 和安装包对不上（${bad.length} 个）：${bad.map((d) => `${d.name}（期望 ${shortHash(d.want)}／实际 ${shortHash(d.got)}，${d.reason}）`).join("；")}`);
+    ledgerGwBad("glibc", bad);
+    APP?.restart(`gw/glibc/${bad[0].name}（网关运行库和安装包对不上）`);
+    return tz(`网关自己的运行库被改过（${bad.length} 个文件和安装包对不上：${bad.map((d) => d.name).join("、")}），这一轮没有启动 Antigravity CLI。网关会在空闲时重启、按安装包还原，稍后再发送。`);
   }
   // gateway M7 补漏：gw 组缺钉子也 fail-closed（与上面 glibc 组 L2 同一条路）：Java 侧 gwPin()
   // 拿不到有效钉子返回 null、干脆不传 AGAPP_GW_PIN，钉子没法现算，重启网关修不好，只会空转，
@@ -93,11 +132,12 @@ export function gwRuntimeBlocked() {
     log(`⚠️ [网关运行库] 应用布局下没有有效的 gw 组钉子（AGAPP_GW_PIN 没传或解析失败），这一轮不起 Antigravity CLI`);
     return tz("网关自己的运行库没有有效的安装包钉子，这一轮没有启动 Antigravity CLI。请重启应用（或重装）后再试。");
   }
-  const gwBad = gwGwBad();
+  const gwBad = gwGwBadDetail();
   if (gwBad.length) {
-    log(`⚠️ [网关运行库] files/gw 和安装包对不上：${gwBad.slice(0, 6).join(", ")}`);
-    APP?.restart(`gw/${gwBad[0]}（网关运行库和安装包对不上）`);
-    return tz("网关自己的运行库被改过，这一轮没有启动 Antigravity CLI。网关会在空闲时重启、按安装包还原，稍后再发送。");
+    log(`⚠️ [网关运行库] files/gw 和安装包对不上（${gwBad.length} 个）：${gwBad.map((d) => `${d.name}（期望 ${shortHash(d.want)}／实际 ${shortHash(d.got)}，${d.reason}）`).join("；")}`);
+    ledgerGwBad("gw", gwBad);
+    APP?.restart(`gw/${gwBad[0].name}（网关运行库和安装包对不上）`);
+    return tz(`网关自己的运行库被改过（${gwBad.length} 个文件和安装包对不上：${gwBad.map((d) => d.name).join("、")}），这一轮没有启动 Antigravity CLI。网关会在空闲时重启、按安装包还原，稍后再发送。`);
   }
   return "";
 }

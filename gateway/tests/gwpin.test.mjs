@@ -7,7 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-const { gwGlibcBad, gwGwBad, gwRuntimeBlocked } = await import("../gw/gwpin.mjs");
+const { gwGlibcBad, gwGwBad, gwRuntimeBlocked, pinBadDetail } = await import("../gw/gwpin.mjs");
 const h = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
 test("gwpin：钉子里的文件都对上才放行；改过、少了、多出来的、换成软链的都算对不上", () => {
@@ -91,4 +91,70 @@ test("gwpin：gw 组缺钉子也 fail-closed（与 glibc 组同一条路：只�
   assert.notEqual(blocked, "", "gw 组没钉子：这一轮不起 agy");
   assert.ok(blocked.includes("Antigravity CLI"), "拦截文案说清没起哪一个");
   assert.equal(run(true), "", "两组钉子都对上：放行");
+});
+
+test("gwpin M4：pinBadDetail 记坏文件全量（期望/实际哈希、原因），不只截前 6 个名字", () => {
+  const dir = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "gwdetail-"));
+  try {
+    fs.writeFileSync(path.join(dir, "node"), "node v2");          // 内容不对
+    // libz.so.1 缺失
+    fs.writeFileSync(path.join(dir, "libevil.so"), "x");          // 多出来的
+    const pin = { node: h("node v1"), "libz.so.1": h("z v1") };
+    const detail = pinBadDetail(pin, dir);
+    const byName = Object.fromEntries(detail.map((d) => [d.name, d]));
+    assert.equal(detail.length, 3, "坏了 3 个，全量都在");
+    assert.equal(byName.node.reason, "mismatch");
+    assert.equal(byName.node.want, h("node v1"));
+    assert.equal(byName.node.got, h("node v2"), "实际哈希要留下");
+    assert.equal(byName["libz.so.1"].reason, "missing");
+    assert.equal(byName["libz.so.1"].got, null);
+    assert.equal(byName["libz.so.1"].want, h("z v1"), "缺失也要留期望哈希");
+    assert.equal(byName["libevil.so"].reason, "extra");
+    assert.equal(byName["libevil.so"].want, null);
+    assert.equal(byName["libevil.so"].got, h("x"));
+    // 名字列表仍是旧口径（兼容 gwGlibcBad / gwGwBad 的调用方）
+    assert.deepEqual(gwGwBad({ pin, dir }).sort(), ["libevil.so", "libz.so.1", "node"]);
+    // 全对上时 detail 为空
+    fs.writeFileSync(path.join(dir, "node"), "node v1");
+    fs.writeFileSync(path.join(dir, "libz.so.1"), "z v1");
+    fs.rmSync(path.join(dir, "libevil.so"));
+    assert.deepEqual(pinBadDetail(pin, dir), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("gwpin M4：拦截文案给坏文件数量、文件名与修复动作；全量进修复账本 detail", () => {
+  // 子进程里测：DIR / 两组钉子都从环境读，AGAPP_LEDGER 指到临时账本文件。
+  const root = fs.mkdtempSync(path.join(process.env.AGAPP_WORKSPACE, "gwblocked-"));
+  const gw = path.join(root, "gw"), glibc = path.join(gw, "glibc");
+  fs.mkdirSync(glibc, { recursive: true });
+  fs.writeFileSync(path.join(glibc, "libc.so.6"), "libc v1");
+  fs.writeFileSync(path.join(gw, "node"), "node v2");   // 内容不对
+  // libz.so.1 缺失
+  const ledgerFile = path.join(root, "ledger.jsonl");
+  const env = { ...process.env, AGAPP_GW_GLIBC_LIB: glibc,
+    AGAPP_GW_GLIBC_PIN: JSON.stringify({ "libc.so.6": h("libc v1") }),
+    AGAPP_GW_PIN: JSON.stringify({ node: h("node v1"), "libz.so.1": h("z v1") }),
+    AGAPP_LEDGER: ledgerFile };
+  try {
+    const r = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `import { gwRuntimeBlocked } from ${JSON.stringify(new URL("../gw/gwpin.mjs", import.meta.url).pathname)}; console.log(JSON.stringify(gwRuntimeBlocked()));`],
+      { env, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const msg = JSON.parse(r.stdout.trim());
+    assert.notEqual(msg, "", "坏文件要拦下来");
+    assert.ok(msg.includes("2 个"), `文案要给坏了几个：${msg}`);
+    assert.ok(msg.includes("node") && msg.includes("libz.so.1"), `文案要给文件名：${msg}`);
+    assert.ok(msg.includes("重启"), `文案要给修复动作（重启还原）：${msg}`);
+    // 账本 detail 里是全量，不只文案里的名字
+    const lines = fs.readFileSync(ledgerFile, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const entry = lines.find((e) => e.kind === "verify" && e.ok === false);
+    assert.ok(entry, "坏文件要记一笔 verify 账本");
+    assert.equal(entry.detail.bad.length, 2, "账本 detail 里是全量坏文件");
+    const byName = Object.fromEntries(entry.detail.bad.map((d) => [d.name, d]));
+    assert.equal(byName.node.reason, "mismatch");
+    assert.equal(byName.node.got, h("node v2"));
+    assert.equal(byName["libz.so.1"].reason, "missing");
+    assert.equal(byName["libz.so.1"].want, h("z v1"));
+    assert.equal(entry.detail.group, "gw", "账本写明是哪一组");
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

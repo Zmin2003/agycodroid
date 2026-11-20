@@ -11,10 +11,102 @@ final class Env {
     /** 界面和 App 访问网关用的地址。不用 127.0.0.1：Cookie 不按端口隔离，种在 127.0.0.1 上会被同机别的应用
      *  在任意端口收走（GHSA-hwmm 第 1 项）。网关两个地址都听，终端里的工具照旧走 127.0.0.1 + 令牌头。见 gateway/gw/access.mjs 的 UI_HOST。
      *  个别设备上 127.0.0.2 根本连不通（11-14 一加 PGP110 / Android 17：发往它的 SYN 被静默丢掉，只剩 127.0.0.1 能通）：
-     *  核不了身份 → 每 40 秒杀一次网关 → 界面永远「等待网关」。类加载时自连探测一次（checkHost），不通就回退 127.0.0.1；
-     *  代价是回退设备上会话 Cookie 落在 127.0.0.1，内置浏览器访问本机 127.0.0.1 别的端口时会带上它（11-14 交接 2.6 明示的安全代价） */
+     *  核不了身份 → 每 40 秒杀一次网关 → 界面永远「等待网关」。后台线程自连探测一次（checkHost），不通就回退 127.0.0.1；
+     *  代价是回退设备上会话 Cookie 落在 127.0.0.1，内置浏览器访问本机 127.0.0.1 别的端口时会带上它（11-14 交接 2.6 明示的安全代价）。
+     *  探测不能在主线程做：MainActivity.onCreate 在主线程首次加载本类，Socket.connect 会抛 NetworkOnMainThreadException——
+     *  那只证明探测根本没发包，不是连不通，所以这类异常单独记为“探测未执行”，不回退（以前 static 块里 catch (Exception)
+     *  把它和真正连不通混为一谈，静默回退到了 127.0.0.1）。只有 ConnectException / 超时（SYN 被静默丢掉的那种）
+     *  才算不通。没出结论前 HOST 保持默认的 127.0.0.2（安全侧）。 */
     static volatile String HOST = "127.0.0.2";
-    static { checkHost(); }
+
+    /** 127.0.0.2 探测的结论（H6）：not-run 还没跑；ok 通；unreachable 不通（已回退）；
+     *  not-executed 探测没执行（主线程拦截之类），没发包、不是连通性结论；unknown 别的异常，结论不明 */
+    static final String PROBE_NOT_RUN = "not-run", PROBE_OK = "ok", PROBE_UNREACHABLE = "unreachable",
+        PROBE_NOT_EXECUTED = "not-executed", PROBE_UNKNOWN = "unknown";
+    private static volatile String hostProbe = PROBE_NOT_RUN;
+    private static volatile String hostProbeDetail = "";
+    private static volatile boolean hostProbeDone, hostProbeStarted;
+    /** 这次探测的结论（诊断用）；"" = 还没跑过 */
+    static String hostProbe() { return hostProbe; }
+    /** 这次探测的异常原文（诊断用）；"" = 没异常 */
+    static String hostProbeDetail() { return hostProbeDetail; }
+
+    /** 探测异常分哪种（纯逻辑）：只有 ConnectException / 超时才算“不通”；
+     *  NetworkOnMainThreadException 是线程策略拦截，探测根本没发包，单独算“未执行”；其余结论不明 */
+    static String classifyHostProbe(Throwable e) {
+        if (e instanceof java.net.ConnectException || e instanceof java.net.SocketTimeoutException
+                || e instanceof java.net.BindException) return PROBE_UNREACHABLE;
+        if (e instanceof android.os.NetworkOnMainThreadException) return PROBE_NOT_EXECUTED;
+        return PROBE_UNKNOWN;
+    }
+
+    /** 记一次探测结论：只有“不通”才回退 127.0.0.1。“探测未执行 / 结论不明”不回退，
+     *  也不把探测标成做完——后台线程稍后还能补跑一次。终态（ok / 不通）才标 done */
+    static void noteProbe(String kind, Throwable e) {
+        hostProbe = kind;
+        hostProbeDetail = e == null ? "" : String.valueOf(e);
+        if (PROBE_UNREACHABLE.equals(kind)) {
+            HOST = "127.0.0.1";
+            hostProbeDone = true;
+            logw("127.0.0.2 在本机连不通，界面地址回退 127.0.0.1：" + e);
+        } else if (PROBE_OK.equals(kind)) {
+            hostProbeDone = true;
+        } else if (PROBE_NOT_EXECUTED.equals(kind)) {
+            logw("127.0.0.2 探测没执行（" + e + "），不回退 127.0.0.1，等后台线程补跑");
+        } else {
+            logw("127.0.0.2 探测结论不明（" + e + "），不回退 127.0.0.1");
+        }
+    }
+
+    /** 后台线程跑一次 host 探测：MainActivity.onCreate 在主线程构造 Env，那里不能做 socket；
+     *  UI 不阻塞，没出结论前 HOST 保持默认的 127.0.0.2。已出终态结论、或已在跑就不重复起 */
+    static void probeHostAsync() {
+        if (hostProbeDone) return;
+        synchronized (Env.class) {
+            if (hostProbeDone || hostProbeStarted) return;
+            hostProbeStarted = true;
+        }
+        Thread t = new Thread(() -> {
+            try { checkHost(); } finally {
+                synchronized (Env.class) { hostProbeStarted = false; Env.class.notifyAll(); }
+            }
+        }, "host-probe");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 同步跑一次 host 探测（后台线程调，如 GatewayService 起网关前，等结论落定再告诉网关界面地址）：
+     *  已出终态结论直接返回；在主线程上调会得 NOT_EXECUTED（没发包），不回退、也不标 done，
+     *  稍后后台线程还能补跑。后台正在跑就等它一会儿（最多 2 秒），不等完也直接返回、用现有 HOST */
+    static void probeHostNow() {
+        if (hostProbeDone) return;
+        synchronized (Env.class) {
+            if (hostProbeDone) return;
+            if (hostProbeStarted) {
+                try { Env.class.wait(2000); } catch (InterruptedException ignored) {}
+                return;
+            }
+            hostProbeStarted = true;
+        }
+        try { checkHost(); } finally {
+            synchronized (Env.class) { hostProbeStarted = false; Env.class.notifyAll(); }
+        }
+    }
+
+    /** 只给测试用：把探测状态与 HOST 复位 */
+    static void resetHostProbeForTest() {
+        synchronized (Env.class) {
+            hostProbeDone = false; hostProbeStarted = false;
+            hostProbe = PROBE_NOT_RUN; hostProbeDetail = "";
+            HOST = "127.0.0.2";
+            Env.class.notifyAll();
+        }
+    }
+
+    /** 记日志，但记日志本身绝不能把探测 / 诊断搞崩（桌面 JVM 的 android.jar 是桩，Log 会抛） */
+    private static void logw(String m) {
+        try { android.util.Log.w("agycodroid", m); } catch (Throwable ignored) {}
+    }
 
     /** 这台设备上 127.0.0.2 通不通：先绑一个端口、再连它自己。绑不上、或 SYN 等不到应答（该设备上被静默丢掉）就回退 127.0.0.1。
      *  整个进程只跑这一次，正常设备行为完全不变 */
@@ -25,9 +117,9 @@ final class Env {
             try (java.net.Socket s = new java.net.Socket()) {
                 s.connect(new java.net.InetSocketAddress("127.0.0.2", ss.getLocalPort()), 300);
             }
-        } catch (Exception e) {
-            HOST = "127.0.0.1";
-            android.util.Log.w("agycodroid", "127.0.0.2 在本机连不通，界面地址回退 127.0.0.1：" + e);
+            noteProbe(PROBE_OK, null);
+        } catch (Throwable e) {
+            noteProbe(classifyHostProbe(e), e);
         }
     }
 
@@ -239,6 +331,7 @@ final class Env {
     static final String LINKER = "/system/bin/linker64";
 
     Env(Context c) {
+        probeHostAsync();   // 主线程构造：只起后台线程做 host 探测，UI 不阻塞（H6）
         files = c.getFilesDir();
         nativeLib = c.getApplicationInfo().nativeLibraryDir;
         pkg = c.getPackageName();
@@ -310,6 +403,12 @@ final class Env {
     /** first-run 失败标记（与 .devkit-ok 同一目录；Installer 的 first-run 失败时写，文件名就定这个，这里只读） */
     File devkitFirstrunFailed() { return new File(usr, ".devkit-firstrun-failed"); }
 
+    /** first-run 失败标记的内容（失败的包名，每行一个）；没有标记 / 读不了返回 ""（诊断与 Updater 共用） */
+    String firstrunFailedText() {
+        try { return new String(java.nio.file.Files.readAllBytes(devkitFirstrunFailed().toPath()), "UTF-8").trim(); }
+        catch (Exception e) { return ""; }
+    }
+
     /** devkitReady() 为 false 时的原因（"" = 就绪）：界面/通知直接拿去显示，省得只写一句“工具链未安装” */
     private volatile String lastProblem = "";
     String devkitProblem() { devkitReady(); return lastProblem; }
@@ -335,17 +434,19 @@ final class Env {
     }
 
     /** 实质探活：bash --version 能跑起来才算就绪（B10：只查 .devkit-ok + node 文件在不在，1.0“就绪却起不来”能原样重现）。
-     *  结果缓存 30 秒；bash 起不来时再试 curl --version，分辨是 bash 坏了还是整包坏了。失败只在 ok→失败的翻转时回调一次 onDevkitDamaged */
+     *  结果缓存 30 秒；bash 起不来时再试 curl --version，分辨是 bash 坏了还是整包坏了。失败只在 ok→失败的翻转时回调一次 onDevkitDamaged。
+     *  失败原因里带探活细节（M5：exit 值 / 超时 / 输出首行），不再只写一句“bash 起不来” */
     private boolean probeOk() {
         long now = System.currentTimeMillis();
         if (now - probeAtMs < PROBE_TTL_MS) return probeOkCache;
-        boolean bash = runQuiet(cmd(bin("bash").getPath(), "--version"));
+        ProbeResult bash = runProbe(cmd(bin("bash").getPath(), "--version"));
         String problem;
-        boolean ok = bash;
-        if (!bash) {
-            boolean curl = runQuiet(cmd(bin("curl").getPath(), "--version"));
-            problem = curl ? Tr.t("bash 起不来（curl 正常），开发工具包可能不完整")
-                           : Tr.t("bash、curl 都起不来，开发工具包已损坏，请在设置里修复工具包");
+        boolean ok = bash.ok;
+        if (!bash.ok) {
+            ProbeResult curl = runProbe(cmd(bin("curl").getPath(), "--version"));
+            String detail = probeDetail(bash);
+            problem = curl.ok ? Tr.t("bash 起不来（curl 正常），开发工具包可能不完整") + detail
+                           : Tr.t("bash、curl 都起不来，开发工具包已损坏，请在设置里修复工具包") + detail;
         } else problem = "";
         probeAtMs = now; probeOkCache = ok; probeProblem = problem;
         if (!ok && !probeDamagedNoted) {
@@ -356,20 +457,97 @@ final class Env {
         return ok;
     }
 
+    /** 一次静默试跑的结果（M5：以前 runQuiet 只返回 boolean，分不清缺库、超时还是权限问题） */
+    static final class ProbeResult {
+        final boolean ok;
+        final int exit;            // 退出码；没跑起来 / 超时为 -1
+        final boolean timedOut;
+        final String firstLine;    // 进程输出首行（已截断到 200 字），没有为空串
+        final String kind;         // ok / nonzero / timeout / linker / io
+        ProbeResult(boolean ok, int exit, boolean timedOut, String firstLine, String kind) {
+            this.ok = ok; this.exit = exit; this.timedOut = timedOut;
+            this.firstLine = firstLine == null ? "" : firstLine; this.kind = kind;
+        }
+    }
+
+    /** 探活失败分哪种（纯逻辑）：超时、缺库（linker 报 CANNOT LINK）、起不来、退出码非 0 */
+    static String classifyProbe(int exit, boolean timedOut, String firstLine, Throwable err) {
+        if (timedOut) return "timeout";
+        if (err != null) return "io";
+        if (firstLine != null && firstLine.contains("CANNOT LINK")) return "linker";
+        if (exit != 0) return "nonzero";
+        return "ok";
+    }
+
+    /** 探活失败的细节（M5）：exit 值 / 超时 / 输出首行，拼在原因后面给界面与诊断看 */
+    private static String probeDetail(ProbeResult r) {
+        StringBuilder d = new StringBuilder("（");
+        if (r.timedOut) d.append(Tr.t("5 秒没跑完，超时"));
+        else if ("io".equals(r.kind)) d.append(Tr.t("进程起不来"));
+        else if ("linker".equals(r.kind)) d.append(Tr.t("缺库，linker 报错"));
+        else d.append(Tr.f("退出码 {0}", r.exit));
+        if (!r.firstLine.isEmpty()) d.append("：").append(r.firstLine);
+        return d.append("）").toString();
+    }
+
+    /** 静默试跑一条命令：按 Installer.run 同样的方式起（经加载器时前面加 linker64 + apply 环境），timeoutMs 内退出码 0 算成。
+     *  输出首行记下来：bash 起不来时一眼看出是缺库还是别的错。
+     *  env 为 null 时继承当前进程环境（测试用）；dir 为 null 时不指定工作目录 */
+    static ProbeResult runProbeCmd(java.util.List<String> argv, java.util.Map<String, String> env, File dir, long timeoutMs) {
+        Process p = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(argv);
+            if (env != null) pb.environment().putAll(env);
+            if (dir != null) pb.directory(dir);
+            pb.redirectErrorStream(true);
+            p = pb.start();
+            boolean done = p.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            byte[] out = readUpTo(p.getInputStream(), 65536);
+            if (!done) {
+                p.destroyForcibly();
+                try { p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+                return new ProbeResult(false, -1, true, firstLine(out), "timeout");
+            }
+            int exit = p.exitValue();
+            String first = firstLine(out);
+            return new ProbeResult(exit == 0, exit, false, first, classifyProbe(exit, false, first, null));
+        } catch (Throwable e) {
+            if (p != null) {
+                p.destroyForcibly();
+                try { p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+            }
+            return new ProbeResult(false, -1, false, "", "io");
+        }
+    }
+
+    /** 输出的首行（截断到 200 字）：stderr 和 stdout 合并后取第一行 */
+    private static String firstLine(byte[] b) {
+        String s = new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        int nl = s.indexOf('\n');
+        if (nl >= 0) s = s.substring(0, nl);
+        s = s.replace('\r', ' ').trim();
+        return s.length() > 200 ? s.substring(0, 200) : s;
+    }
+
+    private static byte[] readUpTo(java.io.InputStream in, int max) throws java.io.IOException {
+        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+        byte[] b = new byte[8192];
+        int total = 0, n;
+        while (total < max && (n = in.read(b, 0, Math.min(b.length, max - total))) > 0) { o.write(b, 0, n); total += n; }
+        return o.toByteArray();
+    }
+
+    /** 静默试跑一条命令（M5）：exit 值 / 超时 / 输出首行都记下来，见 ProbeResult */
+    private ProbeResult runProbe(java.util.List<String> argv) {
+        java.util.Map<String, String> e = new java.util.HashMap<>();
+        apply(e);
+        return runProbeCmd(argv, e, home, 5000);
+    }
+
     /** 静默试跑一条命令：按 Installer.run 同样的方式起（经加载器时前面加 linker64 + apply 环境），5 秒内退出码 0 算成。
      *  Env 里原来没有执行命令的 helper，Installer.run 要 Progress 且把每行输出报给界面，不适合静默探活，这里只借它的起法 */
     private boolean runQuiet(java.util.List<String> argv) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(argv);
-            apply(pb.environment());
-            pb.directory(home);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            // --version 输出只有几行，管道不会堵：先等退出，再把剩余输出读掉
-            if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) { p.destroyForcibly(); return false; }
-            try (java.io.InputStream in = p.getInputStream()) { byte[] b = new byte[4096]; while (in.read(b) > 0) { } }
-            return p.exitValue() == 0;
-        } catch (Exception e) { return false; }
+        return runProbe(argv).ok;
     }
 
     /** 已装工具包的来历（Installer 写的 JSON：base、sha256）。早期版本里只有一行 "ok" → 空对象 */

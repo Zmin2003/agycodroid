@@ -92,8 +92,12 @@ final class GwRuntime {
     /** 这次 ensure() 是否真的尝试过联网取回（进过 fetchBase）；GatewayService 据此决定要不要记一次取回节流——
      *  整理阶段就失败（put 拷失败之类）不算取回，别一次 put 失败就锁 30 分钟 */
     boolean fetchAttempted;
-    /** 取回失败的原因：null=没试或成功，"nospace"=空间不足，"network"=网络或其他 */
+    /** 取回失败的原因（M3，按错误类型分级）：null=没试或成功，"nospace"=空间不足，"network"=网络或其他联网错，
+     *  "verify"=校验类（哈希 / 签名对不上、钉的文件 404），"io"=本地读盘错 */
+    static final String FETCH_NETWORK = "network", FETCH_NOSPACE = "nospace", FETCH_VERIFY = "verify", FETCH_IO = "io";
     String fetchFailKind;
+    /** 这次缺 / 对不上的文件与原因（"node：哈希不符；libz.so.1：缺失"），给诊断与账本用 */
+    String fetchFailDetail;
     /** 取回因空间不足失败时：需要 / 当时可用（字节），给界面写明数字用 */
     long fetchNeedBytes, fetchFreeBytes;
     /** 停止 / 停住时中断下载：GatewayService.spawnGateway 在 ensure() 前挂上 () -> stopping || paused */
@@ -105,7 +109,7 @@ final class GwRuntime {
      * @throws Installer.Cancelled 下载中途点了停止 / 服务停住：不是取回失败，直接中断，调用方别记节流
      */
     String ensure(boolean fetch, Say say) throws Installer.Cancelled {
-        fetchAttempted = false; fetchFailKind = null; fetchNeedBytes = fetchFreeBytes = 0;
+        fetchAttempted = false; fetchFailKind = null; fetchFailDetail = null; fetchNeedBytes = fetchFreeBytes = 0;
         JSONObject p = pin(ctx);
         if (p == null) return Tr.t("安装包里没有网关运行库的清单（gwpin.json）");
         if (!ctx.getPackageName().equals(p.optString("target"))) return Tr.f("网关运行库的清单是给 {0} 的", p.optString("target"));
@@ -113,6 +117,7 @@ final class GwRuntime {
         if (gw == null || gl == null || !gw.has("node")) return Tr.t("网关运行库的清单坏了");
         dir.mkdirs(); glibc.mkdirs();
         java.util.List<String[]> missing = new java.util.ArrayList<>();   // {目标路径, 源相对路径, sha256}
+        java.util.List<String> missingWhy = new java.util.ArrayList<>();  // 与 missing 一一对应：缺失 / 哈希不符 / 读不到
         try {
             prune(dir, gw, true);
             prune(glibc, gl, false);
@@ -123,9 +128,10 @@ final class GwRuntime {
                     JSONObject e = g.getJSONObject(name);
                     File dst = new File(d, name);
                     String want = e.getString("sha256"), src = e.getString("src");
-                    if (want.equals(shaCached(dst))) continue;
+                    String state = shaState(dst, want);
+                    if ("ok".equals(state)) continue;
                     File from = new File(env.usr, src);
-                    if (want.equals(shaCached(from))) {
+                    if ("ok".equals(shaState(from, want))) {
                         try { put(from, dst, want, null); continue; }
                         catch (Exception ex) {
                             // M6：一个文件拷失败就整个放弃、连 fetchBase 都不跑 —— 改成记入 missing，扫完统一取回
@@ -133,6 +139,9 @@ final class GwRuntime {
                         }
                     }
                     missing.add(new String[] { dst.getPath(), src, want });
+                    // M3：缺失、哈希不符、读不到是三种不同的原因，别都笼统记成“对不上”
+                    missingWhy.add(name + "："
+                        + ("missing".equals(state) ? "缺失" : "mismatch".equals(state) ? "哈希不符" : "读不到"));
                 }
             }
         } catch (Exception e) {
@@ -141,6 +150,7 @@ final class GwRuntime {
         }
         if (missing.isEmpty()) return null;
         Log.w(TAG, "files/gw 缺 " + missing.size() + " 个，$PREFIX 里也对不上");
+        fetchFailDetail = android.text.TextUtils.join("；", missingWhy);
         if (!fetch) return Tr.f("网关运行库有 {0} 个文件和安装包对不上", missing.size());
         try {
             fetchBase(missing, say);
@@ -149,13 +159,36 @@ final class GwRuntime {
             throw e;
         } catch (Exception e) {
             Log.w(TAG, "联网取网关运行库失败", e);
-            fetchFailKind = isNoSpace(e) ? "nospace" : "network";
+            fetchFailKind = resolveFetchFailKind(fetchFailKind, e);
             return Tr.t("网关运行库和安装包对不上，联网取回也没成：") + e.getMessage();
         }
     }
 
+    /** M3：取回失败 kind 的最终判定（纯函数，供 JVM 测试）：fetchBase 空间预检已定 kind 时保留它（预设优先），
+     *  否则按异常分类。ensure() 的 catch 不能无条件覆盖预设——预检抛出的逐字消息不含任何分类子串，
+     *  会被 classifyFetchFailure 误判成 network，导致空间不足走了网络退避（B2）。 */
+    static String resolveFetchFailKind(String preset, Throwable e) {
+        if (preset != null) return preset;
+        return classifyFetchFailure(e);
+    }
+
+    /** 取回失败按错误类型分级（M3）：nospace 空间不足；verify 校验类（哈希 / 签名对不上、钉的文件 404）；
+     *  io 本地读盘错；network 联网错（连不上 / 超时 / 解析失败 / 服务端 5xx）。校验类失败不再被当成网络问题，
+     *  也不走网络退避（见 GatewayService）。未知异常默认 network，保持旧行为 */
+    static String classifyFetchFailure(Throwable e) {
+        if (e == null) return FETCH_NETWORK;
+        if (isNoSpace(e)) return FETCH_NOSPACE;
+        String m = String.valueOf(e.getMessage());
+        if (m.contains("对不上") || m.contains("签名")) return FETCH_VERIFY;
+        if (m.contains("HTTP 404") || m.contains("HTTP 410")) return FETCH_VERIFY;
+        if (m.contains("No such file") || m.contains("Permission denied") || m.contains("Read-only")
+                || m.contains("EACCES") || m.contains("EIO") || m.contains("Input/output error")
+                || m.contains("Is a directory")) return FETCH_IO;
+        return FETCH_NETWORK;
+    }
+
     /** 空间不足吗：Installer.NoSpace，或解包/写盘时报的 ENOSPC（No space left on device） */
-    private static boolean isNoSpace(Exception e) {
+    private static boolean isNoSpace(Throwable e) {
         if (e instanceof Installer.NoSpace) return true;
         String m = String.valueOf(e.getMessage());
         return m.contains("No space") || m.contains("ENOSPC") || m.contains("存储空间不够");
@@ -291,10 +324,12 @@ final class GwRuntime {
     // ── 哈希缓存：同一个文件（inode、大小、修改时间、ctime 都没变）不重算。ctime 用户态改不了，换内容一定会变 ──
     private static final java.util.Map<String, String[]> CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** 文件的 sha256；读不到（没有、不是普通文件、读盘错）返回 null —— 不是 ""：调用方要分清“读不到”与“哈希不符”（M3）。
+     *  以前任何异常都返回 ""，和哈希不符混在一起，取回失败就被当成网络问题 */
     static String shaCached(File f) {
         try {
             android.system.StructStat s = Os.lstat(f.getPath());
-            if (!android.system.OsConstants.S_ISREG(s.st_mode)) return "";
+            if (!android.system.OsConstants.S_ISREG(s.st_mode)) return null;
             String fp = s.st_ino + ":" + s.st_size + ":" + s.st_mtime + ":" + s.st_ctime;   // minSdk 26 没有 st_mtim / st_ctim（纳秒要 API 27）
             String[] c = CACHE.get(f.getPath());
             // 刚改过的不信缓存：时间戳只到秒，同一秒里写两遍、大小不变，指纹就一样
@@ -302,7 +337,21 @@ final class GwRuntime {
             String h = Installer.sha256(f);
             CACHE.put(f.getPath(), new String[] { fp, h });
             return h;
-        } catch (Exception e) { return ""; }
+        } catch (Exception e) { return null; }
+    }
+
+    /** 文件相对钉子的状态（M3）："ok" 对上；"missing" 没有这个文件；"unreadable" 在但哈希算不出来（读盘错）；
+     *  "mismatch" 在但哈希对不上 */
+    static String shaState(File f, String want) {
+        if (f == null || !f.isFile()) return "missing";
+        return classifySha(shaCached(f), want, true);
+    }
+
+    /** sha 状态的纯逻辑映射：文件不存在时一定是 missing，不管哈希值是什么 */
+    static String classifySha(String got, String want, boolean exists) {
+        if (!exists) return "missing";
+        if (got == null) return "unreadable";
+        return want.equals(got) ? "ok" : "mismatch";
     }
 
     private static MessageDigest md() {
